@@ -1,2 +1,1 @@
-# plugin
-Plugins for all supported games
+Basic plugins for RustApp
