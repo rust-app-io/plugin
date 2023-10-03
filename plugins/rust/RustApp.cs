@@ -992,7 +992,7 @@ namespace Oxide.Plugins
       });
     }
 
-    private void RA_ReportSend(string initiator_steam_id, string target_steam_id, string message, [CanBeNull] string reason)
+    private void RA_ReportSend(string initiator_steam_id, string target_steam_id, string reason, [CanBeNull] string message)
     {
       _Worker.AddReport(new PluginReportEntry
       {
