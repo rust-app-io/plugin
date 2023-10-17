@@ -885,7 +885,6 @@ namespace Oxide.Plugins
         }
 
         Notices[payload.steam_id] = payload.value;
-
         NoticeStateSet(payload.steam_id, payload.value);
 
         return true;
@@ -898,13 +897,17 @@ namespace Oxide.Plugins
 
       private void NoticeStateSet(string steam_id, bool value)
       {
+        var player = BasePlayer.Find(steam_id);
+        if (player == null || !player.IsConnected) return;
+
         if (!value)
         {
           _RustApp.Puts(_RustApp.msg(
             $"С игрока {steam_id} снято уведомление о проверке",
             $"Notify about check was removed from player {steam_id}"
           ));
-          // TODO: CuiHelper.DestroyUi
+
+          CuiHelper.DestroyUi(player, CheckLayer);
         }
         else
         {
@@ -912,7 +915,8 @@ namespace Oxide.Plugins
             $"Игрок {steam_id} уведомлён о проверке",
             $"Player {steam_id} was notified about check"
           ));
-          // TODO: CuiHelper.AddUi()
+          
+          _RustApp.DrawInterface(player);
         }
       }
 
@@ -963,6 +967,62 @@ namespace Oxide.Plugins
     #endregion
 
     #region Interfaces
+
+    private const string CheckLayer = "RP_PrivateLayer";
+
+    private void DrawInterface(BasePlayer player)
+    {
+        CuiHelper.DestroyUi(player, CheckLayer);
+        CuiElementContainer container = new CuiElementContainer();
+
+        container.Add(new CuiButton
+        {
+            RectTransform = { AnchorMin = "0 0.5", AnchorMax = "1 1", OffsetMin = $"-500 -500", OffsetMax = $"500 500" },
+            Button = { Color = HexToRustFormat("#1C1C1C"), Sprite = "assets/content/ui/ui.circlegradient.png" },
+            Text = { Text = "", Align = TextAnchor.MiddleCenter }
+        }, "Under", CheckLayer);
+
+        string text = "<color=#c6bdb4><size=32><b>ВЫ ВЫЗВАНЫ НА ПРОВЕРКУ</b></size></color>\n<color=#958D85>У вас есть <color=#c6bdb4><b>3 минуты</b></color> чтобы отправить дискорд и принять заявку в друзья.\nИспользуйте команду <b><color=#c6bdb4>/contact</color></b> чтобы отправить дискорд.\n\nДля связи с модератором вне дискорда - используйте чат.</color>";
+
+        container.Add(new CuiLabel
+        {
+            RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" },
+            Text = { Text = text, Align = TextAnchor.MiddleCenter, Font = "robotocondensed-regular.ttf", FontSize = 16 }
+        }, CheckLayer);
+
+        CuiHelper.AddUi(player, container);
+
+        Effect effect = new Effect("ASSETS/BUNDLED/PREFABS/FX/INVITE_NOTICE.PREFAB".ToLower(), player, 0, new Vector3(), new Vector3());
+        EffectNetwork.Send(effect, player.Connection);
+    }
+
+    private static string HexToRustFormat(string hex)
+    {
+        if (string.IsNullOrEmpty(hex))
+        {
+            hex = "#FFFFFFFF";
+        }
+
+        var str = hex.Trim('#');
+
+        if (str.Length == 6)
+            str += "FF";
+
+        if (str.Length != 8)
+        {
+            throw new Exception(hex);
+            throw new InvalidOperationException("Cannot convert a wrong format.");
+        }
+
+        var r = byte.Parse(str.Substring(0, 2), NumberStyles.HexNumber);
+        var g = byte.Parse(str.Substring(2, 2), NumberStyles.HexNumber);
+        var b = byte.Parse(str.Substring(4, 2), NumberStyles.HexNumber);
+        var a = byte.Parse(str.Substring(6, 2), NumberStyles.HexNumber);
+
+        Color color = new Color32(r, g, b, a);
+
+        return string.Format("{0:F2} {1:F2} {2:F2} {3:F2}", color.r, color.g, color.b, color.a);
+    }
 
     #endregion
 
@@ -1147,4 +1207,3 @@ namespace Oxide.Plugins
     #endregion
   }
 }
-
