@@ -818,6 +818,7 @@ namespace Oxide.Plugins
       {
         public string steam_id;
         public string reason;
+        public bool announce;
       }
 
       private object OnQueueKick(QueueKickPayload payload)
@@ -836,6 +837,15 @@ namespace Oxide.Plugins
           $"Игрок {payload.steam_id} кикнут по причине {payload.reason}",
           $"Player {payload.steam_id} was kicked for {payload.reason}"
         ));
+
+        if (payload.announce)
+        {
+          _RustApp.Puts("Типо написали в чат, но на самом деле не писали");
+        }
+        else
+        {
+          _RustApp.Puts("Не пишем в чат, но типо пишем сюда, чтобы проверить что работает");
+        }
 
         player.Kick(payload.reason);
 
@@ -875,6 +885,7 @@ namespace Oxide.Plugins
         }
 
         Notices[payload.steam_id] = payload.value;
+
         NoticeStateSet(payload.steam_id, payload.value);
 
         return true;
