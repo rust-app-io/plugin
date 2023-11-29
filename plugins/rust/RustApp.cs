@@ -643,6 +643,11 @@ namespace Oxide.Plugins
             }
           case "court/kick":
             {
+              if (!_Settings.allow_dangerous_queue)
+              {
+                return "Disabled dangerous queue actions";
+              }
+
               return OnQueueKick(JsonConvert.DeserializeObject<QueueKickPayload>(element.request.data.ToString()));
             }
           case "court/notice-state-get":
@@ -651,7 +656,21 @@ namespace Oxide.Plugins
             }
           case "court/notice-state-set":
             {
+              if (!_Settings.allow_dangerous_queue)
+              {
+                return "Disabled dangerous queue actions";
+              }
+
               return OnNoticeStateSet(JsonConvert.DeserializeObject<QueueNoticeStateSetPayload>(element.request.data.ToString()));
+            }
+          case "court/chat-message":
+            {
+              if (!_Settings.allow_dangerous_queue)
+              {
+                return "Disabled dangerous queue actions";
+              }
+
+              return OnChatMessage(JsonConvert.DeserializeObject<QueueChatMessage>(element.request.data.ToString()));
             }
           default:
             {
@@ -662,7 +681,7 @@ namespace Oxide.Plugins
               break;
             }
         }
-        //
+
         return null;
       }
 
@@ -688,7 +707,7 @@ namespace Oxide.Plugins
             $"Не удалось кикнуть игрока {payload.steam_id}, игрок не найден или оффлайн",
             $"Failed to kick player {payload.steam_id}, player not found or disconnected"
           ));
-          return false;
+          return "Player not found or offline";
         }
 
         _RustApp.Puts(_RustApp.msg(
@@ -710,6 +729,36 @@ namespace Oxide.Plugins
         return true;
       }
 
+      private object OnChatMessage(QueueChatMessage payload)
+      {
+        if (payload.target_steam_id is string)
+        {
+          var player = BasePlayer.Find(payload.target_steam_id);
+
+          if (player == null || !player.IsConnected)
+          {
+            return "Player not found or offline";
+          }
+
+          SendMessage(player, payload);
+        }
+        else
+        {
+          foreach (var player in BasePlayer.activePlayerList)
+          {
+            SendMessage(player, payload);
+          }
+        }
+
+
+        return true;
+      }
+
+      private void SendMessage(BasePlayer player, QueueChatMessage payload)
+      {
+        _RustApp.Puts($"Sent message to {player.displayName} {JsonConvert.SerializeObject(payload)}");
+      }
+
       #region Notice 
 
       class QueueNoticeStateGetPayload
@@ -721,6 +770,18 @@ namespace Oxide.Plugins
       {
         public string steam_id;
         public bool value;
+      }
+
+      private class QueueChatMessage
+      {
+        public string initiator_name;
+        public string initiator_steam_id;
+
+        [CanBeNull] public string target_steam_id;
+
+        public string message;
+
+        public string mode;
       }
 
       private Dictionary<string, bool> Notices = new Dictionary<string, bool>();
@@ -737,6 +798,12 @@ namespace Oxide.Plugins
 
       private object OnNoticeStateSet(QueueNoticeStateSetPayload payload)
       {
+        var player = BasePlayer.Find(payload.steam_id);
+        if (player == null || !player.IsConnected)
+        {
+          return "Player not found or offline";
+        }
+
         if (!Notices.ContainsKey(payload.steam_id))
         {
           Notices.Add(payload.steam_id, payload.value);
@@ -752,19 +819,19 @@ namespace Oxide.Plugins
         Notices.Keys.ToList().ForEach(v => NoticeStateSet(v, false));
       }
 
-      private bool NoticeStateSet(string steam_id, bool value)
+      private object NoticeStateSet(string steam_id, bool value)
       {
         var player = BasePlayer.Find(steam_id);
         if (player == null || !player.IsConnected)
         {
-          return false;
+          return "Player not found or offline";
         }
 
         if (!value)
         {
           _RustApp.Puts(_RustApp.msg(
-            $"С игрока {steam_id} снято уведомление о проверке",
-            $"Notify about check was removed from player {steam_id}"
+            $"С игрока {player.userID} снято уведомление о проверке",
+            $"Notify about check was removed from player {player.userID}"
           ));
 
           CuiHelper.DestroyUi(player, CheckLayer);
@@ -772,8 +839,8 @@ namespace Oxide.Plugins
         else
         {
           _RustApp.Puts(_RustApp.msg(
-            $"Игрок {steam_id} уведомлён о проверке",
-            $"Player {steam_id} was notified about check"
+            $"Игрок {player.userID} уведомлён о проверке",
+            $"Player {player.userID} was notified about check"
           ));
 
           _RustApp.DrawInterface(player);
@@ -825,6 +892,44 @@ namespace Oxide.Plugins
 
       }
     }
+
+    #endregion
+
+    #region Configuration
+
+    private class Configuration
+    {
+      [JsonProperty("Allow execute dangerous methods from queue")]
+      public bool allow_dangerous_queue = false;
+
+      public static Configuration Generate()
+      {
+        return new Configuration
+        {
+          allow_dangerous_queue = false
+        };
+      }
+    }
+
+
+    protected override void LoadConfig()
+    {
+      base.LoadConfig();
+      try
+      {
+        _Settings = Config.ReadObject<Configuration>();
+      }
+      catch
+      {
+        PrintWarning($"Error reading config, creating one new config!");
+        LoadDefaultConfig();
+      }
+
+      SaveConfig();
+    }
+
+    protected override void LoadDefaultConfig() => _Settings = Configuration.Generate();
+    protected override void SaveConfig() => Config.WriteObject(_Settings);
 
     #endregion
 
@@ -891,6 +996,8 @@ namespace Oxide.Plugins
     #region Variables
 
     private static RustApp _RustApp;
+    private static Configuration _Settings;
+
     private CourtWorker _Worker;
 
     #endregion
