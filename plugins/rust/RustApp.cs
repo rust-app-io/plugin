@@ -31,6 +31,8 @@ using UnityEngine;
 using UnityEngine.Networking;
 using System.IO;
 using ConVar;
+using Oxide.Core.Database;
+using Facepunch;
 
 
 namespace Oxide.Plugins
@@ -55,20 +57,8 @@ namespace Oxide.Plugins
       }
     }
 
-    public class QueueElement
-    {
-      public string id;
-
-      public QueueRequest request;
-    }
-
-    public class QueueRequest
-    {
-      public string name;
-      public JObject data;
-    }
-
-    private class StableRequest<T>
+    // Base code idea from RustStore by Sanlerus
+    public class StableRequest<T>
     {
       private static Dictionary<string, string> DefaultHeaders(string secret)
       {
@@ -94,7 +84,7 @@ namespace Oxide.Plugins
 
       private DateTime _created = DateTime.Now;
 
-      public StableRequest(string url, RequestMethod method, object data, string secret, string name)
+      public StableRequest(string url, RequestMethod method, object? data, string secret)
       {
         this.url = url;
         this.method = method;
@@ -104,11 +94,11 @@ namespace Oxide.Plugins
 
         this.onException += (a) =>
         {
-          AvailableRequests.Exceptions.Insert(0, new LastException(name, data, a, secret));
+          LastException.History.Insert(0, new LastException(url, data, a, secret));
 
-          if (AvailableRequests.Exceptions.Count > 10)
+          if (LastException.History.Count > 10)
           {
-            AvailableRequests.Exceptions.RemoveRange(10, 1);
+            LastException.History.RemoveRange(10, 1);
           }
         };
       }
@@ -118,8 +108,11 @@ namespace Oxide.Plugins
         return (DateTime.Now - _created).TotalMilliseconds;
       }
 
-      public void Execute()
+      public void Execute(Action<T, string> onComplete, Action<string> onException)
       {
+        this.onComplete += onComplete;
+        this.onException += onException;
+
         UnityWebRequest webRequest = null;
 
         var body = System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(data != null ? data : new { }));
@@ -178,7 +171,6 @@ namespace Oxide.Plugins
 
         if (isError)
         {
-
           if (body.Contains("cloudflare"))
           {
             onException.Invoke("cloudflare");
@@ -193,6 +185,7 @@ namespace Oxide.Plugins
           try
           {
             var obj = JsonConvert.DeserializeObject<T>(request.downloadHandler?.text);
+
             onComplete.Invoke(obj, request.downloadHandler?.text);
           }
           catch (Exception parseException)
@@ -205,6 +198,8 @@ namespace Oxide.Plugins
 
     private class LastException
     {
+      public static List<LastException> History = new List<LastException>();
+
       public string module;
       public string secret;
       public string payload;
@@ -220,98 +215,30 @@ namespace Oxide.Plugins
       }
     }
 
-    private class AvailableRequests
+    private static class CourtUrls
     {
-      public static string COURT_URL = "https://court.rustapp.io/plugin";
-      public static string QUEUE_URL = "https://queue.rustapp.io";
+      private static string Base = "https://court.rustapp.io";
 
-      public static List<LastException> Exceptions = new List<LastException>();
+      public static string Validate = $"{CourtUrls.Base}/plugin/";
+      public static string SendContact = $"{CourtUrls.Base}/plugin/contact";
+      public static string SendState = $"{CourtUrls.Base}/plugin/state";
+      public static string SendChat = $"{CourtUrls.Base}/plugin/chat";
+      public static string SendReports = $"{CourtUrls.Base}/plugin/reports";
+    }
 
-      public static void Validate(string secret, [CanBeNull] Action onSuccess, [CanBeNull] Action<string> onException)
-      {
-        var request = new StableRequest<object>($"{COURT_URL}/", RequestMethod.GET, null, secret, "Validate configuration");
+    private static class QueueUrls
+    {
+      private static string Base = "https://queue.rustapp.io";
 
-        _RustApp.Puts(_RustApp.msg(
-          "Подождите, происходит проверка секретного ключа!",
-          "Please hold-on, validating your api-key!"
-        ));
+      public static string Fetch = $"{QueueUrls.Base}/";
+      public static string Response = $"{QueueUrls.Base}/";
+    }
 
-        request.onComplete += (a, b) => onSuccess?.Invoke();
-        request.onException += (a) =>
-        {
-          onException?.Invoke(_RustApp.msg($"Ошибка подключения ключа: {a}", $"Failed to validate key: {a}"));
-        };
+    private static class BanUrls
+    {
+      private static string Base = "https://ban.rustapp.io";
 
-        request.Execute();
-      }
-
-      public static void SendUpdate(string secret, PluginStatePayload payload)
-      {
-        var request = new StableRequest<object>($"{COURT_URL}/state", RequestMethod.PUT, payload, secret, "Updating state");
-
-        request.onException += (a) =>
-        {
-          _RustApp.PrintWarning(_RustApp.msg(
-            $"Не удалось отправить информацию об игроках (Напишите 'ra_status' для деталей)",
-            $"Failed to send players update (Use 'ra_status' for details)"
-          ));
-        };
-
-        request.Execute();
-      }
-
-      public static void SendContact(string secret, PluginContactPayload payload, Action<bool> callback)
-      {
-        var request = new StableRequest<object>($"{COURT_URL}/contact", RequestMethod.POST, payload, secret, "Sending contact");
-
-        request.onException += (a) => callback(false);
-        request.onComplete += (a, b) => callback(true);
-
-        request.Execute();
-      }
-
-      public static void SendChatMessages(string secret, PluginChatMessagesPayload payload, Action<PluginChatMessagesPayload> fallback)
-      {
-        var request = new StableRequest<object>($"{COURT_URL}/chat", RequestMethod.POST, payload, secret, "Updating state");
-
-        request.onException += (a) =>
-        {
-          fallback(payload);
-        };
-
-        request.Execute();
-      }
-
-      public static void SendReports(string secret, PluginReportsPayload payload, Action<PluginReportsPayload> fallback)
-      {
-        var request = new StableRequest<object>($"{COURT_URL}/reports", RequestMethod.POST, payload, secret, "Updating reports");
-
-        request.onException += (a) =>
-        {
-          fallback(payload);
-        };
-
-        request.Execute();
-      }
-
-      public static void QueueRetreive(string secret, Action<List<QueueElement>> callback)
-      {
-        var request = new StableRequest<List<QueueElement>>($"{QUEUE_URL}/", RequestMethod.GET, null, secret, "Queue retreive");
-
-        request.onComplete += (a, b) =>
-        {
-          callback(a);
-        };
-
-        request.Execute();
-      }
-
-      public static void QueueProcess(string secret, Dictionary<string, object> responses)
-      {
-        var request = new StableRequest<List<QueueElement>>($"{QUEUE_URL}/", RequestMethod.PUT, new { data = responses }, secret, "Queue process");
-
-        request.Execute();
-      }
+      public static string Fetch = $"{BanUrls.Base}/plugin";
     }
 
     class PluginChatMessagesPayload
@@ -349,31 +276,6 @@ namespace Oxide.Plugins
       public string message;
     }
 
-    class PluginStatePayload
-    {
-      public int slots = ConVar.Server.maxplayers;
-      public string version = _RustApp.Version.ToString();
-      public string performance = _RustApp.TotalHookTime.ToString();
-
-      public List<PluginPlayerPayload> players = new List<PluginPlayerPayload>();
-
-      public PluginStatePayload(List<PluginPlayerPayload> players)
-      {
-        this.players = players;
-      }
-    }
-
-    class PluginContactPayload
-    {
-      public string steam_id;
-      public string message;
-
-      public PluginContactPayload(string steam_id, string message)
-      {
-        this.steam_id = steam_id;
-        this.message = message;
-      }
-    }
 
     class PluginPlayerPayload
     {
@@ -462,234 +364,457 @@ namespace Oxide.Plugins
       public string Value;
     }
 
-    public class CourtWorker : MonoBehaviour
-    {
-      private List<PluginReportEntry> reports = new List<PluginReportEntry>();
-      private List<PluginChatMessageEntry> messages = new List<PluginChatMessageEntry>();
 
-      [CanBeNull] private string secret;
+    public class CourtWorker : BaseWorker
+    {
+      public ActionWorker Action;
+      public UpdateWorker Update;
+      public QueueWorker Queue;
+      public BanWorker Ban;
+
+      private MetaInfo Meta;
 
       public void Awake()
       {
-        var meta = MetaInfo.Read();
+        OnDestroy();
 
-        _RustApp.Puts(_RustApp.msg(
+        _RustApp.Log(
           "Добро пожаловать в RustApp.IO! Подключение к серверам панели...",
           "Welcome to the RustApp.IO! Connecting to servers..."
-          ));
+        );
 
-        if (meta == null)
+        Action = gameObject.AddComponent<ActionWorker>();
+        Update = gameObject.AddComponent<UpdateWorker>();
+        Queue = gameObject.AddComponent<QueueWorker>();
+        Ban = gameObject.AddComponent<BanWorker>();
+
+        Meta = MetaInfo.Read();
+
+        if (Meta == null)
         {
-          _RustApp.PrintError(_RustApp.msg(
-            "Плагин не настроен, откройте раздел 'сервера' и нажмите 'подключить' возле нужного сервера",
-            "Plugin is not configured, open 'servers' sections and press 'connect' over selected server"
-          ));
-          _RustApp.PrintError(_RustApp.msg(
-            "Если у вас остались вопросы: https://vk.com/rustapp",
-            "If you have any question, please contact: https://vk.com/rustapp"
-          ));
+          _RustApp.Warning(
+            "Плагин не настроен, выполните команду 'ra_pair' для первоначальной настройки",
+            "Plugin is not configured, execute the command 'ra_pair' for initial setup"
+          );
+
           return;
         }
 
-        AvailableRequests.Validate(meta.Value, () =>
-        {
-          _RustApp.Puts(_RustApp.msg(
-            $"Соединение успешно установлено, плагин корректно настроен",
-            "Connection is established, plugin is configured"
-          ));
+        Connect();
+      }
 
-          this.StartCycle(meta.Value);
-        }, (a) =>
-        {
-          if (a.Contains("cloudflare"))
+      public void Connect()
+      {
+        Auth(Meta.Value);
+
+        @ValidateSecret(
+          () => EnableModules(),
+          (err) =>
           {
-            _RustApp.PrintWarning(_RustApp.msg(
-              $"RustApp.IO временно недоступен, переподключение черз 10 секунд",
-              $"RustApp.IO is temporary unavailable, retry in 10 secs"
-            ));
+            if (err.Contains("is lower than minimal"))
+            {
+              _RustApp.Warning(
+                $"Ваша версия слишком сильно устарела, необходимо скачать новую версию с сайта",
+                $"Your version is significantly outdated, you need to download the new version from the website"
+              );
+              return;
+            }
 
-            Invoke(nameof(Awake), 10);
-            return;
+            if (err.Contains("Authorization secret is corrupted"))
+            {
+              _RustApp.Warning(
+                $"Ваш ключ недействителен, подключите сервер заного при помощи 'ra_pair'",
+                $"Your key is invalid. Reconnect the server using 'ra_pair'"
+              );
+              return;
+            }
+
+            if (err.Contains("Check server configuration, required ip") || err.Contains("Check server configuration, required port"))
+            {
+              _RustApp.Warning(
+                $"Конфигурация вашего сервера изменилась, необходимо восстановление при помощи 'ra_pair'",
+                $"The configuration of your server has changed, you need to perform a restore using 'ra_pair'"
+              );
+              return;
+            }
+
+            _RustApp.Error(
+              $"Судя по всему, сервера RustApp недоступны. Переподключение через 10 секунд",
+              $"It seems that RustApp servers are unavailable. Reconnect in 10 seconds"
+            );
+
+            Invoke(nameof(Connect), 10f);
           }
-
-          _RustApp.PrintError(_RustApp.msg(
-            $"Ключ не прошёл проверку: {a}",
-            $"Key was not validated: ${a}"
-          ));
-        });
+        );
       }
 
-      public void StartCycle(string secret)
+      public void EnableModules()
       {
-        this.secret = secret;
+        Action.Auth(Meta.Value);
+        Update.Auth(Meta.Value);
+        Queue.Auth(Meta.Value);
+        Ban.Auth(Meta.Value);
 
+        _RustApp.Log(
+          "Соединение установлена, плагин готов к работе",
+          "Connection established, plugin is ready"
+        );
+      }
+
+      public void @ValidateSecret(Action? onComplete, Action<string>? onException)
+      {
+        Request<object>(CourtUrls.Validate, RequestMethod.GET)
+          .Execute(
+            (data, raw) => onComplete?.Invoke(),
+            (err) => onException?.Invoke(err)
+          );
+      }
+
+      public void OnDestroy()
+      {
+        if (Action != null)
+        {
+          Destroy(Action);
+        }
+
+        if (Update != null)
+        {
+          Destroy(Update);
+        }
+
+        if (Queue != null)
+        {
+          Destroy(Queue);
+        }
+
+        if (Ban != null)
+        {
+          Destroy(Ban);
+        }
+      }
+    }
+
+    public class ActionWorker : BaseWorker
+    {
+      public void @SendContact(string steam_id, string message, Action<bool> callback)
+      {
+        if (!IsReady())
+        {
+          return;
+        }
+
+        Request<object>(CourtUrls.SendContact, RequestMethod.POST, new { steam_id, message })
+          .Execute(
+            (data, raw) => callback(true),
+            (err) => callback(false)
+          );
+      }
+    }
+
+    public class BanWorker : BaseWorker
+    {
+      public class BanFetchResponse
+      {
+        public List<BanFetchEntry> entries;
+      }
+
+      public class BanFetchPayload
+      {
+        public string steam_id;
+        public string ip;
+      }
+
+      public class BanFetchEntry : BanFetchPayload
+      {
+        public List<BanEntry> bans;
+      }
+
+      public class BanEntry
+      {
+
+      }
+
+      private Dictionary<string, string> PlayersCollection = new Dictionary<string, string>();
+
+      public void Awake()
+      {
+        foreach (var player in BasePlayer.activePlayerList)
+        {
+          FetchBan(player);
+        }
+
+        foreach (var queued in ServerMgr.Instance.connectionQueue.queue)
+        {
+          FetchBan(queued.userid.ToString(), queued.IPAddressWithoutPort());
+        }
+
+        foreach (var loading in ServerMgr.Instance.connectionQueue.joining)
+        {
+          FetchBan(loading.userid.ToString(), loading.IPAddressWithoutPort());
+        }
+      }
+
+      protected override void OnReady()
+      {
+        InvokeRepeating(nameof(FetchBans), 0f, 2f);
+      }
+
+      public void FetchBan(BasePlayer player)
+      {
+        FetchBan(player.UserIDString, player.Connection.IPAddressWithoutPort());
+      }
+
+      public void FetchBan(string steamId, string ip)
+      {
+        if (!PlayersCollection.ContainsKey(steamId))
+        {
+          PlayersCollection.Add(steamId, ip);
+          return;
+        }
+
+        PlayersCollection[steamId] = ip;
+      }
+
+      private void FetchBans()
+      {
+        if (!IsReady() || PlayersCollection.Count == 0)
+        {
+          return;
+        }
+
+        @FetchBans(
+          PlayersCollection,
+          (steamId, ban) =>
+          {
+            if (PlayersCollection.ContainsKey(steamId))
+            {
+              PlayersCollection.Remove(steamId);
+            }
+
+            if (ban != null)
+            {
+              _RustApp.CloseConnection(steamId, "ban");
+            }
+          },
+          () =>
+          {
+            _RustApp.Error(
+              $"Ошибка проверки блокировок ({PlayersCollection.Keys.Count} шт.), пытаемся снова...",
+              $"Ban check error ({PlayersCollection.Keys.Count} total), attempting again..."
+            );
+          }
+        );
+      }
+
+      public void @FetchBans(Dictionary<string, string> entries, Action<string, BanEntry> onBan, Action onException)
+      {
+        _RustApp.Log(
+          $"Проверяем блокировки игроков ({entries.Keys.Count} шт)",
+          $"Fetch players bans ({entries.Keys.Count} pc)"
+        );
+
+        var players = new List<BanFetchPayload>();
+
+        foreach (var entry in entries)
+        {
+          players.Add(new BanFetchPayload { steam_id = entry.Key, ip = entry.Value });
+        }
+
+        Request<BanFetchResponse>(BanUrls.Fetch, RequestMethod.POST, new { players })
+          .Execute(
+            (data, raw) =>
+            {
+              foreach (var player in players)
+              {
+                var exists = data.entries.Find(v => v.steam_id == player.steam_id);
+                if (exists == null)
+                {
+                  _RustApp.Error(
+                    $"Ответ бан-сервиса не содержит запрошенного игрока: {player.steam_id}",
+                    $"The ban service response does not contain the requested player: {player.steam_id}"
+                  );
+                  return;
+                }
+
+                var active = exists.bans.FirstOrDefault();
+
+                onBan?.Invoke(player.steam_id, active);
+              }
+            },
+            (err) =>
+            {
+              Interface.Oxide.LogWarning(err);
+              onException?.Invoke();
+            }
+          );
+      }
+    }
+
+    public class UpdateWorker : BaseWorker
+    {
+      private List<PluginReportEntry> ReportCollection = new List<PluginReportEntry>();
+      private List<PluginChatMessageEntry> ChatCollection = new List<PluginChatMessageEntry>();
+      private Dictionary<string, string> DisconnectHistory = new Dictionary<string, string>();
+      private Dictionary<string, string> TeamChangeHistory = new Dictionary<string, string>();
+
+      protected override void OnReady()
+      {
+        CancelInvoke(nameof(SendChat));
         CancelInvoke(nameof(SendUpdate));
-        CancelInvoke(nameof(QueueRetreive));
+        CancelInvoke(nameof(SendReports));
 
-        InvokeRepeating(nameof(SendMessages), 0, 1f);
-        InvokeRepeating(nameof(SendReports), 0, 1f);
+        InvokeRepeating(nameof(SendChat), 0, 1f);
         InvokeRepeating(nameof(SendUpdate), 0, 5f);
-        InvokeRepeating(nameof(QueueRetreive), 0, 1f);
+        InvokeRepeating(nameof(SendReports), 0, 1f);
       }
 
-      public void AddMessage(PluginChatMessageEntry message)
+      public void SaveChat(PluginChatMessageEntry message)
       {
-        messages.Add(message);
+        ChatCollection.Add(message);
       }
 
-      public void AddReport(PluginReportEntry report)
+      public void SaveDisconnect(BasePlayer player, string reason)
       {
-        reports.Add(report);
+        if (!DisconnectHistory.ContainsKey(player.UserIDString))
+        {
+          DisconnectHistory.Add(player.UserIDString, reason);
+        }
+
+        DisconnectHistory[player.UserIDString] = reason;
       }
 
-      public void SendMessages()
+      public void SaveTeamHistory(string initiator_steam_id, string target_steam_id)
       {
-        if (!CheckCondition() || messages.Count == 0)
+        if (!TeamChangeHistory.ContainsKey(target_steam_id))
+        {
+          TeamChangeHistory.Add(target_steam_id, initiator_steam_id);
+        }
+
+        TeamChangeHistory[target_steam_id] = initiator_steam_id;
+      }
+
+      public void SaveReport(PluginReportEntry report)
+      {
+        ReportCollection.Add(report);
+      }
+
+      private void SendChat()
+      {
+        if (!IsReady() || ChatCollection.Count == 0)
         {
           return;
         }
 
-        AvailableRequests.SendChatMessages(secret, new PluginChatMessagesPayload { messages = messages }, (fbMessages) =>
-        {
-          var resurrectMessages = new List<PluginChatMessageEntry>();
+        var messages = ChatCollection.ToList();
 
-          resurrectMessages.AddRange(fbMessages.messages);
-          resurrectMessages.AddRange(messages);
+        Request<object>(CourtUrls.SendChat, RequestMethod.POST, new { messages })
+          .Execute(
+            null,
+            (err) =>
+            {
+              _RustApp.Error(
+                $"Не удалось отправить сообщения из чата ({messages.Count} шт)",
+                $"Failed to send messages from the chat ({messages.Count} pc)"
+              );
 
-          messages = resurrectMessages;
-        });
+              // Возвращаем неудачно отправленные сообщения обратно в массив
+              var resurrectCollection = new List<PluginChatMessageEntry>();
 
-        messages = new List<PluginChatMessageEntry>();
+              resurrectCollection.AddRange(messages);
+              resurrectCollection.AddRange(ChatCollection);
+
+              ChatCollection = resurrectCollection;
+            }
+          );
+
+        ChatCollection = new List<PluginChatMessageEntry>();
       }
-
-      public void SendContact(string steam_id, string message, Action<bool> callback)
-      {
-        if (!CheckCondition())
-        {
-          return;
-        }
-
-        AvailableRequests.SendContact(secret, new PluginContactPayload(steam_id, message), callback);
-      }
-
       public void SendReports()
       {
-        if (!CheckCondition() || reports.Count == 0)
+        if (!IsReady() || ReportCollection.Count == 0)
         {
           return;
         }
 
-        AvailableRequests.SendReports(secret, new PluginReportsPayload { reports = reports }, (fbReports) =>
-        {
-          var resurrectReports = new List<PluginReportEntry>();
+        var reports = ReportCollection.ToList();
 
-          resurrectReports.AddRange(fbReports.reports);
-          resurrectReports.AddRange(reports);
+        Request<object>(CourtUrls.SendReports, RequestMethod.POST, new { reports })
+          .Execute(
+            null,
+            (err) =>
+            {
+              _RustApp.Error(
+                $"Не удалось отправить жалобы ({reports.Count} шт)",
+                $"Failed to send messages from the chat ({reports.Count} pc)"
+              );
 
-          reports = resurrectReports;
-        });
+              // Возвращаем неудачно отправленные репорты обратно в массив
+              var resurrectCollection = new List<PluginReportEntry>();
 
-        reports = new List<PluginReportEntry>();
+              resurrectCollection.AddRange(reports);
+              resurrectCollection.AddRange(ReportCollection);
+
+              ReportCollection = resurrectCollection;
+            }
+          );
+
+        ReportCollection = new List<PluginReportEntry>();
       }
 
-      public void QueueRetreive()
+      public void SendUpdate()
       {
-        if (!CheckCondition())
+        if (!IsReady())
         {
           return;
         }
 
-        AvailableRequests.QueueRetreive(this.secret, (queue) =>
+        var players = BasePlayer.activePlayerList.Select(v => PluginPlayerPayload.FromPlayer(v)).ToList();
+
+        players.AddRange(ServerMgr.Instance.connectionQueue.queue.Select(v => PluginPlayerPayload.FromConnection(v, "queued")));
+        players.AddRange(ServerMgr.Instance.connectionQueue.joining.Select(v => PluginPlayerPayload.FromConnection(v, "joining")));
+
+        var payload = new
         {
-          if (!CheckCondition())
-          {
-            return;
-          }
+          slots = ConVar.Server.maxplayers,
+          version = _RustApp.Version.ToString(),
+          performance = _RustApp.TotalHookTime.ToString(),
 
-          var responses = new Dictionary<string, object>();
+          players,
+          disconnected = DisconnectHistory,
+          team_changes = TeamChangeHistory
+        };
 
-          queue.ForEach(v =>
-          {
-            try
+        Request<object>(CourtUrls.SendState, RequestMethod.PUT, payload)
+          .Execute(
+            (data, raw) =>
             {
-              var response = QueueProcess(v);
-
-              responses.Add(v.id, response);
-            }
-            catch (Exception exc)
-            {
-              _RustApp.PrintWarning(_RustApp.msg(
-                "Не удалось обработать команду из очереди",
-                "Failed to process queue command"
-              ));
-              responses.Add(v.id, $"!EXCEPTION!:{exc.ToString()}");
-            }
-          });
-
-          if (responses.Keys.Count > 0)
-          {
-            AvailableRequests.QueueProcess(this.secret, responses);
-          }
-        });
+              DisconnectHistory.Clear();
+              TeamChangeHistory.Clear();
+            },
+            (err) => _RustApp.Error(
+              $"Не удалось отправить состояние сервера ({err})",
+              $"Failed to send server status ({err})"
+            )
+          );
       }
+    }
 
-      public object QueueProcess(QueueElement element)
+    public class QueueWorker : BaseWorker
+    {
+      private Dictionary<string, bool> Notices = new Dictionary<string, bool>();
+
+      public class QueueElement
       {
-        switch (element.request.name)
-        {
-          case "court/health-check":
-            {
-              return OnQueueHealthCheck();
-            }
-          case "court/kick":
-            {
-              if (!_Settings.allow_dangerous_queue)
-              {
-                return "Disabled dangerous queue actions";
-              }
+        public string id;
 
-              return OnQueueKick(JsonConvert.DeserializeObject<QueueKickPayload>(element.request.data.ToString()));
-            }
-          case "court/notice-state-get":
-            {
-              return OnNoticeStateGet(JsonConvert.DeserializeObject<QueueNoticeStateGetPayload>(element.request.data.ToString()));
-            }
-          case "court/notice-state-set":
-            {
-              if (!_Settings.allow_dangerous_queue)
-              {
-                return "Disabled dangerous queue actions";
-              }
-
-              return OnNoticeStateSet(JsonConvert.DeserializeObject<QueueNoticeStateSetPayload>(element.request.data.ToString()));
-            }
-          case "court/chat-message":
-            {
-              if (!_Settings.allow_dangerous_queue)
-              {
-                return "Disabled dangerous queue actions";
-              }
-
-              return OnChatMessage(JsonConvert.DeserializeObject<QueueChatMessage>(element.request.data.ToString()));
-            }
-          default:
-            {
-              _RustApp.Puts(_RustApp.msg(
-                $"Неизвестная команда из очередей: {element.request.name}",
-                $"Unknown queue command: {element.request.name}"
-              ));
-              break;
-            }
-        }
-
-        return null;
+        public QueueRequest request;
       }
 
-      private object OnQueueHealthCheck()
+      public class QueueRequest
       {
-        return true;
+        public string name;
+        public JObject data;
       }
-
 
       private class QueueKickPayload
       {
@@ -698,68 +823,6 @@ namespace Oxide.Plugins
         public bool announce;
       }
 
-      private object OnQueueKick(QueueKickPayload payload)
-      {
-        var player = BasePlayer.Find(payload.steam_id);
-        if (player == null || !player.IsConnected)
-        {
-          _RustApp.Puts(_RustApp.msg(
-            $"Не удалось кикнуть игрока {payload.steam_id}, игрок не найден или оффлайн",
-            $"Failed to kick player {payload.steam_id}, player not found or disconnected"
-          ));
-          return "Player not found or offline";
-        }
-
-        _RustApp.Puts(_RustApp.msg(
-          $"Игрок {payload.steam_id} кикнут по причине {payload.reason}",
-          $"Player {payload.steam_id} was kicked for {payload.reason}"
-        ));
-
-        if (payload.announce)
-        {
-          _RustApp.Puts("Типо написали в чат, но на самом деле не писали");
-        }
-        else
-        {
-          _RustApp.Puts("Не пишем в чат, но типо пишем сюда, чтобы проверить что работает");
-        }
-
-        player.Kick(payload.reason);
-
-        return true;
-      }
-
-      private object OnChatMessage(QueueChatMessage payload)
-      {
-        if (payload.target_steam_id is string)
-        {
-          var player = BasePlayer.Find(payload.target_steam_id);
-
-          if (player == null || !player.IsConnected)
-          {
-            return "Player not found or offline";
-          }
-
-          SendMessage(player, payload);
-        }
-        else
-        {
-          foreach (var player in BasePlayer.activePlayerList)
-          {
-            SendMessage(player, payload);
-          }
-        }
-
-
-        return true;
-      }
-
-      private void SendMessage(BasePlayer player, QueueChatMessage payload)
-      {
-        _RustApp.Puts($"Sent message to {player.displayName} {JsonConvert.SerializeObject(payload)}");
-      }
-
-      #region Notice 
 
       class QueueNoticeStateGetPayload
       {
@@ -783,8 +846,114 @@ namespace Oxide.Plugins
 
         public string mode;
       }
+      protected override void OnReady()
+      {
+        InvokeRepeating(nameof(QueueRetreive), 0f, 1f);
+      }
 
-      private Dictionary<string, bool> Notices = new Dictionary<string, bool>();
+      private void QueueRetreive()
+      {
+        if (!IsReady())
+        {
+          return;
+        }
+
+        @QueueRetreive((queues) =>
+        {
+          var responses = new Dictionary<string, object>();
+
+          foreach (var queue in queues)
+          {
+            try
+            {
+              var response = QueueProcess(queue);
+
+              responses.Add(queue.id, response);
+            }
+            catch (Exception exc)
+            {
+              _RustApp.PrintWarning(
+                "Не удалось обработать команду из очереди",
+                "Failed to process queue command"
+              );
+
+              responses.Add(queue.id, $"!EXCEPTION!:{exc.ToString()}");
+            }
+          }
+
+          if (responses.Keys.Count == 0)
+          {
+            return;
+          }
+
+          QueueProcess(responses);
+        });
+      }
+
+      private void @QueueRetreive(Action<List<QueueElement>> callback)
+      {
+        Request<List<QueueElement>>(QueueUrls.Fetch, RequestMethod.GET, null)
+          .Execute(
+            (data, raw) => callback(data),
+            (err) =>
+            {
+              _RustApp.Error(
+                "Не удалось загрузить задачи из очередей",
+                "Failed to retreive queue"
+              );
+            }
+          );
+      }
+
+      public void QueueProcess(Dictionary<string, object> responses)
+      {
+        Request<List<QueueElement>>(QueueUrls.Fetch, RequestMethod.PUT, new { data = responses })
+          .Execute(
+            (data, raw) => { },
+            (err) => { }
+          );
+      }
+
+      private object OnQueueHealthCheck()
+      {
+        return true;
+      }
+      public object QueueProcess(QueueElement element)
+      {
+        switch (element.request.name)
+        {
+          case "court/health-check":
+            {
+              return OnQueueHealthCheck();
+            }
+          case "court/kick":
+            {
+              return OnQueueKick(JsonConvert.DeserializeObject<QueueKickPayload>(element.request.data.ToString()));
+            }
+          case "court/notice-state-get":
+            {
+              return OnNoticeStateGet(JsonConvert.DeserializeObject<QueueNoticeStateGetPayload>(element.request.data.ToString()));
+            }
+          case "court/notice-state-set":
+            {
+              return OnNoticeStateSet(JsonConvert.DeserializeObject<QueueNoticeStateSetPayload>(element.request.data.ToString()));
+            }
+          case "court/chat-message":
+            {
+              return OnChatMessage(JsonConvert.DeserializeObject<QueueChatMessage>(element.request.data.ToString()));
+            }
+          default:
+            {
+              _RustApp.Log(
+                $"Неизвестная команда из очередей: {element.request.name}",
+                $"Unknown queue command: {element.request.name}"
+              );
+              break;
+            }
+        }
+
+        return null;
+      }
 
       private object OnNoticeStateGet(QueueNoticeStateGetPayload payload)
       {
@@ -811,37 +980,75 @@ namespace Oxide.Plugins
 
         Notices[payload.steam_id] = payload.value;
 
-        return NoticeStateSet(payload.steam_id, payload.value);
+        return NoticeStateSet(player, payload.value);
       }
-
-      private void NoticeClear()
+      private object OnQueueKick(QueueKickPayload payload)
       {
-        Notices.Keys.ToList().ForEach(v => NoticeStateSet(v, false));
-      }
-
-      private object NoticeStateSet(string steam_id, bool value)
-      {
-        var player = BasePlayer.Find(steam_id);
-        if (player == null || !player.IsConnected)
+        var success = _RustApp.CloseConnection(payload.steam_id, payload.reason);
+        if (!success)
         {
+          _RustApp.Log(
+            $"Не удалось кикнуть игрока {payload.steam_id}, игрок не найден или оффлайн",
+            $"Failed to kick player {payload.steam_id}, player not found or disconnected"
+          );
           return "Player not found or offline";
         }
 
+        _RustApp.Log(
+          $"Игрок {payload.steam_id} кикнут по причине {payload.reason}",
+          $"Player {payload.steam_id} was kicked for {payload.reason}"
+        );
+
+        if (payload.announce)
+        {
+          _RustApp.SendGlobalMessage("Игрок был кикнут");
+        }
+
+        return true;
+      }
+
+      private object OnChatMessage(QueueChatMessage payload)
+      {
+        if (payload.target_steam_id is string)
+        {
+          var player = BasePlayer.Find(payload.target_steam_id);
+
+          if (player == null || !player.IsConnected)
+          {
+            return "Player not found or offline";
+          }
+
+          _RustApp.SendMessage(player, payload.message);
+        }
+        else
+        {
+          foreach (var player in BasePlayer.activePlayerList)
+          {
+            _RustApp.SendMessage(player, payload.message);
+          }
+        }
+
+
+        return true;
+      }
+
+      private object NoticeStateSet(BasePlayer player, bool value)
+      {
         if (!value)
         {
-          _RustApp.Puts(_RustApp.msg(
+          _RustApp.Log(
             $"С игрока {player.userID} снято уведомление о проверке",
             $"Notify about check was removed from player {player.userID}"
-          ));
+          );
 
           CuiHelper.DestroyUi(player, CheckLayer);
         }
         else
         {
-          _RustApp.Puts(_RustApp.msg(
+          _RustApp.Log(
             $"Игрок {player.userID} уведомлён о проверке",
             $"Player {player.userID} was notified about check"
-          ));
+          );
 
           _RustApp.DrawInterface(player);
         }
@@ -849,36 +1056,41 @@ namespace Oxide.Plugins
         return true;
       }
 
-      #endregion
-
-      public void SendUpdate()
+      public void OnDestroy()
       {
-        if (!CheckCondition())
-        {
-          return;
-        }
+        Interface.Oxide.LogWarning("Убиты очереди");
+      }
+    }
 
-        var players = BasePlayer.activePlayerList.Select(v => PluginPlayerPayload.FromPlayer(v)).ToList();
 
-        players.AddRange(ServerMgr.Instance.connectionQueue.queue.Select(v => PluginPlayerPayload.FromConnection(v, "queued")));
-        players.AddRange(ServerMgr.Instance.connectionQueue.joining.Select(v => PluginPlayerPayload.FromConnection(v, "joining")));
 
-        var payload = new PluginStatePayload(players);
+    public class BaseWorker : MonoBehaviour
+    {
+      protected string secret = string.Empty;
 
-        AvailableRequests.SendUpdate(this.secret, payload);
+      public void Auth(string secret)
+      {
+        this.secret = secret;
+
+        OnReady();
       }
 
-      public bool CheckCondition()
+      protected StableRequest<T> Request<T>(string url, RequestMethod method, object? data = null)
+      {
+        var request = new StableRequest<T>(url, method, data, this.secret);
+
+        return request;
+      }
+
+      protected bool IsReady()
       {
         if (_RustApp == null || !_RustApp.IsLoaded)
         {
-          Interface.Oxide.LogWarning("Unexpected exception, plugin is already unloaded. Contact support: https://vk.com/rustapp");
-
-          UnityEngine.Object.Destroy(this);
+          Destroy(this);
           return false;
         }
 
-        if (this.secret == null)
+        if (secret == null)
         {
           Interface.Oxide.LogWarning("Unexpected exception, secret is missing. Contact support: https://vk.com/rustapp");
           return false;
@@ -887,10 +1099,7 @@ namespace Oxide.Plugins
         return true;
       }
 
-      public void OnDestroy()
-      {
-
-      }
+      protected virtual void OnReady() { }
     }
 
     #endregion
@@ -899,14 +1108,14 @@ namespace Oxide.Plugins
 
     private class Configuration
     {
-      [JsonProperty("Allow execute dangerous methods from queue")]
-      public bool allow_dangerous_queue = false;
+      [JsonProperty("Ignore all players manipulation")]
+      public bool do_not_interact_player = true;
 
       public static Configuration Generate()
       {
         return new Configuration
         {
-          allow_dangerous_queue = false
+          do_not_interact_player = true
         };
       }
     }
@@ -939,6 +1148,11 @@ namespace Oxide.Plugins
 
     private void DrawInterface(BasePlayer player)
     {
+      if (_Settings.do_not_interact_player)
+      {
+        return;
+      }
+
       CuiHelper.DestroyUi(player, CheckLayer);
       CuiElementContainer container = new CuiElementContainer();
 
@@ -1008,7 +1222,10 @@ namespace Oxide.Plugins
     {
       _RustApp = this;
 
-      _Worker = ServerMgr.Instance.gameObject.AddComponent<CourtWorker>();
+      timer.Once(1, () =>
+      {
+        _Worker = ServerMgr.Instance.gameObject.AddComponent<CourtWorker>();
+      });
     }
 
     private void Unload()
@@ -1022,7 +1239,7 @@ namespace Oxide.Plugins
 
     private void RA_DirectMessageHandler(string from, string to, string message)
     {
-      _Worker.AddMessage(new PluginChatMessageEntry
+      _Worker?.Update.SaveChat(new PluginChatMessageEntry
       {
         steam_id = from,
         target_steam_id = to,
@@ -1034,7 +1251,7 @@ namespace Oxide.Plugins
 
     private void RA_ReportSend(string initiator_steam_id, string target_steam_id, string reason, [CanBeNull] string message)
     {
-      _Worker.AddReport(new PluginReportEntry
+      _Worker?.Update.SaveReport(new PluginReportEntry
       {
         initiator_steam_id = initiator_steam_id,
         target_steam_id = target_steam_id,
@@ -1048,6 +1265,36 @@ namespace Oxide.Plugins
 
     #region Hooks
 
+    private void CanUserLogin(string name, string id, string ipAddress)
+    {
+      _Worker?.Ban.FetchBan(id, ipAddress);
+    }
+
+    private void OnPlayerDisconnected(BasePlayer player, string reason)
+    {
+      _Worker?.Update.SaveDisconnect(player, reason);
+    }
+
+    private void OnTeamKick(RelationshipManager.PlayerTeam team, BasePlayer player, ulong target)
+    {
+      _Worker?.Update.SaveTeamHistory(player.UserIDString, target.ToString());
+    }
+
+    private void OnTeamDisband(RelationshipManager.PlayerTeam team)
+    {
+      team.members.ForEach(v => _Worker?.Update.SaveTeamHistory(v.ToString(), v.ToString()));
+    }
+
+    private void OnTeamLeave(RelationshipManager.PlayerTeam team, BasePlayer player)
+    {
+      if (team.members.Count == 1)
+      {
+        return;
+      }
+
+      _Worker?.Update.SaveTeamHistory(player.UserIDString, player.UserIDString);
+    }
+
     private void OnPlayerChat(BasePlayer player, string message, ConVar.Chat.ChatChannel channel)
     {
       // Сохраняем только глобальный и командный чат
@@ -1056,7 +1303,7 @@ namespace Oxide.Plugins
         return;
       }
 
-      _Worker.AddMessage(new PluginChatMessageEntry
+      _Worker?.Update.SaveChat(new PluginChatMessageEntry
       {
         steam_id = player.UserIDString,
 
@@ -1073,9 +1320,16 @@ namespace Oxide.Plugins
     [ChatCommand("contact")]
     private void CmdChatContact(BasePlayer player, string command, string[] args)
     {
-      _Worker.SendContact(player.UserIDString, String.Join(" ", args), success =>
+      _Worker?.Action.SendContact(player.UserIDString, String.Join(" ", args), (accepted) =>
       {
-        player.ChatMessage($"status: {success}");
+        if (!accepted)
+        {
+          return;
+        }
+
+        // TODO: Сообщение должно быть локализовано
+        // TODO: Должна быть поддержка отправки как через сообщение, так и через gametip
+        SendMessage(player, "Ваши контактные данные отправлены модератору");
       });
     }
 
@@ -1091,43 +1345,52 @@ namespace Oxide.Plugins
         return;
       }
 
-      Puts(msg("Помощь по командам RustApp.IO", "Command help for RustApp.IO"));
-      Puts(msg(
+      Log(
+        "Помощь по командам RustApp.IO",
+        "Command help for RustApp.IO"
+      );
+      Log(
         "ra_status <true?> - статус работы плагина (если передан true, покажет переданные данные)",
         "ra_status <true?> - plugin health-check (if true passed, with request payload)"
-      ));
-      Puts(msg(
-        "ra_pair <secret> - настройка секретного ключа",
-        "ra_pair <secret> - configure secret key"
-      ));
-      Puts(msg(
-        "ra_genmap - генерация оноайн-карты (игроки могут быть кикнуты с сервера)",
-        "ra_genmap - generate online-map (players will be kicked)"
-      ));
+      );
+      Log(
+        "ra_pair - подключение сервера",
+        "ra_pair - connect server"
+      );
+      Log(
+        "ra_map - генерация оноайн-карты (игроки могут быть кикнуты с сервера)",
+        "ra_map - generate online-map (players will be kicked)"
+      );
     }
 
     [ConsoleCommand("ra_status")]
     private void CmdConsoleStatus(ConsoleSystem.Arg args)
     {
-      Puts(msg(
-        "Последние веб-ошибки:",
-        "Last web exceptions:"
-      ));
-
-      if (AvailableRequests.Exceptions.Count == 0)
+      if (!args.IsAdmin)
       {
-        Puts(msg(
-          "- ошибки не найдены",
-          "- no exceptions found"
-        ));
         return;
       }
 
-      foreach (var value in AvailableRequests.Exceptions)
+      if (LastException.History.Count == 0)
+      {
+        Log(
+          "Ни одной ошибки не найдено",
+          "No errors found"
+        );
+        return;
+      }
+
+      Log(
+        "Список последних ошибок в запросах:",
+        "List of recent errors in requests:"
+      );
+
+
+      foreach (var value in LastException.History)
       {
         var diff = (DateTime.Now - value.time).TotalSeconds;
 
-        string diffText = diff.ToString("F2") + msg("сек. назад", "secs ago");
+        string diffText = diff.ToString("F2") + Msg("сек. назад", "secs ago");
 
         Puts($"{value.module} ({diffText})");
 
@@ -1146,43 +1409,137 @@ namespace Oxide.Plugins
       {
         return;
       }
+    }
 
-      if (args.Args.Length != 1)
+    #endregion
+
+    #region User Manipulation
+
+    private void SendGlobalMessage(string message)
+    {
+      foreach (var player in BasePlayer.activePlayerList)
       {
-        PrintWarning(msg(
-          "Вы неправильно используете команду! Формат: ra_pair <secret>",
-          "Wrong command usage! Format: ra_pair <secret>"
-        ));
+        SendMessage(player, message);
+      }
+    }
+
+    private void SendMessage(string steamId, string message)
+    {
+      var player = BasePlayer.Find(steamId);
+      if (player == null || !player.IsConnected)
+      {
         return;
       }
 
-      var secret = args.Args[0].Replace("<", "").Replace(">", "").Replace("'", "").Replace("'", "");
+      SendMessage(player, message);
+    }
 
-      AvailableRequests.Validate(secret, () =>
+    private void SendMessage(BasePlayer player, string message)
+    {
+      if (_Settings.do_not_interact_player)
       {
-        Puts(msg(
-          "Секретный ключ успешно прошёл проверку, перезагрузка...",
-          "Secret key validate successfull, reloading..."
-        ));
-        MetaInfo.write(new MetaInfo { Value = secret });
+        return;
+      }
 
-        Server.Command("o.reload RustApp");
-      }, (msg) =>
+      player.ChatMessage(message);
+    }
+
+    private bool CloseConnection(string steamId, string reason)
+    {
+      if (_Settings.do_not_interact_player)
       {
-        PrintWarning(msg);
-      });
+        Puts("Игнорируем закрытие соединения с игроком (отключено в настройках плагина)");
+        return true;
+      }
+
+      var player = BasePlayer.Find(steamId);
+      if (player != null && player.IsConnected)
+      {
+        player.Kick(reason);
+        return true;
+      }
+
+      var loading = ServerMgr.Instance.connectionQueue.queue.Find(v => v.userid.ToString() == steamId);
+      if (loading != null)
+      {
+        Network.Net.sv.Kick(loading, reason);
+        return true;
+      }
+
+      var queued = ServerMgr.Instance.connectionQueue.queue.Find(v => v.userid.ToString() == steamId);
+      if (queued != null)
+      {
+        Network.Net.sv.Kick(queued, reason);
+        return true;
+      }
+
+      return false;
+    }
+
+    #endregion
+
+    #region Utils
+
+    private Network.Connection? getPlayerConnection(string steamId)
+    {
+      var player = BasePlayer.Find(steamId);
+      if (player != null && player.IsConnected)
+      {
+        return player.Connection;
+      }
+
+      var joining = ServerMgr.Instance.connectionQueue.joining.Find(v => v.userid.ToString() == steamId);
+      if (joining != null)
+      {
+        return joining;
+      }
+
+      var queued = ServerMgr.Instance.connectionQueue.queue.Find(v => v.userid.ToString() == steamId);
+      if (queued != null)
+      {
+        return queued;
+      }
+
+      return null;
     }
 
     #endregion
 
     #region Messages
 
-    public string msg(string ru, string en)
+    public string Msg(string ru, string en)
     {
 #if RU
       return ru;
 #else
       return en;
+#endif
+    }
+
+    public void Log(string ru, string en)
+    {
+#if RU
+      Puts(ru);
+#else
+      Puts(en);
+#endif
+    }
+
+    public void Warning(string ru, string en)
+    {
+#if RU
+      PrintWarning(ru);
+#else
+      PrintWarning(en);
+#endif
+    }
+
+    public void Error(string ru, string en)
+    {
+#if RU
+      PrintError(ru);
+#else
+      PrintError(en);
 #endif
     }
 
