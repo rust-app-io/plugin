@@ -470,7 +470,9 @@ namespace Oxide.Plugins
           slots = ConVar.Server.maxplayers,
 
           port = ConVar.Server.port,
-          branch = ConVar.Server.branch
+          branch = ConVar.Server.branch,
+
+          connected = _RustApp._Worker?.Ban.IsAuthed()
         };
 
         Request<PluginPairDto>(CourtUrls.Pair + $"?code={code}", RequestMethod.POST, obj)
@@ -1240,6 +1242,11 @@ namespace Oxide.Plugins
         }
 
         return true;
+      }
+
+      public bool IsAuthed()
+      {
+        return _RustApp != null && _RustApp.IsLoaded && secret != null && secret.Length > 0;
       }
 
       protected virtual void OnReady() { }
