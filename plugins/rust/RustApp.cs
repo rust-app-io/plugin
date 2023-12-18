@@ -184,13 +184,25 @@ namespace Oxide.Plugins
         {
           try
           {
-            var obj = JsonConvert.DeserializeObject<T>(request.downloadHandler?.text);
+            if (typeof(T) == typeof(String))
+            {
+              onComplete?.Invoke((T)(object)request.downloadHandler?.text, request.downloadHandler?.text);
+            }
+            else
+            {
+              var obj = JsonConvert.DeserializeObject<T>(request.downloadHandler?.text);
 
-            onComplete.Invoke(obj, request.downloadHandler?.text);
+              onComplete.Invoke(obj, request.downloadHandler?.text);
+            }
           }
           catch (Exception parseException)
           {
             var str = typeof(T).ToString();
+
+            _RustApp.Error(
+              "Не удалось разобрать ответ от сервера",
+              "Failed to parse server response"
+            );
           }
         }
       }
@@ -218,6 +230,8 @@ namespace Oxide.Plugins
     private static class CourtUrls
     {
       private static string Base = "https://court.rustapp.io";
+
+      public static string Pair = $"{CourtUrls.Base}/plugin/pair";
 
       public static string Validate = $"{CourtUrls.Base}/plugin/";
       public static string SendContact = $"{CourtUrls.Base}/plugin/contact";
@@ -276,6 +290,11 @@ namespace Oxide.Plugins
       public string message;
     }
 
+    class PluginPairDto
+    {
+      [CanBeNull] public int ttl;
+      [CanBeNull] public string token;
+    }
 
     class PluginPlayerPayload
     {
@@ -364,12 +383,132 @@ namespace Oxide.Plugins
       public string Value;
     }
 
+    public class PairWorker : BaseWorker
+    {
+      public string Code;
+
+      public void EnterCode(string code)
+      {
+        @PairAssignData(code, (data) =>
+        {
+          Code = code;
+
+          if (data.token != null && data.token.Length > 0)
+          {
+            Complete(data.token);
+            return;
+          }
+
+          Notify(data.ttl);
+
+          Invoke(nameof(PairWaitFinish), 1f);
+        }, (err) =>
+        {
+        });
+      }
+
+      public void Notify(int left)
+      {
+        _RustApp.Log(
+          $"Соединение установлено, завершите подключение на сайте (осталось {left} сек.)",
+          $"Connection established, complete pair on site ({left} secs. left)"
+        );
+      }
+
+      public void Complete(string token)
+      {
+        _RustApp.Log(
+          "Соединение установлено, перезагрузка...",
+          "Connection established, reloading..."
+        );
+
+        if (_RustApp != null && _RustApp._Worker != null)
+        {
+          MetaInfo.write(new MetaInfo { Value = token });
+
+          _RustApp._Worker.Awake();
+        }
+      }
+
+      public void PairWaitFinish()
+      {
+        if (Code == null)
+        {
+          Destroy(this);
+          return;
+        }
+
+        @PairAssignData(Code, (data) =>
+        {
+          if (data.token == null || data.token.Length == 0)
+          {
+            Invoke(nameof(PairWaitFinish), 1f);
+            Notify(data.ttl);
+            return;
+          }
+
+          Complete(data.token);
+        }, (err) =>
+        {
+          Invoke(nameof(PairWaitFinish), 1f);
+
+          Interface.Oxide.LogError($"ошибка, {err}");
+        });
+      }
+
+      private void @PairAssignData(string code, Action<PluginPairDto> onComplete, Action<string> onException)
+      {
+        var obj = new
+        {
+          name = ConVar.Server.hostname,
+          description = ConVar.Server.description + " " + ConVar.Server.motd,
+
+          avatar_big = ConVar.Server.logoimage,
+          banner_url = ConVar.Server.headerimage,
+
+          online = BasePlayer.activePlayerList.Count + ServerMgr.Instance.connectionQueue.queue.Count + ServerMgr.Instance.connectionQueue.joining.Count,
+          slots = ConVar.Server.maxplayers,
+
+          port = ConVar.Server.port,
+          branch = ConVar.Server.branch
+        };
+
+        Request<PluginPairDto>(CourtUrls.Pair + $"?code={code}", RequestMethod.POST, obj)
+          .Execute(
+            (data, raw) =>
+            {
+              if (data.ttl != null)
+              {
+                data.ttl = (int)Math.Round((float)(data.ttl / 1000));
+              }
+
+              onComplete(data);
+            },
+            (err) =>
+            {
+              if (err.Contains("code not exists"))
+              {
+                _RustApp.Error(
+                  "Судя по всему, действие кода вышло. Повторите попытку подключения через сайт",
+                  "Seems code life-time left, try again using site"
+                );
+
+                Destroy(this);
+                return;
+              }
+
+              onException(err);
+            }
+          );
+      }
+    }
 
     public class CourtWorker : BaseWorker
     {
       public ActionWorker Action;
       public UpdateWorker Update;
       public QueueWorker Queue;
+      public PairWorker Pair;
       public BanWorker Ban;
 
       private MetaInfo Meta;
@@ -389,16 +528,6 @@ namespace Oxide.Plugins
         Ban = gameObject.AddComponent<BanWorker>();
 
         Meta = MetaInfo.Read();
-
-        if (Meta == null)
-        {
-          _RustApp.Warning(
-            "Плагин не настроен, выполните команду 'ra_pair' для первоначальной настройки",
-            "Plugin is not configured, execute the command 'ra_pair' for initial setup"
-          );
-
-          return;
-        }
 
         Connect();
       }
@@ -470,6 +599,22 @@ namespace Oxide.Plugins
           );
       }
 
+      public void StartPair(string code)
+      {
+        if (Pair != null)
+        {
+          _RustApp.Warning(
+            "Вы уже подключаетесь, вы можете отменить запрос",
+            "You already connecting, you can reset state"
+          );
+          return;
+        }
+
+        Pair = gameObject.AddComponent<PairWorker>();
+
+        Pair.EnterCode(code);
+      }
+
       public void OnDestroy()
       {
         if (Action != null)
@@ -485,6 +630,11 @@ namespace Oxide.Plugins
         if (Queue != null)
         {
           Destroy(Queue);
+        }
+
+        if (Pair != null)
+        {
+          Destroy(Pair);
         }
 
         if (Ban != null)
@@ -1055,14 +1205,7 @@ namespace Oxide.Plugins
 
         return true;
       }
-
-      public void OnDestroy()
-      {
-        Interface.Oxide.LogWarning("Убиты очереди");
-      }
     }
-
-
 
     public class BaseWorker : MonoBehaviour
     {
@@ -1409,6 +1552,13 @@ namespace Oxide.Plugins
       {
         return;
       }
+
+      if (!args.HasArgs(1))
+      {
+        return;
+      }
+
+      _Worker?.StartPair(args.Args[0]);
     }
 
     #endregion
@@ -1479,6 +1629,11 @@ namespace Oxide.Plugins
     #endregion
 
     #region Utils
+
+    private long getUnixTime()
+    {
+      return ((DateTimeOffset)DateTime.UtcNow).ToUnixTimeSeconds();
+    }
 
     private Network.Connection? getPlayerConnection(string steamId)
     {
