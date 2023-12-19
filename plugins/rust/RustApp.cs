@@ -304,6 +304,7 @@ namespace Oxide.Plugins
 
       [CanBeNull] public string position;
       [CanBeNull] public string rotation;
+      [CanBeNull] public string coords;
 
       public bool can_build = false;
       public bool is_raiding = false;
@@ -317,8 +318,8 @@ namespace Oxide.Plugins
         var payload = new PluginPlayerPayload();
 
         payload.position = player.transform.position.ToString();
-
         payload.rotation = player.eyes.rotation.ToString();
+        payload.coords = GridReference(player.transform.position);
 
         payload.steam_id = player.UserIDString;
         payload.steam_name = player.displayName;
@@ -1632,6 +1633,28 @@ namespace Oxide.Plugins
     #endregion
 
     #region Utils
+
+    private static string GridReference(Vector3 position)
+    {
+      var chars = new string[] { "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "AA", "AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI", "AJ", "AK", "AL", "AM", "AN", "AO", "AP", "AQ", "AR", "AS", "AT", "AU", "AV", "AW", "AX", "AY", "AZ" };
+
+      const float block = 146;
+
+      float size = ConVar.Server.worldsize;
+      float offset = size / 2;
+
+      float xpos = position.x + offset;
+      float zpos = position.z + offset;
+
+      int maxgrid = (int)(size / block);
+
+      float xcoord = Mathf.Clamp(xpos / block, 0, maxgrid - 1);
+      float zcoord = Mathf.Clamp(maxgrid - (zpos / block), 0, maxgrid - 1);
+
+      string pos = string.Concat(chars[(int)xcoord], (int)zcoord);
+
+      return (pos);
+    }
 
     private long getUnixTime()
     {
