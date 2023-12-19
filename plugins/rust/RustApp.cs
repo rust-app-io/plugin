@@ -37,7 +37,7 @@ using Facepunch;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp.IO", "Hougan & Xacku & Olkuts", "1.0.0")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.0.0")]
   public class RustApp : RustPlugin
   {
     #region Classes
@@ -410,8 +410,8 @@ namespace Oxide.Plugins
       public void Notify(int left)
       {
         _RustApp.Log(
-          $"Соединение установлено, завершите подключение на сайте (осталось {left} сек.)",
-          $"Connection established, complete pair on site ({left} secs. left)"
+          $"Соединение установлено, завершите подключение на сайте.",
+          $"Connection established, complete pair on site."
         );
       }
 
@@ -491,8 +491,8 @@ namespace Oxide.Plugins
               if (err.Contains("code not exists"))
               {
                 _RustApp.Error(
-                  "Судя по всему, действие кода вышло. Повторите попытку подключения через сайт",
-                  "Seems code life-time left, try again using site"
+                  "Ключ API более недействителен.",
+                  "API key is no longer valid."
                 );
 
                 Destroy(this);
@@ -520,8 +520,8 @@ namespace Oxide.Plugins
         OnDestroy();
 
         _RustApp.Log(
-          "Добро пожаловать в RustApp.IO! Подключение к серверам панели...",
-          "Welcome to the RustApp.IO! Connecting to servers..."
+          "Добро пожаловать в RustApp! Подключение к серверам панели...",
+          "Welcome to the RustApp! Connecting to servers..."
         );
 
         Action = gameObject.AddComponent<ActionWorker>();
@@ -545,8 +545,8 @@ namespace Oxide.Plugins
             if (err.Contains("is lower than minimal"))
             {
               _RustApp.Warning(
-                $"Ваша версия слишком сильно устарела, необходимо скачать новую версию с сайта",
-                $"Your version is significantly outdated, you need to download the new version from the website"
+                $"Ваша версия плагина слишком сильно устарела, необходимо скачать новую с сайта.",
+                $"Your version of the plugin is too outdated, you need to download a new one from the website."
               );
               return;
             }
@@ -554,8 +554,8 @@ namespace Oxide.Plugins
             if (err.Contains("Authorization secret is corrupted"))
             {
               _RustApp.Warning(
-                $"Ваш ключ недействителен, подключите сервер заного при помощи 'ra_pair'",
-                $"Your key is invalid. Reconnect the server using 'ra_pair'"
+                $"Ваш ключ более недействителен.",
+                $"Your key is no longer valid."
               );
               return;
             }
@@ -563,15 +563,15 @@ namespace Oxide.Plugins
             if (err.Contains("Check server configuration, required ip") || err.Contains("Check server configuration, required port"))
             {
               _RustApp.Warning(
-                $"Конфигурация вашего сервера изменилась, необходимо восстановление при помощи 'ra_pair'",
-                $"The configuration of your server has changed, you need to perform a restore using 'ra_pair'"
+                $"Конфигурация вашего сервера изменилась, необходимо переподключить сервер через сайт.",
+                $"Your server configuration has changed, you need to reconnect the server through the site."
               );
               return;
             }
 
             _RustApp.Error(
-              $"Судя по всему, сервера RustApp недоступны. Переподключение через 10 секунд",
-              $"It seems that RustApp servers are unavailable. Reconnect in 10 seconds"
+              $"Судя по всему RustApp временно недоступен, попробуем переподключиться через 10 секунд.",
+              $"Apparently RustApp is temporarily unavailable, let's try reconnecting in 10 seconds."
             );
 
             Invoke(nameof(Connect), 10f);
@@ -587,8 +587,8 @@ namespace Oxide.Plugins
         Ban.Auth(Meta.Value);
 
         _RustApp.Log(
-          "Соединение установлена, плагин готов к работе",
-          "Connection established, plugin is ready"
+          "Соединение установлено, плагин готов к работе!",
+          "Connection established, plugin is ready!"
         );
       }
 
@@ -606,8 +606,8 @@ namespace Oxide.Plugins
         if (Pair != null)
         {
           _RustApp.Warning(
-            "Вы уже подключаетесь, вы можете отменить запрос",
-            "You already connecting, you can reset state"
+            "Вы уже подключаетесь, вы можете отменить запрос.",
+            "You already connecting, you can reset state."
           );
           return;
         }
@@ -1487,7 +1487,7 @@ namespace Oxide.Plugins
 
     #region Commands
 
-    [ConsoleCommand("ra_help")]
+    [ConsoleCommand("ra.help")]
     private void CmdConsoleHelp(ConsoleSystem.Arg args)
     {
       if (args.Player() != null)
@@ -1496,24 +1496,20 @@ namespace Oxide.Plugins
       }
 
       Log(
-        "Помощь по командам RustApp.IO",
-        "Command help for RustApp.IO"
+        "Помощь по командам RustApp",
+        "Command help for RustApp"
       );
       Log(
-        "ra_status <true?> - статус работы плагина (если передан true, покажет переданные данные)",
-        "ra_status <true?> - plugin health-check (if true passed, with request payload)"
+        "ra.debug - показать список последних ошибок",
+        "ra.debug - show list of recent errors"
       );
       Log(
-        "ra_pair - подключение сервера",
-        "ra_pair - connect server"
-      );
-      Log(
-        "ra_map - генерация оноайн-карты (игроки могут быть кикнуты с сервера)",
-        "ra_map - generate online-map (players will be kicked)"
+        "ra.pair <key> - подключение сервера (ключ можно получить на сайте)",
+        "ra.pair <key> - connect server (key can be obtained on the website)"
       );
     }
 
-    [ConsoleCommand("ra_status")]
+    [ConsoleCommand("ra.debug")]
     private void CmdConsoleStatus(ConsoleSystem.Arg args)
     {
       if (!args.IsAdmin)
@@ -1552,7 +1548,7 @@ namespace Oxide.Plugins
       }
     }
 
-    [ConsoleCommand("ra_pair")]
+    [ConsoleCommand("ra.pair")]
     private void CmdConsoleCourtSetup(ConsoleSystem.Arg args)
     {
       if (args.Player() != null)
