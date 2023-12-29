@@ -110,8 +110,14 @@ namespace Oxide.Plugins
 
       public void Execute(Action<T, string> onComplete, Action<string> onException)
       {
-        this.onComplete += onComplete;
-        this.onException += onException;
+        if (onComplete != null)
+        {
+          this.onComplete += onComplete;
+        }
+        if (onException != null)
+        {
+          this.onException += onException;
+        }
 
         UnityWebRequest webRequest = null;
 
@@ -173,11 +179,11 @@ namespace Oxide.Plugins
         {
           if (body.Contains("cloudflare"))
           {
-            onException.Invoke("cloudflare");
+            onException?.Invoke("cloudflare");
           }
           else
           {
-            onException.Invoke(body);
+            onException?.Invoke(body);
           }
         }
         else
@@ -192,7 +198,7 @@ namespace Oxide.Plugins
             {
               var obj = JsonConvert.DeserializeObject<T>(request.downloadHandler?.text);
 
-              onComplete.Invoke(obj, request.downloadHandler?.text);
+              onComplete?.Invoke(obj, request.downloadHandler?.text);
             }
           }
           catch (Exception parseException)
@@ -200,8 +206,8 @@ namespace Oxide.Plugins
             var str = typeof(T).ToString();
 
             _RustApp.Error(
-              "Не удалось разобрать ответ от сервера",
-              "Failed to parse server response"
+              $"Не удалось разобрать ответ от сервера ({request.method.ToUpper()} {request.url}): {parseException} (Response: {request.downloadHandler?.text})",
+              $"Failed to parse server response: ({request.method.ToUpper()} {request.url}): {parseException} (Response: {request.downloadHandler?.text})"
             );
           }
         }
@@ -405,6 +411,7 @@ namespace Oxide.Plugins
           Invoke(nameof(PairWaitFinish), 1f);
         }, (err) =>
         {
+          Destroy(this);
         });
       }
 
@@ -462,6 +469,7 @@ namespace Oxide.Plugins
         var obj = new
         {
           name = ConVar.Server.hostname,
+          level = ConVar.Server.level,
           description = ConVar.Server.description + " " + ConVar.Server.motd,
 
           avatar_big = ConVar.Server.logoimage,
@@ -532,7 +540,17 @@ namespace Oxide.Plugins
 
         Meta = MetaInfo.Read();
 
-        Connect();
+        if (Meta != null)
+        {
+          Connect();
+        }
+        else
+        {
+          _RustApp.Warning(
+            "Ваш плагин не настроен, создайте сервер на сайте и следуйте указаниям",
+            "Your plugin is not configured, create server on site and follow instructions"
+          );
+        }
       }
 
       public void Connect()
@@ -928,6 +946,12 @@ namespace Oxide.Plugins
 
         var payload = new
         {
+          hostname = ConVar.Server.hostname,
+          level = ConVar.Server.level,
+
+          avatar_url = ConVar.Server.logoimage,
+          banner_url = ConVar.Server.headerimage,
+
           slots = ConVar.Server.maxplayers,
           version = _RustApp.Version.ToString(),
           performance = _RustApp.TotalHookTime.ToString(),
@@ -1468,7 +1492,7 @@ namespace Oxide.Plugins
 
     #region UX
 
-    [ChatCommand("contact")]
+    [ChatCommand("t.contact")]
     private void CmdChatContact(BasePlayer player, string command, string[] args)
     {
       _Worker?.Action.SendContact(player.UserIDString, String.Join(" ", args), (accepted) =>
