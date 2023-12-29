@@ -1500,8 +1500,6 @@ namespace Oxide.Plugins
       timer.Once(1, () =>
       {
         _Worker = ServerMgr.Instance.gameObject.AddComponent<CourtWorker>();
-
-        _Worker.Ban.FetchBan("76561198121100397", "127.0.0.1");
       });
     }
 
