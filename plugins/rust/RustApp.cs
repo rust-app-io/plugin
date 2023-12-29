@@ -824,8 +824,6 @@ namespace Oxide.Plugins
           return;
         }
 
-        _RustApp.Puts("saved alerts");
-
         _RustApp._Worker.Update.SaveAlert(new PluginPlayerAlertEntry
         {
           type = PlayerAlertType.join_with_ip_ban,
