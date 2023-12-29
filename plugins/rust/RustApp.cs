@@ -243,6 +243,7 @@ namespace Oxide.Plugins
       public static string SendContact = $"{CourtUrls.Base}/plugin/contact";
       public static string SendState = $"{CourtUrls.Base}/plugin/state";
       public static string SendChat = $"{CourtUrls.Base}/plugin/chat";
+      public static string SendAlerts = $"{CourtUrls.Base}/plugin/alerts";
       public static string SendReports = $"{CourtUrls.Base}/plugin/reports";
     }
 
@@ -280,6 +281,34 @@ namespace Oxide.Plugins
     class PluginReportsPayload
     {
       public List<PluginReportEntry> reports = new List<PluginReportEntry>();
+    }
+
+    public static class PlayerAlertType
+    {
+      public static readonly string join_with_ip_ban = "join_with_ip_ban";
+      public static readonly string dug_up_stash = "dug_up_stash";
+      public static readonly string custom_api = "custom_api";
+    }
+
+    public class PluginPlayerAlertEntry
+    {
+      public string type;
+      public object meta;
+    }
+
+    public class PluginPlayerAlertJoinWithIpBanMeta
+    {
+      public string steam_id;
+      public string ip;
+      public int ban_id;
+    }
+
+    public class PluginPlayerAlertDugUpStashMeta
+    {
+      public string steam_id;
+      public string owner_steam_id;
+      public string position;
+      public string square;
     }
 
     public class PluginReportEntry
@@ -702,7 +731,11 @@ namespace Oxide.Plugins
 
       public class BanEntry
       {
-
+        public int id;
+        public string steam_id;
+        public string ban_ip;
+        public bool ban_ip_active;
+        public bool computed_is_active;
       }
 
       private Dictionary<string, string> PlayersCollection = new Dictionary<string, string>();
@@ -765,6 +798,8 @@ namespace Oxide.Plugins
             if (ban != null)
             {
               _RustApp.CloseConnection(steamId, "ban");
+
+              CreateAlertForIpBan(ban, steamId);
             }
           },
           () =>
@@ -775,6 +810,32 @@ namespace Oxide.Plugins
             );
           }
         );
+      }
+
+      public void CreateAlertForIpBan(BanEntry ban, string steamId)
+      {
+        if (ban.steam_id == steamId)
+        {
+          return;
+        }
+
+        if (!ban.ban_ip_active)
+        {
+          return;
+        }
+
+        _RustApp.Puts("saved alerts");
+
+        _RustApp._Worker.Update.SaveAlert(new PluginPlayerAlertEntry
+        {
+          type = PlayerAlertType.join_with_ip_ban,
+          meta = new PluginPlayerAlertJoinWithIpBanMeta
+          {
+            steam_id = steamId,
+            ip = ban.ban_ip,
+            ban_id = ban.id
+          }
+        });
       }
 
       public void @FetchBans(Dictionary<string, string> entries, Action<string, BanEntry> onBan, Action onException)
@@ -807,7 +868,7 @@ namespace Oxide.Plugins
                   return;
                 }
 
-                var active = exists.bans.FirstOrDefault();
+                var active = exists.bans.FirstOrDefault(v => v.computed_is_active);
 
                 onBan?.Invoke(player.steam_id, active);
               }
@@ -823,6 +884,7 @@ namespace Oxide.Plugins
 
     public class UpdateWorker : BaseWorker
     {
+      private List<PluginPlayerAlertEntry> PlayerAlertCollection = new List<PluginPlayerAlertEntry>();
       private List<PluginReportEntry> ReportCollection = new List<PluginReportEntry>();
       private List<PluginChatMessageEntry> ChatCollection = new List<PluginChatMessageEntry>();
       private Dictionary<string, string> DisconnectHistory = new Dictionary<string, string>();
@@ -833,15 +895,22 @@ namespace Oxide.Plugins
         CancelInvoke(nameof(SendChat));
         CancelInvoke(nameof(SendUpdate));
         CancelInvoke(nameof(SendReports));
+        CancelInvoke(nameof(SendAlerts));
 
         InvokeRepeating(nameof(SendChat), 0, 1f);
         InvokeRepeating(nameof(SendUpdate), 0, 5f);
         InvokeRepeating(nameof(SendReports), 0, 1f);
+        InvokeRepeating(nameof(SendAlerts), 0, 5f);
       }
 
       public void SaveChat(PluginChatMessageEntry message)
       {
         ChatCollection.Add(message);
+      }
+
+      public void SaveAlert(PluginPlayerAlertEntry playerAlert)
+      {
+        PlayerAlertCollection.Add(playerAlert);
       }
 
       public void SaveDisconnect(BasePlayer player, string reason)
@@ -867,6 +936,39 @@ namespace Oxide.Plugins
       public void SaveReport(PluginReportEntry report)
       {
         ReportCollection.Add(report);
+      }
+
+      private void SendAlerts()
+      {
+        if (!IsReady() || PlayerAlertCollection.Count == 0)
+        {
+          return;
+        }
+
+        var alerts = PlayerAlertCollection.ToList();
+
+        Request<object>(CourtUrls.SendAlerts, RequestMethod.POST, new { alerts })
+          .Execute(
+            null,
+            (err) =>
+            {
+              _RustApp.Puts(err);
+              _RustApp.Error(
+                $"Не удалось отправить алерты ({alerts.Count} шт)",
+                $"Failed to send alerts for player ({alerts.Count} pc)"
+              );
+
+              // Возвращаем неудачно отправленные сообщения обратно в массив
+              var resurrectCollection = new List<PluginPlayerAlertEntry>();
+
+              resurrectCollection.AddRange(alerts);
+              resurrectCollection.AddRange(PlayerAlertCollection);
+
+              PlayerAlertCollection = resurrectCollection;
+            }
+          );
+
+        PlayerAlertCollection = new List<PluginPlayerAlertEntry>();
       }
 
       private void SendChat()
@@ -1400,6 +1502,8 @@ namespace Oxide.Plugins
       timer.Once(1, () =>
       {
         _Worker = ServerMgr.Instance.gameObject.AddComponent<CourtWorker>();
+
+        _Worker.Ban.FetchBan("76561198121100397", "127.0.0.1");
       });
     }
 
@@ -1439,6 +1543,42 @@ namespace Oxide.Plugins
     #endregion
 
     #region Hooks
+
+    private void OnStashExposed(StashContainer stash, BasePlayer player)
+    {
+      if (stash == null)
+      {
+        return;
+      }
+
+      var team = player.Team;
+      if (team != null)
+      {
+        if (team.members.Contains(stash.OwnerID))
+        {
+          return;
+        }
+      }
+
+      var owner = stash.OwnerID;
+
+      if (player.userID == stash.OwnerID)
+      {
+        return;
+      }
+
+      _Worker.Update.SaveAlert(new PluginPlayerAlertEntry
+      {
+        type = PlayerAlertType.dug_up_stash,
+        meta = new PluginPlayerAlertDugUpStashMeta
+        {
+          owner_steam_id = owner.ToString(),
+          position = player.transform.position.ToString(),
+          square = GridReference(player.transform.position),
+          steam_id = player.UserIDString
+        }
+      });
+    }
 
     private void CanUserLogin(string name, string id, string ipAddress)
     {
