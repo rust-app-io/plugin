@@ -839,8 +839,10 @@ namespace Oxide.Plugins
           return;
         }
 
+        var banChecks = PlayersCollection.ToDictionary(v => v.Key, v => v.Value);
+
         @FetchBans(
-          PlayersCollection,
+          banChecks,
           (steamId, ban) =>
           {
             if (PlayersCollection.ContainsKey(steamId))
@@ -858,11 +860,37 @@ namespace Oxide.Plugins
           () =>
           {
             _RustApp.Error(
-              $"Ошибка проверки блокировок ({PlayersCollection.Keys.Count} шт.), пытаемся снова...",
-              $"Ban check error ({PlayersCollection.Keys.Count} total), attempting again..."
+              $"Ошибка проверки блокировок ({banChecks.Keys.Count} шт.), пытаемся снова...",
+              $"Ban check error ({banChecks.Keys.Count} total), attempting again..."
             );
+
+            // Возвращаем неудачно отправленные сообщения обратно в массив
+            var resurrectCollection = new Dictionary<string, string>();
+
+            foreach (var ban in banChecks)
+            {
+              if (resurrectCollection.ContainsKey(ban.Key))
+              {
+                continue;
+              }
+
+              resurrectCollection.Add(ban.Key, ban.Value);
+            }
+            foreach (var ban in PlayersCollection)
+            {
+              if (resurrectCollection.ContainsKey(ban.Key))
+              {
+                continue;
+              }
+
+              resurrectCollection.Add(ban.Key, ban.Value);
+            }
+
+            PlayersCollection = resurrectCollection;
           }
         );
+
+        PlayersCollection = new Dictionary<string, string>();
       }
 
       public void CreateAlertForIpBan(BanEntry ban, string steamId)
