@@ -333,12 +333,17 @@ namespace Oxide.Plugins
 
     class PluginPlayerPayload
     {
-      private bool? IsRaidBlocked(BasePlayer player)
+      private static bool IsRaidBlocked(BasePlayer player)
       {
+        if (_RustApp == null || !_RustApp.IsLoaded)
+        {
+          return false;
+        }
+
         var plugins = new List<Plugin> {
-            _RustApp.NoEscape,
-            _RustApp.RaidZone,
-            _RustApp.RaidBlock
+          _RustApp.NoEscape,
+          _RustApp.RaidZone,
+          _RustApp.RaidBlock
         };
 
         var correct = plugins.Find(v => v != null);
@@ -378,7 +383,7 @@ namespace Oxide.Plugins
           }
         }
 
-        return null;
+        return false;
       }
 
       public static PluginPlayerPayload FromPlayer(BasePlayer player)
@@ -396,7 +401,7 @@ namespace Oxide.Plugins
         payload.status = "active";
 
         payload.can_build = player.IsBuildingAuthed();
-        payload.is_raiding
+        payload.is_raiding = PluginPlayerPayload.IsRaidBlocked(player);
 
         if (player.Team != null)
         {
