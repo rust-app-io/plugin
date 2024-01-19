@@ -333,20 +333,53 @@ namespace Oxide.Plugins
 
     class PluginPlayerPayload
     {
-      public string steam_id;
-      public string steam_name;
-      public string ip;
+      private bool? IsRaidBlocked(BasePlayer player)
+      {
+        var plugins = new List<Plugin> {
+            _RustApp.NoEscape,
+            _RustApp.RaidZone,
+            _RustApp.RaidBlock
+        };
 
-      [CanBeNull] public string position;
-      [CanBeNull] public string rotation;
-      [CanBeNull] public string coords;
+        var correct = plugins.Find(v => v != null);
+        if (correct != null)
+        {
+          try
+          {
+            switch (correct.Name)
+            {
+              case "NoEscape":
+                {
+                  return (bool)correct.Call("IsRaidBlocked", player);
+                }
+              case "RaidZone":
+                {
+                  return (bool)correct.Call("HasBlock", player.userID);
+                }
+              case "RaidBlock":
+                {
+                  try
+                  {
+                    return (bool)correct.Call("IsInRaid", player);
+                  }
+                  catch
+                  {
+                    return (bool)correct.Call("IsRaidBlocked", player);
+                  }
+                }
+            }
+          }
+          catch
+          {
+            _RustApp.Warning(
+              "Обнаружен плагин NoEscape, но не удалось вызвать API",
+              "Detected plugin NoEscape, but failed to call API"
+            );
+          }
+        }
 
-      public bool can_build = false;
-      public bool is_raiding = false;
-
-      public string status;
-
-      public List<string> team = new List<string>();
+        return null;
+      }
 
       public static PluginPlayerPayload FromPlayer(BasePlayer player)
       {
@@ -363,6 +396,7 @@ namespace Oxide.Plugins
         payload.status = "active";
 
         payload.can_build = player.IsBuildingAuthed();
+        payload.is_raiding
 
         if (player.Team != null)
         {
@@ -396,6 +430,20 @@ namespace Oxide.Plugins
 
         return payload;
       }
+      public string steam_id;
+      public string steam_name;
+      public string ip;
+
+      [CanBeNull] public string position;
+      [CanBeNull] public string rotation;
+      [CanBeNull] public string coords;
+
+      public bool can_build = false;
+      public bool is_raiding = false;
+
+      public string status;
+
+      public List<string> team = new List<string>();
     }
 
     public class MetaInfo
@@ -1486,8 +1534,10 @@ namespace Oxide.Plugins
 
     private static RustApp _RustApp;
     private static Configuration _Settings;
-
     private CourtWorker _Worker;
+
+    // References for RB plugins to get RB status
+    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock;
 
     #endregion
 
