@@ -1,4 +1,4 @@
-﻿#define RU
+#define RU
 
 using Newtonsoft.Json;
 using Oxide.Core;
@@ -860,7 +860,7 @@ namespace Oxide.Plugins
 
             if (ban != null)
             {
-              _RustApp.CloseConnection(steamId, $"Ban reason: {ban.reason}");
+              _RustApp.CloseConnection(steamId, _Settings.ban_reason_format.Replace("%REASON%", ban.reason));
 
               CreateAlertForIpBan(ban, steamId);
             }
@@ -1535,6 +1535,9 @@ namespace Oxide.Plugins
       [JsonProperty("[Ban] Ban broadcast format")]
       public string ban_broadcast_format;
 
+      [JsonProperty("[Ban] Ban kick reason format (%REASON% - ban reason)")]
+      public string ban_reason_format;
+
       public static Configuration Generate()
       {
         return new Configuration
@@ -1552,6 +1555,7 @@ namespace Oxide.Plugins
 
           ban_enable_broadcast = false,
           ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
+          ban_reason_format = "Вы забанены на этом сервере, причина: %REASON%",
         };
       }
     }
