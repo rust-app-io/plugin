@@ -1383,6 +1383,17 @@ namespace Oxide.Plugins
 
       private object OnQueueBan(QueueBanPayload payload)
       {
+        var player = BasePlayer.Find(payload.steam_id);
+        if (player == null)
+        {
+          return "Player is disconnected or not exists";
+        }
+
+        if (player.IsConnected)
+        {
+          _RustApp._Worker.Ban.FetchBan(player);
+        }
+
         return true;
       }
 
