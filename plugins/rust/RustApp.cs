@@ -2340,6 +2340,11 @@ namespace Oxide.Plugins
 
     private bool CloseConnection(string steamId, string reason)
     {
+      Log(
+        $"Закрываем соединение с {steamId} по причине {reason}",
+        $"Closing connection with {steamId} for {reason}"
+      );
+
       if (_Settings.do_not_interact_player)
       {
         Puts("Игнорируем закрытие соединения с игроком (отключено в настройках плагина)");
