@@ -1,4 +1,4 @@
-#define RU
+﻿#define RU
 
 using Newtonsoft.Json;
 using Oxide.Core;
@@ -794,6 +794,7 @@ namespace Oxide.Plugins
         public int id;
         public string steam_id;
         public string ban_ip;
+        public string reason;
         public bool ban_ip_active;
         public bool computed_is_active;
       }
@@ -859,7 +860,7 @@ namespace Oxide.Plugins
 
             if (ban != null)
             {
-              _RustApp.CloseConnection(steamId, "ban");
+              _RustApp.CloseConnection(steamId, $"Ban reason: {ban.reason}");
 
               CreateAlertForIpBan(ban, steamId);
             }
