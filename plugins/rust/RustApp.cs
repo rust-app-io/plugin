@@ -1413,7 +1413,7 @@ namespace Oxide.Plugins
           }
 
           _RustApp.SendMessage(player, message);
-          _RustApp.SoundToast(player, "Получено сообщение от админа, посмотрите в чат!" /*Chat.Direct.Toast*/, 2);
+          _RustApp.SoundToast(player, _RustApp.lang.GetMessage("Chat.Direct.Toast", _RustApp, player.UserIDString), 2);
         }
         else
         {
