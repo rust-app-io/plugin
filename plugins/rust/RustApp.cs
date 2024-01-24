@@ -1,4 +1,4 @@
-﻿#define RU
+#define RU
 
 using Newtonsoft.Json;
 using Oxide.Core;
@@ -2352,7 +2352,14 @@ namespace Oxide.Plugins
         return true;
       }
 
-      var loading = ServerMgr.Instance.connectionQueue.queue.Find(v => v.userid.ToString() == steamId);
+      var connection = ConnectionAuth.m_AuthConnection.Find(v => v.userid.ToString() == steamId);
+      if (connection != null)
+      {
+        Network.Net.sv.Kick(connection, reason);
+        return true;
+      }
+
+      var loading = ServerMgr.Instance.connectionQueue.joining.Find(v => v.userid.ToString() == steamId);
       if (loading != null)
       {
         Network.Net.sv.Kick(loading, reason);
