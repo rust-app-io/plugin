@@ -1383,17 +1383,6 @@ namespace Oxide.Plugins
 
       private object OnQueueBan(QueueBanPayload payload)
       {
-        var player = BasePlayer.Find(payload.steam_id);
-        if (player == null)
-        {
-          return "Player is disconnected or not exists";
-        }
-
-        if (player.IsConnected)
-        {
-          _RustApp._Worker.Ban.FetchBan(player);
-        }
-
         return true;
       }
 
@@ -1413,6 +1402,7 @@ namespace Oxide.Plugins
           }
 
           _RustApp.SendMessage(player, message);
+          _RustApp.SoundToast(player, "Получено сообщение от админа, посмотрите в чат!" /*Chat.Direct.Toast*/, 2);
         }
         else
         {
@@ -1503,34 +1493,34 @@ namespace Oxide.Plugins
       [JsonProperty("Ignore all players manipulation")]
       public bool do_not_interact_player = true;
 
-      [JsonProperty("ReportUI. Chat commands")]
+      [JsonProperty("[UI] Chat commands")]
       public List<string> report_ui_commands = new List<string>();
 
-      [JsonProperty("ReportUI. Report reasons")]
+      [JsonProperty("[UI] Report reasons")]
       public List<string> report_ui_reasons = new List<string>();
 
-      [JsonProperty("ReportUI. Cooldown between reports (seconds)")]
+      [JsonProperty("[UI] Cooldown between reports (seconds)")]
       public int report_ui_cooldown;
 
-      [JsonProperty("ReportUI. Auto-parse bans from F7 (ingame reports)")]
+      [JsonProperty("[UI] Auto-parse bans from F7 (ingame reports)")]
       public bool report_ui_auto_parse = true;
 
-      [JsonProperty("Chat. SteamID for message avatar (default account contains RustApp logo)")]
+      [JsonProperty("[Chat] SteamID for message avatar (default account contains RustApp logo)")]
       public string chat_default_avatar_steamid;
 
-      [JsonProperty("Chat. Global message format")]
+      [JsonProperty("[Chat] Global message format")]
       public string chat_global_format;
 
-      [JsonProperty("Chat. Direct message format")]
+      [JsonProperty("[Chat] Direct message format")]
       public string chat_direct_format;
 
-      [JsonProperty("Check. Command to send contact")]
+      [JsonProperty("[Check] Command to send contact")]
       public string check_contact_command = "contact";
 
-      [JsonProperty("Ban. Enable broadcast server bans")]
+      [JsonProperty("[Ban] Enable broadcast server bans")]
       public bool ban_enable_broadcast;
 
-      [JsonProperty("Ban. Ban broadcast format")]
+      [JsonProperty("[Ban] Ban broadcast format")]
       public string ban_broadcast_format;
 
       public static Configuration Generate()
@@ -1540,16 +1530,16 @@ namespace Oxide.Plugins
           do_not_interact_player = true,
 
           report_ui_commands = new List<string> { "report", "reports" },
-          report_ui_reasons = new List<string> { "Читы", "Макросы", "2+" },
+          report_ui_reasons = new List<string> { "Чит", "Макрос", "Багоюз" },
           report_ui_cooldown = 300,
           report_ui_auto_parse = true,
 
-          chat_default_avatar_steamid = "76561198121100397",
-          chat_global_format = "<size=12><color=#ffffff80>Сообщение от администратора</color></size>\n<color=#B1D6F1>%CLIENT_TAG%</color>: %MSG%",
-          chat_direct_format = "<size=12><color=#ffffff80>ЛС от администратора</color></size>\n<color=#B1D6F1>%CLIENT_TAG%</color>: %MSG%",
+          chat_default_avatar_steamid = "76561198134964268",
+          chat_global_format = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
+          chat_direct_format = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
 
           ban_enable_broadcast = false,
-          ban_broadcast_format = "Игрок <color=#D68E84>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>Причина: <color=#d3d3d3>%REASON%</color></size>",
+          ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
         };
       }
     }
@@ -1665,7 +1655,7 @@ namespace Oxide.Plugins
         Parent = ReportLayer + ".S",
         Components =
             {
-                new CuiInputFieldComponent { FontSize = 14, Font = "robotocondensed-regular.ttf", Align = TextAnchor.MiddleLeft, Command = "UI_RP_ReportPanel search 0 "},
+                new CuiInputFieldComponent { Text = $"{lang.GetMessage("Header.Search.Placeholder", this, player.UserIDString)}", FontSize = 14, Font = "robotocondensed-regular.ttf", Align = TextAnchor.MiddleLeft, Command = "UI_RP_ReportPanel search 0", NeedsKeyboard = true},
                 new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "10 0", OffsetMax = "-85 0"}
             }
       });
@@ -1720,7 +1710,7 @@ namespace Oxide.Plugins
               Parent = ReportLayer + $".{target.UserIDString}",
               Components =
                         {
-                            new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString) },
+                            new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
                             new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
                         }
             });
@@ -1787,7 +1777,7 @@ namespace Oxide.Plugins
         Text = { Text = "", Align = TextAnchor.MiddleCenter }
       }, "Under", CheckLayer);
 
-      string text = "<color=#c6bdb4><size=32><b>ВЫ ВЫЗВАНЫ НА ПРОВЕРКУ</b></size></color>\n<color=#958D85>У вас есть <color=#c6bdb4><b>3 минуты</b></color> чтобы отправить дискорд и принять заявку в друзья.\nИспользуйте команду <b><color=#c6bdb4>/contact</color></b> чтобы отправить дискорд.\n\nДля связи с модератором вне дискорда - используйте чат.</color>";
+      string text = lang.GetMessage("Check.Text", this, player.UserIDString);
 
       container.Add(new CuiLabel
       {
@@ -1869,6 +1859,7 @@ namespace Oxide.Plugins
         ["Header.SubFindResults"] = "Here are players, which we found",
         ["Header.SubFindEmpty"] = "No players was found",
         ["Header.Search"] = "Search",
+        ["Header.Search.Placeholder"] = "Enter nickname/steamid",
         ["Subject.Head"] = "Select the reason for the report",
         ["Subject.SubHead"] = "For player %PLAYER%",
         ["Cooldown"] = "Wait %TIME% sec.",
@@ -1876,7 +1867,8 @@ namespace Oxide.Plugins
         ["Contact.Error"] = "You did not sent your Discord",
         ["Contact.Sent"] = "You sent:",
         ["Contact.SentWait"] = "If you sent the correct discord - wait for a friend request.",
-        ["Check.Text"] = "<color=#c6bdb4><size=32><b>YOU ARE CALLED FOR CHECK</b></size></color>\n<color=#958D85>You have <color=#c6bdb4><b>5 minutes</b></color> to send discord, and accept friends.\nCommand for send: <b><color=#c6bdb4>/contact</color> <<color=#c6bdb4>Nick#0000</color>></b></color>"
+        ["Check.Text"] = "<color=#c6bdb4><size=32><b>YOU ARE SUMMONED FOR A CHECK-UP</b></size></color>\n<color=#958D85>You have <color=#c6bdb4><b>3 minutes</b></color> to send discord and accept the friend request.\nUse the <b><color=#c6bdb4>/contact</color></b> command to send discord.\n\nTo contact a moderator - use chat, not a command.</color>",
+        ["Chat.Direct.Toast"] = "Received a message from admin, look at the chat!"
       }, this, "en");
 
       lang.RegisterMessages(new Dictionary<string, string>
@@ -1886,6 +1878,7 @@ namespace Oxide.Plugins
         ["Header.SubFindResults"] = "Вот игроки, которых мы нашли",
         ["Header.SubFindEmpty"] = "Игроки не найдены",
         ["Header.Search"] = "Поиск",
+        ["Header.Search.Placeholder"] = "Введите ник/steamid",
         ["Subject.Head"] = "Выберите причину репорта",
         ["Subject.SubHead"] = "На игрока %PLAYER%",
         ["Cooldown"] = "Подожди %TIME% сек.",
@@ -1893,7 +1886,8 @@ namespace Oxide.Plugins
         ["Contact.Error"] = "Вы не отправили свой Discord",
         ["Contact.Sent"] = "Вы отправили:",
         ["Contact.SentWait"] = "<size=12>Если вы отправили корректный дискорд - ждите заявку в друзья.</size>",
-        ["Check.Text"] = "<color=#c6bdb4><size=32><b>ВЫ ВЫЗВАНЫ НА ПРОВЕРКУ</b></size></color>\n<color=#958D85>У вас есть <color=#c6bdb4><b>5 минут</b></color> чтобы отправить дискорд и принять заявку в друзья.\nКоманда для отправки: <b><color=#c6bdb4>/contact</color> <<color=#c6bdb4>Nick#0000</color>></b></color>"
+        ["Check.Text"] = "<color=#c6bdb4><size=32><b>ВЫ ВЫЗВАНЫ НА ПРОВЕРКУ</b></size></color>\n<color=#958D85>У вас есть <color=#c6bdb4><b>3 минуты</b></color> чтобы отправить дискорд и принять заявку в друзья.\nИспользуйте команду <b><color=#c6bdb4>/contact</color></b> чтобы отправить дискорд.\n\nДля связи с модератором - используйте чат, а не команду.</color>",
+        ["Chat.Direct.Toast"] = "Получено сообщение от админа, посмотрите в чат!"
       }, this, "ru");
     }
 
@@ -1901,6 +1895,12 @@ namespace Oxide.Plugins
     private void Unload()
     {
       UnityEngine.Object.Destroy(_Worker);
+
+      foreach (var player in BasePlayer.activePlayerList)
+      {
+          CuiHelper.DestroyUi(player, CheckLayer);
+          CuiHelper.DestroyUi(player, ReportLayer);
+      }
     }
 
     #endregion
@@ -2148,7 +2148,7 @@ namespace Oxide.Plugins
               Parent = ReportLayer + $".T",
               Components =
                       {
-                          new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString) },
+                          new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
                           new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
                       }
             });
