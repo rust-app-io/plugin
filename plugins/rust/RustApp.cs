@@ -873,7 +873,14 @@ namespace Oxide.Plugins
 
             if (ban != null)
             {
-              _RustApp.CloseConnection(steamId, _Settings.ban_reason_format.Replace("%REASON%", ban.reason));
+              if (ban.steam_id == steamId)
+              {
+                _RustApp.CloseConnection(steamId, _Settings.ban_reason_format.Replace("%REASON%", ban.reason));
+              }
+              else
+              {
+                _RustApp.CloseConnection(steamId, _Settings.ban_reason_ip_format);
+              }
 
               CreateAlertForIpBan(ban, steamId);
             }
@@ -1548,8 +1555,11 @@ namespace Oxide.Plugins
       [JsonProperty("[Ban] Ban broadcast format")]
       public string ban_broadcast_format;
 
-      [JsonProperty("[Ban] Ban kick reason format (%REASON% - ban reason)")]
+      [JsonProperty("[Ban] Kick message format (%REASON% - ban reason)")]
       public string ban_reason_format;
+
+      [JsonProperty("[Ban] Message format when kicking due to IP")]
+      public string ban_reason_ip_format;
 
       public static Configuration Generate()
       {
@@ -1569,6 +1579,7 @@ namespace Oxide.Plugins
           ban_enable_broadcast = false,
           ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
           ban_reason_format = "Вы забанены на этом сервере, причина: %REASON%",
+          ban_reason_ip_format = "Вам ограничен вход на сервер!",
         };
       }
     }
@@ -2357,9 +2368,9 @@ namespace Oxide.Plugins
 
     private bool CloseConnection(string steamId, string reason)
     {
-      Log(
-        $"Закрываем соединение с {steamId} по причине {reason}",
-        $"Closing connection with {steamId} for {reason}"
+      Log( 
+        $"Закрываем соединение с {steamId}: {reason}", 
+        $"Closing connection with {steamId}: {reason}" 
       );
 
       if (_Settings.do_not_interact_player)
