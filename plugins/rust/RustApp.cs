@@ -468,17 +468,17 @@ namespace Oxide.Plugins
     {
       public static MetaInfo Read()
       {
-        if (!Interface.Oxide.DataFileSystem.ExistsDatafile("court_cloud_credentials"))
+        if (!Interface.Oxide.DataFileSystem.ExistsDatafile("RustApp_Configuration"))
         {
           return null;
         }
 
-        return Interface.Oxide.DataFileSystem.ReadObject<MetaInfo>("court_cloud_credentials");
+        return Interface.Oxide.DataFileSystem.ReadObject<MetaInfo>("RustApp_Configuration");
       }
 
       public static void write(MetaInfo courtMeta)
       {
-        Interface.Oxide.DataFileSystem.WriteObject("court_cloud_credentials", courtMeta);
+        Interface.Oxide.DataFileSystem.WriteObject("RustApp_Configuration", courtMeta);
       }
 
       [JsonProperty("It is access for RustApp Court, never edit or share it")]
@@ -1212,6 +1212,7 @@ namespace Oxide.Plugins
       private class QueueBanPayload
       {
         public string steam_id;
+        public string name;
         public string reason;
       }
 
@@ -1404,6 +1405,14 @@ namespace Oxide.Plugins
 
       private object OnQueueBan(QueueBanPayload payload)
       {
+        if (_Settings.ban_broadcast_format.Length != 0)
+        {
+          var msg = _Settings.ban_broadcast_format.Replace("%TARGET%", payload.name).Replace("%REASON%", payload.reason);
+
+          _RustApp.SendGlobalMessage(msg);
+          _RustApp.Puts(msg);
+        }
+
         var player = BasePlayer.Find(payload.steam_id);
         if (player == null)
         {
@@ -1532,34 +1541,34 @@ namespace Oxide.Plugins
       public List<string> report_ui_reasons = new List<string>();
 
       [JsonProperty("[UI] Cooldown between reports (seconds)")]
-      public int report_ui_cooldown;
+      public int report_ui_cooldown = 300;
 
       [JsonProperty("[UI] Auto-parse bans from F7 (ingame reports)")]
       public bool report_ui_auto_parse = true;
 
       [JsonProperty("[Chat] SteamID for message avatar (default account contains RustApp logo)")]
-      public string chat_default_avatar_steamid;
+      public string chat_default_avatar_steamid = "76561198134964268";
 
       [JsonProperty("[Chat] Global message format")]
-      public string chat_global_format;
+      public string chat_global_format = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%";
 
       [JsonProperty("[Chat] Direct message format")]
-      public string chat_direct_format;
+      public string chat_direct_format = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%";
 
       [JsonProperty("[Check] Command to send contact")]
       public string check_contact_command = "contact";
 
       [JsonProperty("[Ban] Enable broadcast server bans")]
-      public bool ban_enable_broadcast;
+      public bool ban_enable_broadcast = false;
 
       [JsonProperty("[Ban] Ban broadcast format")]
-      public string ban_broadcast_format;
+      public string ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>";
 
       [JsonProperty("[Ban] Kick message format (%REASON% - ban reason)")]
-      public string ban_reason_format;
+      public string ban_reason_format = "Вы забанены на этом сервере, причина: %REASON%";
 
       [JsonProperty("[Ban] Message format when kicking due to IP")]
-      public string ban_reason_ip_format;
+      public string ban_reason_ip_format = "Вам ограничен вход на сервер!";
 
       public static Configuration Generate()
       {
@@ -2085,7 +2094,6 @@ namespace Oxide.Plugins
 
     #region UX
 
-    [ChatCommand("t.contact")]
     private void CmdChatContact(BasePlayer player, string command, string[] args)
     {
       if (args.Length == 0)
@@ -2368,9 +2376,9 @@ namespace Oxide.Plugins
 
     private bool CloseConnection(string steamId, string reason)
     {
-      Log( 
-        $"Закрываем соединение с {steamId}: {reason}", 
-        $"Closing connection with {steamId}: {reason}" 
+      Log(
+        $"Закрываем соединение с {steamId}: {reason}",
+        $"Closing connection with {steamId}: {reason}"
       );
 
       if (_Settings.do_not_interact_player)
