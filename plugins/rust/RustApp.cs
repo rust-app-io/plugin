@@ -1405,7 +1405,7 @@ namespace Oxide.Plugins
 
       private object OnQueueBan(QueueBanPayload payload)
       {
-        if (_Settings.ban_broadcast_format.Length != 0)
+        if (_Settings.ban_enable_broadcast)
         {
           var msg = _Settings.ban_broadcast_format.Replace("%TARGET%", payload.name).Replace("%REASON%", payload.reason);
 
@@ -1559,7 +1559,7 @@ namespace Oxide.Plugins
       public string check_contact_command = "contact";
 
       [JsonProperty("[Ban] Enable broadcast server bans")]
-      public bool ban_enable_broadcast = false;
+      public bool ban_enable_broadcast = true;
 
       [JsonProperty("[Ban] Ban broadcast format")]
       public string ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>";
@@ -1585,7 +1585,7 @@ namespace Oxide.Plugins
           chat_global_format = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
           chat_direct_format = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
 
-          ban_enable_broadcast = false,
+          ban_enable_broadcast = true,
           ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
           ban_reason_format = "Вы забанены на этом сервере, причина: %REASON%",
           ban_reason_ip_format = "Вам ограничен вход на сервер!",
