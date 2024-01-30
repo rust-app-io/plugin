@@ -1,4 +1,4 @@
-#define RU
+﻿#define RU
 
 using Newtonsoft.Json;
 using Oxide.Core;
@@ -33,6 +33,7 @@ using System.IO;
 using ConVar;
 using Oxide.Core.Database;
 using Facepunch;
+using Rust;
 
 
 namespace Oxide.Plugins
@@ -386,6 +387,17 @@ namespace Oxide.Plugins
         return false;
       }
 
+
+
+      private static bool IsBuildingAuthed(BasePlayer player)
+      {
+        var list = new List<BuildingPrivlidge>();
+
+        Vis.Entities(player.transform.position, 16f, list, Layers.PreventBuilding);
+
+        return list.FirstOrDefault()?.IsAuthed(player) ?? false;
+      }
+
       public static PluginPlayerPayload FromPlayer(BasePlayer player)
       {
         var payload = new PluginPlayerPayload();
@@ -400,7 +412,8 @@ namespace Oxide.Plugins
 
         payload.status = "active";
 
-        payload.can_build = player.IsBuildingAuthed();
+        payload.can_build = PluginPlayerPayload.IsBuildingAuthed(player);
+
         payload.is_raiding = PluginPlayerPayload.IsRaidBlocked(player);
 
         if (player.Team != null)
