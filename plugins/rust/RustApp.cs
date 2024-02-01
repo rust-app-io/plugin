@@ -33,6 +33,7 @@ using System.IO;
 using ConVar;
 using Oxide.Core.Database;
 using Facepunch;
+using Rust;
 
 
 namespace Oxide.Plugins
@@ -243,6 +244,7 @@ namespace Oxide.Plugins
       public static string SendContact = $"{CourtUrls.Base}/plugin/contact";
       public static string SendState = $"{CourtUrls.Base}/plugin/state";
       public static string SendChat = $"{CourtUrls.Base}/plugin/chat";
+      public static string SendAlerts = $"{CourtUrls.Base}/plugin/alerts";
       public static string SendReports = $"{CourtUrls.Base}/plugin/reports";
     }
 
@@ -282,6 +284,34 @@ namespace Oxide.Plugins
       public List<PluginReportEntry> reports = new List<PluginReportEntry>();
     }
 
+    public static class PlayerAlertType
+    {
+      public static readonly string join_with_ip_ban = "join_with_ip_ban";
+      public static readonly string dug_up_stash = "dug_up_stash";
+      public static readonly string custom_api = "custom_api";
+    }
+
+    public class PluginPlayerAlertEntry
+    {
+      public string type;
+      public object meta;
+    }
+
+    public class PluginPlayerAlertJoinWithIpBanMeta
+    {
+      public string steam_id;
+      public string ip;
+      public int ban_id;
+    }
+
+    public class PluginPlayerAlertDugUpStashMeta
+    {
+      public string steam_id;
+      public string owner_steam_id;
+      public string position;
+      public string square;
+    }
+
     public class PluginReportEntry
     {
       public string initiator_steam_id;
@@ -304,20 +334,69 @@ namespace Oxide.Plugins
 
     class PluginPlayerPayload
     {
-      public string steam_id;
-      public string steam_name;
-      public string ip;
+      private static bool IsRaidBlocked(BasePlayer player)
+      {
+        if (_RustApp == null || !_RustApp.IsLoaded)
+        {
+          return false;
+        }
 
-      [CanBeNull] public string position;
-      [CanBeNull] public string rotation;
-      [CanBeNull] public string coords;
+        var plugins = new List<Plugin> {
+          _RustApp.NoEscape,
+          _RustApp.RaidZone,
+          _RustApp.RaidBlock
+        };
 
-      public bool can_build = false;
-      public bool is_raiding = false;
+        var correct = plugins.Find(v => v != null);
+        if (correct != null)
+        {
+          try
+          {
+            switch (correct.Name)
+            {
+              case "NoEscape":
+                {
+                  return (bool)correct.Call("IsRaidBlocked", player);
+                }
+              case "RaidZone":
+                {
+                  return (bool)correct.Call("HasBlock", player.userID);
+                }
+              case "RaidBlock":
+                {
+                  try
+                  {
+                    return (bool)correct.Call("IsInRaid", player);
+                  }
+                  catch
+                  {
+                    return (bool)correct.Call("IsRaidBlocked", player);
+                  }
+                }
+            }
+          }
+          catch
+          {
+            _RustApp.Warning(
+              "Обнаружен плагин NoEscape, но не удалось вызвать API",
+              "Detected plugin NoEscape, but failed to call API"
+            );
+          }
+        }
 
-      public string status;
+        return false;
+      }
 
-      public List<string> team = new List<string>();
+
+
+      private static bool IsBuildingAuthed(BasePlayer player)
+      {
+        var list = new List<BuildingPrivlidge>();
+
+        Vis.Entities(player.transform.position, 16f, list, Layers.PreventBuilding);
+
+        return list.FirstOrDefault()?.IsAuthed(player) ?? false;
+      }
 
       public static PluginPlayerPayload FromPlayer(BasePlayer player)
       {
@@ -333,7 +412,9 @@ namespace Oxide.Plugins
 
         payload.status = "active";
 
-        payload.can_build = player.IsBuildingAuthed();
+        payload.can_build = PluginPlayerPayload.IsBuildingAuthed(player);
+
+        payload.is_raiding = PluginPlayerPayload.IsRaidBlocked(player);
 
         if (player.Team != null)
         {
@@ -367,23 +448,37 @@ namespace Oxide.Plugins
 
         return payload;
       }
+      public string steam_id;
+      public string steam_name;
+      public string ip;
+
+      [CanBeNull] public string position;
+      [CanBeNull] public string rotation;
+      [CanBeNull] public string coords;
+
+      public bool can_build = false;
+      public bool is_raiding = false;
+
+      public string status;
+
+      public List<string> team = new List<string>();
     }
 
     public class MetaInfo
     {
       public static MetaInfo Read()
       {
-        if (!Interface.Oxide.DataFileSystem.ExistsDatafile("court_cloud_credentials"))
+        if (!Interface.Oxide.DataFileSystem.ExistsDatafile("RustApp_Configuration"))
         {
           return null;
         }
 
-        return Interface.Oxide.DataFileSystem.ReadObject<MetaInfo>("court_cloud_credentials");
+        return Interface.Oxide.DataFileSystem.ReadObject<MetaInfo>("RustApp_Configuration");
       }
 
       public static void write(MetaInfo courtMeta)
       {
-        Interface.Oxide.DataFileSystem.WriteObject("court_cloud_credentials", courtMeta);
+        Interface.Oxide.DataFileSystem.WriteObject("RustApp_Configuration", courtMeta);
       }
 
       [JsonProperty("It is access for RustApp Court, never edit or share it")]
@@ -609,6 +704,13 @@ namespace Oxide.Plugins
           "Соединение установлено, плагин готов к работе!",
           "Connection established, plugin is ready!"
         );
+
+        _Settings.report_ui_commands.ForEach(v =>
+        {
+          _RustApp.cmd.AddChatCommand(v, _RustApp, nameof(_RustApp.ChatCmdReport));
+        });
+
+        _RustApp.cmd.AddChatCommand(_Settings.check_contact_command, _RustApp, nameof(_RustApp.CmdChatContact));
       }
 
       public void @ValidateSecret(Action? onComplete, Action<string>? onException)
@@ -702,7 +804,12 @@ namespace Oxide.Plugins
 
       public class BanEntry
       {
-
+        public int id;
+        public string steam_id;
+        public string ban_ip;
+        public string reason;
+        public bool ban_ip_active;
+        public bool computed_is_active;
       }
 
       private Dictionary<string, string> PlayersCollection = new Dictionary<string, string>();
@@ -753,8 +860,10 @@ namespace Oxide.Plugins
           return;
         }
 
+        var banChecks = PlayersCollection.ToDictionary(v => v.Key, v => v.Value);
+
         @FetchBans(
-          PlayersCollection,
+          banChecks,
           (steamId, ban) =>
           {
             if (PlayersCollection.ContainsKey(steamId))
@@ -764,17 +873,76 @@ namespace Oxide.Plugins
 
             if (ban != null)
             {
-              _RustApp.CloseConnection(steamId, "ban");
+              if (ban.steam_id == steamId)
+              {
+                _RustApp.CloseConnection(steamId, _Settings.ban_reason_format.Replace("%REASON%", ban.reason));
+              }
+              else
+              {
+                _RustApp.CloseConnection(steamId, _Settings.ban_reason_ip_format);
+              }
+
+              CreateAlertForIpBan(ban, steamId);
             }
           },
           () =>
           {
             _RustApp.Error(
-              $"Ошибка проверки блокировок ({PlayersCollection.Keys.Count} шт.), пытаемся снова...",
-              $"Ban check error ({PlayersCollection.Keys.Count} total), attempting again..."
+              $"Ошибка проверки блокировок ({banChecks.Keys.Count} шт.), пытаемся снова...",
+              $"Ban check error ({banChecks.Keys.Count} total), attempting again..."
             );
+
+            // Возвращаем неудачно отправленные сообщения обратно в массив
+            var resurrectCollection = new Dictionary<string, string>();
+
+            foreach (var ban in banChecks)
+            {
+              if (resurrectCollection.ContainsKey(ban.Key))
+              {
+                continue;
+              }
+
+              resurrectCollection.Add(ban.Key, ban.Value);
+            }
+            foreach (var ban in PlayersCollection)
+            {
+              if (resurrectCollection.ContainsKey(ban.Key))
+              {
+                continue;
+              }
+
+              resurrectCollection.Add(ban.Key, ban.Value);
+            }
+
+            PlayersCollection = resurrectCollection;
           }
         );
+
+        PlayersCollection = new Dictionary<string, string>();
+      }
+
+      public void CreateAlertForIpBan(BanEntry ban, string steamId)
+      {
+        if (ban.steam_id == steamId)
+        {
+          return;
+        }
+
+        if (!ban.ban_ip_active)
+        {
+          return;
+        }
+
+        _RustApp._Worker.Update.SaveAlert(new PluginPlayerAlertEntry
+        {
+          type = PlayerAlertType.join_with_ip_ban,
+          meta = new PluginPlayerAlertJoinWithIpBanMeta
+          {
+            steam_id = steamId,
+            ip = ban.ban_ip,
+            ban_id = ban.id
+          }
+        });
       }
 
       public void @FetchBans(Dictionary<string, string> entries, Action<string, BanEntry> onBan, Action onException)
@@ -807,7 +975,7 @@ namespace Oxide.Plugins
                   return;
                 }
 
-                var active = exists.bans.FirstOrDefault();
+                var active = exists.bans.FirstOrDefault(v => v.computed_is_active);
 
                 onBan?.Invoke(player.steam_id, active);
               }
@@ -823,6 +991,7 @@ namespace Oxide.Plugins
 
     public class UpdateWorker : BaseWorker
     {
+      private List<PluginPlayerAlertEntry> PlayerAlertCollection = new List<PluginPlayerAlertEntry>();
       private List<PluginReportEntry> ReportCollection = new List<PluginReportEntry>();
       private List<PluginChatMessageEntry> ChatCollection = new List<PluginChatMessageEntry>();
       private Dictionary<string, string> DisconnectHistory = new Dictionary<string, string>();
@@ -833,15 +1002,22 @@ namespace Oxide.Plugins
         CancelInvoke(nameof(SendChat));
         CancelInvoke(nameof(SendUpdate));
         CancelInvoke(nameof(SendReports));
+        CancelInvoke(nameof(SendAlerts));
 
         InvokeRepeating(nameof(SendChat), 0, 1f);
         InvokeRepeating(nameof(SendUpdate), 0, 5f);
         InvokeRepeating(nameof(SendReports), 0, 1f);
+        InvokeRepeating(nameof(SendAlerts), 0, 5f);
       }
 
       public void SaveChat(PluginChatMessageEntry message)
       {
         ChatCollection.Add(message);
+      }
+
+      public void SaveAlert(PluginPlayerAlertEntry playerAlert)
+      {
+        PlayerAlertCollection.Add(playerAlert);
       }
 
       public void SaveDisconnect(BasePlayer player, string reason)
@@ -867,6 +1043,39 @@ namespace Oxide.Plugins
       public void SaveReport(PluginReportEntry report)
       {
         ReportCollection.Add(report);
+      }
+
+      private void SendAlerts()
+      {
+        if (!IsReady() || PlayerAlertCollection.Count == 0)
+        {
+          return;
+        }
+
+        var alerts = PlayerAlertCollection.ToList();
+
+        Request<object>(CourtUrls.SendAlerts, RequestMethod.POST, new { alerts })
+          .Execute(
+            null,
+            (err) =>
+            {
+              _RustApp.Puts(err);
+              _RustApp.Error(
+                $"Не удалось отправить алерты ({alerts.Count} шт)",
+                $"Failed to send alerts for player ({alerts.Count} pc)"
+              );
+
+              // Возвращаем неудачно отправленные сообщения обратно в массив
+              var resurrectCollection = new List<PluginPlayerAlertEntry>();
+
+              resurrectCollection.AddRange(alerts);
+              resurrectCollection.AddRange(PlayerAlertCollection);
+
+              PlayerAlertCollection = resurrectCollection;
+            }
+          );
+
+        PlayerAlertCollection = new List<PluginPlayerAlertEntry>();
       }
 
       private void SendChat()
@@ -1000,6 +1209,12 @@ namespace Oxide.Plugins
         public bool announce;
       }
 
+      private class QueueBanPayload
+      {
+        public string steam_id;
+        public string name;
+        public string reason;
+      }
 
       class QueueNoticeStateGetPayload
       {
@@ -1107,6 +1322,10 @@ namespace Oxide.Plugins
             {
               return OnQueueKick(JsonConvert.DeserializeObject<QueueKickPayload>(element.request.data.ToString()));
             }
+          case "court/ban":
+            {
+              return OnQueueBan(JsonConvert.DeserializeObject<QueueBanPayload>(element.request.data.ToString()));
+            }
           case "court/notice-state-get":
             {
               return OnNoticeStateGet(JsonConvert.DeserializeObject<QueueNoticeStateGetPayload>(element.request.data.ToString()));
@@ -1178,7 +1397,31 @@ namespace Oxide.Plugins
 
         if (payload.announce)
         {
-          _RustApp.SendGlobalMessage("Игрок был кикнут");
+          // _RustApp.SendGlobalMessage("Игрок был кикнут");
+        }
+
+        return true;
+      }
+
+      private object OnQueueBan(QueueBanPayload payload)
+      {
+        if (_Settings.ban_enable_broadcast)
+        {
+          var msg = _Settings.ban_broadcast_format.Replace("%TARGET%", payload.name).Replace("%REASON%", payload.reason);
+
+          _RustApp.SendGlobalMessage(msg);
+          _RustApp.Puts(msg);
+        }
+
+        var player = BasePlayer.Find(payload.steam_id);
+        if (player == null)
+        {
+          return "Player is disconnected or not exists";
+        }
+
+        if (player.IsConnected)
+        {
+          _RustApp._Worker.Ban.FetchBan(player);
         }
 
         return true;
@@ -1186,6 +1429,10 @@ namespace Oxide.Plugins
 
       private object OnChatMessage(QueueChatMessage payload)
       {
+        var format = payload.target_steam_id is string ? _Settings.chat_direct_format : _Settings.chat_global_format;
+
+        var message = format.Replace("%CLIENT_TAG%", payload.initiator_name).Replace("%MSG%", payload.message);
+
         if (payload.target_steam_id is string)
         {
           var player = BasePlayer.Find(payload.target_steam_id);
@@ -1195,13 +1442,14 @@ namespace Oxide.Plugins
             return "Player not found or offline";
           }
 
-          _RustApp.SendMessage(player, payload.message);
+          _RustApp.SendMessage(player, message);
+          _RustApp.SoundToast(player, _RustApp.lang.GetMessage("Chat.Direct.Toast", _RustApp, player.UserIDString), 2);
         }
         else
         {
           foreach (var player in BasePlayer.activePlayerList)
           {
-            _RustApp.SendMessage(player, payload.message);
+            _RustApp.SendMessage(player, message);
           }
         }
 
@@ -1286,11 +1534,61 @@ namespace Oxide.Plugins
       [JsonProperty("Ignore all players manipulation")]
       public bool do_not_interact_player = true;
 
+      [JsonProperty("[UI] Chat commands")]
+      public List<string> report_ui_commands = new List<string>();
+
+      [JsonProperty("[UI] Report reasons")]
+      public List<string> report_ui_reasons = new List<string>();
+
+      [JsonProperty("[UI] Cooldown between reports (seconds)")]
+      public int report_ui_cooldown = 300;
+
+      [JsonProperty("[UI] Auto-parse bans from F7 (ingame reports)")]
+      public bool report_ui_auto_parse = true;
+
+      [JsonProperty("[Chat] SteamID for message avatar (default account contains RustApp logo)")]
+      public string chat_default_avatar_steamid = "76561198134964268";
+
+      [JsonProperty("[Chat] Global message format")]
+      public string chat_global_format = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%";
+
+      [JsonProperty("[Chat] Direct message format")]
+      public string chat_direct_format = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%";
+
+      [JsonProperty("[Check] Command to send contact")]
+      public string check_contact_command = "contact";
+
+      [JsonProperty("[Ban] Enable broadcast server bans")]
+      public bool ban_enable_broadcast = true;
+
+      [JsonProperty("[Ban] Ban broadcast format")]
+      public string ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>";
+
+      [JsonProperty("[Ban] Kick message format (%REASON% - ban reason)")]
+      public string ban_reason_format = "Вы забанены на этом сервере, причина: %REASON%";
+
+      [JsonProperty("[Ban] Message format when kicking due to IP")]
+      public string ban_reason_ip_format = "Вам ограничен вход на сервер!";
+
       public static Configuration Generate()
       {
         return new Configuration
         {
-          do_not_interact_player = true
+          do_not_interact_player = true,
+
+          report_ui_commands = new List<string> { "report", "reports" },
+          report_ui_reasons = new List<string> { "Чит", "Макрос", "Багоюз" },
+          report_ui_cooldown = 300,
+          report_ui_auto_parse = true,
+
+          chat_default_avatar_steamid = "76561198134964268",
+          chat_global_format = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
+          chat_direct_format = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
+
+          ban_enable_broadcast = true,
+          ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
+          ban_reason_format = "Вы забанены на этом сервере, причина: %REASON%",
+          ban_reason_ip_format = "Вам ограничен вход на сервер!",
         };
       }
     }
@@ -1319,6 +1617,196 @@ namespace Oxide.Plugins
 
     #region Interfaces
 
+    private static string ReportLayer = "UI_RP_ReportPanelUI";
+    private void DrawReportInterface(BasePlayer player, int page = 0, string search = "", bool redraw = false)
+    {
+      var lineAmount = 6;
+      var lineMargin = 8;
+
+      var size = (float)(700 - lineMargin * lineAmount) / lineAmount;
+      var list = BasePlayer.activePlayerList
+          .ToList();
+
+      var finalList = list
+          .FindAll(v => v.displayName.ToLower().Contains(search) || v.UserIDString.ToLower().Contains(search) || search == null)
+          .Skip(page * 18)
+          .Take(18);
+
+      if (finalList.Count() == 0)
+      {
+        if (search == null)
+        {
+          DrawReportInterface(player, page - 1);
+          return;
+        }
+      }
+
+      CuiElementContainer container = new CuiElementContainer();
+
+      if (!redraw)
+      {
+        CuiHelper.DestroyUi(player, ReportLayer);
+
+
+        container.Add(new CuiPanel
+        {
+          CursorEnabled = true,
+          RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" },
+          Image = { Color = HexToRustFormat("#282828E6"), Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat" }
+        }, "Overlay", ReportLayer);
+
+        container.Add(new CuiButton()
+        {
+          RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" },
+          Button = { Close = ReportLayer, Color = "0 0 0 0" },
+          Text = { Text = "" }
+        }, ReportLayer);
+      }
+
+      CuiHelper.DestroyUi(player, ReportLayer + ".C");
+
+      container.Add(new CuiPanel
+      {
+        RectTransform = { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = "-368 -200", OffsetMax = "368 142" },
+        Image = { Color = "1 0 0 0" }
+      }, ReportLayer, ReportLayer + ".C");
+
+      container.Add(new CuiPanel
+      {
+        RectTransform = { AnchorMin = "1 0", AnchorMax = "1 1", OffsetMin = "-36 0", OffsetMax = "0 0" },
+        Image = { Color = "0 0 1 0" }
+      }, ReportLayer + ".C", ReportLayer + ".R");
+
+      //↓ ↑
+
+      container.Add(new CuiButton()
+      {
+        RectTransform = { AnchorMin = "0 0", AnchorMax = "1 0.5", OffsetMin = "0 0", OffsetMax = "0 -4" },
+        Button = { Color = $"0.7 0.7 0.7 {(list.Count > 18 && finalList.Count() == 18 ? 0.5 : 0.3)}", Command = list.Count > 18 && finalList.Count() == 18 ? $"UI_RP_ReportPanel search {page + 1}" : "" },
+        Text = { Text = "↓", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-bold.ttf", FontSize = 24, Color = $"0.7 0.7 0.7 {(list.Count > 18 && finalList.Count() == 18 ? 0.9 : 0.2)}" }
+      }, ReportLayer + ".R", ReportLayer + ".RD");
+
+      container.Add(new CuiButton()
+      {
+        RectTransform = { AnchorMin = "0 0.5", AnchorMax = "1 1", OffsetMin = "0 4", OffsetMax = "0 0" },
+        Button = { Color = $"0.7 0.7 0.7 {(page == 0 ? 0.3 : 0.5)}", Command = page == 0 ? "" : $"UI_RP_ReportPanel search {page - 1}" },
+        Text = { Text = "↑", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-bold.ttf", FontSize = 24, Color = $"0.7 0.7 0.7 {(page == 0 ? 0.2 : 0.9)}" }
+      }, ReportLayer + ".R", ReportLayer + ".RU");
+
+      container.Add(new CuiPanel
+      {
+        RectTransform = { AnchorMin = "1 1", AnchorMax = "1 1", OffsetMin = "-250 8", OffsetMax = "0 43" },
+        Image = { Color = "1 1 1 0.20" }
+      }, ReportLayer + ".C", ReportLayer + ".S");
+
+      container.Add(new CuiElement
+      {
+        Parent = ReportLayer + ".S",
+        Components =
+            {
+                new CuiInputFieldComponent { Text = $"{lang.GetMessage("Header.Search.Placeholder", this, player.UserIDString)}", FontSize = 14, Font = "robotocondensed-regular.ttf", Align = TextAnchor.MiddleLeft, Command = "UI_RP_ReportPanel search 0", NeedsKeyboard = true},
+                new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "10 0", OffsetMax = "-85 0"}
+            }
+      });
+
+      container.Add(new CuiButton
+      {
+        RectTransform = { AnchorMin = "1 0", AnchorMax = "1 1", OffsetMin = "-75 0", OffsetMax = "0 0" },
+        Button = { Color = "0.7 0.7 0.7 0.5" },
+        Text = { Text = $"{lang.GetMessage("Header.Search", this, player.UserIDString)}", Font = "robotocondensed-regular.ttf", FontSize = 14, Align = TextAnchor.MiddleCenter }
+      }, ReportLayer + ".S", ReportLayer + ".SB");
+
+      container.Add(new CuiPanel
+      {
+        RectTransform = { AnchorMin = "0 1", AnchorMax = "0.5 1", OffsetMin = "0 7", OffsetMax = "0 47" },
+        Image = { Color = "0.8 0.8 0.8 0" }
+      }, ReportLayer + ".C", ReportLayer + ".LT");
+
+      container.Add(new CuiLabel()
+      {
+        RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "0 0", OffsetMax = "0 0" },
+        Text = { Text = $"{lang.GetMessage("Header.Find", this, player.UserIDString)} {(search != null && search.Length > 0 ? $"- {(search.Length > 20 ? search.Substring(0, 14).ToUpper() + "..." : search.ToUpper())}" : "")}", Font = "robotocondensed-bold.ttf", FontSize = 24, Align = TextAnchor.UpperLeft }
+      }, ReportLayer + ".LT");
+
+      container.Add(new CuiLabel()
+      {
+        RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "0 0", OffsetMax = "0 0" },
+        Text = { Text = search == null || search.Length == 0 ? lang.GetMessage("Header.SubDefault", this, player.UserIDString) : finalList.Count() == 0 ? lang.GetMessage("Header.SubFindEmpty", this, player.UserIDString) : lang.GetMessage("Header.SubFindResults", this, player.UserIDString), Font = "robotocondensed-regular.ttf", FontSize = 14, Align = TextAnchor.LowerLeft, Color = "1 1 1 0.5" }
+      }, ReportLayer + ".LT");
+
+
+      container.Add(new CuiPanel
+      {
+        RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "0 0", OffsetMax = "-40 0" },
+        Image = { Color = "0 1 0 0" }
+      }, ReportLayer + ".C", ReportLayer + ".L");
+
+      for (var y = 0; y < 3; y++)
+      {
+        for (var x = 0; x < 6; x++)
+        {
+          var target = finalList.ElementAtOrDefault(y * 6 + x);
+          if (target)
+          {
+            container.Add(new CuiPanel
+            {
+              RectTransform = { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = $"{x * size + lineMargin * x} -{(y + 1) * size + lineMargin * y}", OffsetMax = $"{(x + 1) * size + lineMargin * x} -{y * size + lineMargin * y}" },
+              Image = { Color = "0.8 0.8 0.8 1" }
+            }, ReportLayer + ".L", ReportLayer + $".{target.UserIDString}");
+
+            container.Add(new CuiElement
+            {
+              Parent = ReportLayer + $".{target.UserIDString}",
+              Components =
+                        {
+                            new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
+                            new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
+                        }
+            });
+
+            container.Add(new CuiPanel()
+            {
+              RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "0 0", OffsetMax = "0 0" },
+              Image = { Sprite = "assets/content/ui/ui.background.transparent.linear.psd", Color = HexToRustFormat("#282828f2") }
+            }, ReportLayer + $".{target.UserIDString}");
+
+            string normaliseName = NormalizeString(target.displayName);
+
+            string name = normaliseName.Length > 14 ? normaliseName.Substring(0, 15) + ".." : normaliseName;
+
+            container.Add(new CuiLabel
+            {
+              RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "6 16", OffsetMax = "0 0" },
+              Text = { Text = name, Align = TextAnchor.LowerLeft, Font = "robotocondensed-bold.ttf", FontSize = 13, Color = HexToRustFormat("#FFFFFF") }
+            }, ReportLayer + $".{target.UserIDString}");
+
+            container.Add(new CuiLabel
+            {
+              RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "6 5", OffsetMax = "0 0" },
+              Text = { Text = target.UserIDString, Align = TextAnchor.LowerLeft, Font = "robotocondensed-regular.ttf", FontSize = 10, Color = HexToRustFormat("#FFFFFF80") }
+            }, ReportLayer + $".{target.UserIDString}");
+
+            container.Add(new CuiButton()
+            {
+              RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "0 0", OffsetMax = "0 0" },
+              Button = { Color = "0 0 0 0", Command = $"UI_RP_ReportPanel show {target.UserIDString} {x * size + lineMargin * x} -{(y + 1) * size + lineMargin * y} {(x + 1) * size + lineMargin * x} -{y * size + lineMargin * y}  {x >= 3}" },
+              Text = { Text = "" }
+            }, ReportLayer + $".{target.UserIDString}");
+          }
+          else
+          {
+            container.Add(new CuiPanel
+            {
+              RectTransform = { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = $"{x * size + lineMargin * x} -{(y + 1) * size + lineMargin * y}", OffsetMax = $"{(x + 1) * size + lineMargin * x} -{y * size + lineMargin * y}" },
+              Image = { Color = "0.8 0.8 0.8 0.25" }
+            }, ReportLayer + ".L");
+          }
+        }
+      }
+
+      CuiHelper.AddUi(player, container);
+    }
+
     private const string CheckLayer = "RP_PrivateLayer";
 
     private void DrawInterface(BasePlayer player)
@@ -1338,7 +1826,7 @@ namespace Oxide.Plugins
         Text = { Text = "", Align = TextAnchor.MiddleCenter }
       }, "Under", CheckLayer);
 
-      string text = "<color=#c6bdb4><size=32><b>ВЫ ВЫЗВАНЫ НА ПРОВЕРКУ</b></size></color>\n<color=#958D85>У вас есть <color=#c6bdb4><b>3 минуты</b></color> чтобы отправить дискорд и принять заявку в друзья.\nИспользуйте команду <b><color=#c6bdb4>/contact</color></b> чтобы отправить дискорд.\n\nДля связи с модератором вне дискорда - используйте чат.</color>";
+      string text = lang.GetMessage("Check.Text", this, player.UserIDString);
 
       container.Add(new CuiLabel
       {
@@ -1384,10 +1872,16 @@ namespace Oxide.Plugins
 
     #region Variables
 
+    private CourtWorker _Worker;
+    private Dictionary<ulong, double> _Cooldowns = new Dictionary<ulong, double>();
+
     private static RustApp _RustApp;
     private static Configuration _Settings;
 
-    private CourtWorker _Worker;
+
+
+    // References for RB plugins to get RB status
+    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock;
 
     #endregion
 
@@ -1401,11 +1895,61 @@ namespace Oxide.Plugins
       {
         _Worker = ServerMgr.Instance.gameObject.AddComponent<CourtWorker>();
       });
+
+      RegisterMessages();
     }
+
+    private void RegisterMessages()
+    {
+      lang.RegisterMessages(new Dictionary<string, string>
+      {
+        ["Header.Find"] = "FIND PLAYER",
+        ["Header.SubDefault"] = "Who do you want to report?",
+        ["Header.SubFindResults"] = "Here are players, which we found",
+        ["Header.SubFindEmpty"] = "No players was found",
+        ["Header.Search"] = "Search",
+        ["Header.Search.Placeholder"] = "Enter nickname/steamid",
+        ["Subject.Head"] = "Select the reason for the report",
+        ["Subject.SubHead"] = "For player %PLAYER%",
+        ["Cooldown"] = "Wait %TIME% sec.",
+        ["Sent"] = "Report succesful sent",
+        ["Contact.Error"] = "You did not sent your Discord",
+        ["Contact.Sent"] = "You sent:",
+        ["Contact.SentWait"] = "If you sent the correct discord - wait for a friend request.",
+        ["Check.Text"] = "<color=#c6bdb4><size=32><b>YOU ARE SUMMONED FOR A CHECK-UP</b></size></color>\n<color=#958D85>You have <color=#c6bdb4><b>3 minutes</b></color> to send discord and accept the friend request.\nUse the <b><color=#c6bdb4>/contact</color></b> command to send discord.\n\nTo contact a moderator - use chat, not a command.</color>",
+        ["Chat.Direct.Toast"] = "Received a message from admin, look at the chat!"
+      }, this, "en");
+
+      lang.RegisterMessages(new Dictionary<string, string>
+      {
+        ["Header.Find"] = "НАЙТИ ИГРОКА",
+        ["Header.SubDefault"] = "На кого вы хотите пожаловаться?",
+        ["Header.SubFindResults"] = "Вот игроки, которых мы нашли",
+        ["Header.SubFindEmpty"] = "Игроки не найдены",
+        ["Header.Search"] = "Поиск",
+        ["Header.Search.Placeholder"] = "Введите ник/steamid",
+        ["Subject.Head"] = "Выберите причину репорта",
+        ["Subject.SubHead"] = "На игрока %PLAYER%",
+        ["Cooldown"] = "Подожди %TIME% сек.",
+        ["Sent"] = "Жалоба успешно отправлена",
+        ["Contact.Error"] = "Вы не отправили свой Discord",
+        ["Contact.Sent"] = "Вы отправили:",
+        ["Contact.SentWait"] = "<size=12>Если вы отправили корректный дискорд - ждите заявку в друзья.</size>",
+        ["Check.Text"] = "<color=#c6bdb4><size=32><b>ВЫ ВЫЗВАНЫ НА ПРОВЕРКУ</b></size></color>\n<color=#958D85>У вас есть <color=#c6bdb4><b>3 минуты</b></color> чтобы отправить дискорд и принять заявку в друзья.\nИспользуйте команду <b><color=#c6bdb4>/contact</color></b> чтобы отправить дискорд.\n\nДля связи с модератором - используйте чат, а не команду.</color>",
+        ["Chat.Direct.Toast"] = "Получено сообщение от админа, посмотрите в чат!"
+      }, this, "ru");
+    }
+
 
     private void Unload()
     {
       UnityEngine.Object.Destroy(_Worker);
+
+      foreach (var player in BasePlayer.activePlayerList)
+      {
+        CuiHelper.DestroyUi(player, CheckLayer);
+        CuiHelper.DestroyUi(player, ReportLayer);
+      }
     }
 
     #endregion
@@ -1438,7 +1982,65 @@ namespace Oxide.Plugins
 
     #endregion
 
+    #region Interface
+
+
+
+    #endregion
+
     #region Hooks
+
+    private void OnPlayerReported(BasePlayer reporter, string targetName, string targetId, string subject, string message, string type)
+    {
+      if (!_Settings.report_ui_auto_parse)
+      {
+        return;
+      }
+
+      var target = BasePlayer.Find(targetId) ?? BasePlayer.FindSleeping(targetId);
+      if (target == null)
+      {
+        return;
+      }
+
+      RA_ReportSend(reporter.UserIDString, targetId, type, message);
+    }
+
+    private void OnStashExposed(StashContainer stash, BasePlayer player)
+    {
+      if (stash == null)
+      {
+        return;
+      }
+
+      var team = player.Team;
+      if (team != null)
+      {
+        if (team.members.Contains(stash.OwnerID))
+        {
+          return;
+        }
+      }
+
+      var owner = stash.OwnerID;
+
+      if (player.userID == stash.OwnerID)
+      {
+        return;
+      }
+
+      _Worker.Update.SaveAlert(new PluginPlayerAlertEntry
+      {
+        type = PlayerAlertType.dug_up_stash,
+        meta = new PluginPlayerAlertDugUpStashMeta
+        {
+          owner_steam_id = owner.ToString(),
+          position = player.transform.position.ToString(),
+          square = GridReference(player.transform.position),
+          steam_id = player.UserIDString
+        }
+      });
+    }
 
     private void CanUserLogin(string name, string id, string ipAddress)
     {
@@ -1492,9 +2094,14 @@ namespace Oxide.Plugins
 
     #region UX
 
-    [ChatCommand("t.contact")]
     private void CmdChatContact(BasePlayer player, string command, string[] args)
     {
+      if (args.Length == 0)
+      {
+        SendMessage(player, lang.GetMessage("Contact.Error", this, player.UserIDString));
+        return;
+      }
+
       _Worker?.Action.SendContact(player.UserIDString, String.Join(" ", args), (accepted) =>
       {
         if (!accepted)
@@ -1502,15 +2109,155 @@ namespace Oxide.Plugins
           return;
         }
 
-        // TODO: Сообщение должно быть локализовано
-        // TODO: Должна быть поддержка отправки как через сообщение, так и через gametip
-        SendMessage(player, "Ваши контактные данные отправлены модератору");
+        SendMessage(player, lang.GetMessage("Contact.Sent", this, player.UserIDString) + $"<color=#8393cd> {String.Join(" ", args)}</color>");
+        SendMessage(player, lang.GetMessage("Contact.SentWait", this, player.UserIDString));
       });
     }
 
     #endregion
 
     #region Commands
+
+    [ConsoleCommand("UI_RP_ReportPanel")]
+    private void CmdConsoleReportPanel(ConsoleSystem.Arg args)
+    {
+      var player = args.Player();
+      if (player == null || !args.HasArgs(1))
+      {
+        return;
+      }
+
+      switch (args.Args[0].ToLower())
+      {
+        case "search":
+          {
+            int page = args.HasArgs(2) ? int.Parse(args.Args[1]) : 0;
+            string search = args.HasArgs(3) ? args.Args[2] : "";
+
+            Effect effect = new Effect("assets/prefabs/tools/detonator/effects/unpress.prefab", player, 0, new Vector3(), new Vector3());
+            EffectNetwork.Send(effect, player.Connection);
+
+            DrawReportInterface(player, page, search, true);
+            break;
+          }
+        case "show":
+          {
+            string targetId = args.Args[1];
+            BasePlayer target = BasePlayer.Find(targetId) ?? BasePlayer.FindSleeping(targetId);
+
+            Effect effect = new Effect("assets/prefabs/tools/detonator/effects/unpress.prefab", player, 0, new Vector3(), new Vector3());
+            EffectNetwork.Send(effect, player.Connection);
+
+            CuiElementContainer container = new CuiElementContainer();
+            CuiHelper.DestroyUi(player, ReportLayer + $".T");
+
+            container.Add(new CuiPanel
+            {
+              RectTransform = { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = $"{args.Args[2]} {args.Args[3]}", OffsetMax = $"{args.Args[4]} {args.Args[5]}" },
+              Image = { Color = "0 0 0 1" }
+            }, ReportLayer + $".L", ReportLayer + $".T");
+
+
+            container.Add(new CuiButton()
+            {
+              RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = $"-500 -500", OffsetMax = $"500 500" },
+              Button = { Close = $"{ReportLayer}.T", Color = "0 0 0 1", Sprite = "assets/content/ui/ui.circlegradient.png" }
+            }, ReportLayer + $".T");
+
+
+            bool leftAlign = bool.Parse(args.Args[6]);
+            container.Add(new CuiButton()
+            {
+              RectTransform = { AnchorMin = $"{(leftAlign ? -1 : 2)} 0", AnchorMax = $"{(leftAlign ? -2 : 3)} 1", OffsetMin = $"-500 -500", OffsetMax = $"500 500" },
+              Button = { Close = $"{ReportLayer}.T", Color = HexToRustFormat("#282828"), Sprite = "assets/content/ui/ui.circlegradient.png" }
+            }, ReportLayer + $".T");
+
+            container.Add(new CuiButton()
+            {
+              RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = $"-1111111 -1111111", OffsetMax = $"1111111 1111111" },
+              Button = { Close = $"{ReportLayer}.T", Color = "0 0 0 0.5", Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat" }
+            }, ReportLayer + $".T");
+
+
+            container.Add(new CuiLabel
+            {
+              RectTransform = { AnchorMin = $"{(leftAlign ? "0" : "1")} 0", AnchorMax = $"{(leftAlign ? "0" : "1")} 1", OffsetMin = $"{(leftAlign ? "-350" : "20")} 0", OffsetMax = $"{(leftAlign ? "-20" : "350")} -5" },
+              Text = { FadeIn = 0.4f, Text = lang.GetMessage("Subject.Head", this, player.UserIDString), Font = "robotocondensed-bold.ttf", FontSize = 24, Align = leftAlign ? TextAnchor.UpperRight : TextAnchor.UpperLeft }
+            }, ReportLayer + ".T");
+
+            container.Add(new CuiLabel
+            {
+              RectTransform = { AnchorMin = $"{(leftAlign ? "0" : "1")} 0", AnchorMax = $"{(leftAlign ? "0" : "1")} 1", OffsetMin = $"{(leftAlign ? "-250" : "20")} 0", OffsetMax = $"{(leftAlign ? "-20" : "250")} -35" },
+              Text = { FadeIn = 0.4f, Text = $"{lang.GetMessage("Subject.SubHead", this, player.UserIDString).Replace("%PLAYER%", $"<b>{target.displayName}</b>")}", Font = "robotocondensed-regular.ttf", FontSize = 14, Color = "1 1 1 0.7", Align = leftAlign ? TextAnchor.UpperRight : TextAnchor.UpperLeft }
+            }, ReportLayer + ".T");
+
+            container.Add(new CuiElement
+            {
+              Parent = ReportLayer + $".T",
+              Components =
+                      {
+                          new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
+                          new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
+                      }
+            });
+
+            for (var i = 0; i < _Settings.report_ui_reasons.Count; i++)
+            {
+              var offXMin = (20 + (i * 5)) + i * 80;
+              var offXMax = 20 + (i * 5) + (i + 1) * 80;
+
+              container.Add(new CuiButton()
+              {
+                RectTransform = { AnchorMin = $"{(leftAlign ? 0 : 1)} 0", AnchorMax = $"{(leftAlign ? 0 : 1)} 0", OffsetMin = $"{(leftAlign ? -offXMax : offXMin)} 15", OffsetMax = $"{(leftAlign ? -offXMin : offXMax)} 45" },
+                Button = { FadeIn = 0.4f + i * 0.2f, Color = HexToRustFormat("#FFFFFF4D"), Command = $"UI_RP_ReportPanel report {target.UserIDString} {_Settings.report_ui_reasons[i].Replace(" ", "0")}" },
+                Text = { FadeIn = 0.4f, Text = $"{_Settings.report_ui_reasons[i]}", Align = TextAnchor.MiddleCenter, Color = "1 1 1 1", Font = "robotocondensed-regular.ttf", FontSize = 16 }
+              }, ReportLayer + $".T");
+            }
+
+            CuiHelper.AddUi(player, container);
+            break;
+          }
+        case "report":
+          {
+            string targetId = args.Args[1];
+            string reason = args.Args[2].Replace("0", "");
+
+            BasePlayer target = BasePlayer.Find(targetId) ?? BasePlayer.FindSleeping(targetId);
+
+            RA_ReportSend(player.UserIDString, target.UserIDString, reason, "");
+            CuiHelper.DestroyUi(player, ReportLayer);
+
+            SoundToast(player, lang.GetMessage("Sent", this, player.UserIDString), 2);
+
+            if (!_Cooldowns.ContainsKey(player.userID))
+            {
+              _Cooldowns.Add(player.userID, 0);
+            }
+
+            _Cooldowns[player.userID] = CurrentTime() + _Settings.report_ui_cooldown;
+            break;
+          }
+      }
+    }
+
+    private void ChatCmdReport(BasePlayer player)
+    {
+      /*if (!UserService.COOLDOWNS.ContainsKey(player.userID))
+      {
+          UserService.COOLDOWNS.Add(player.userID, 0);
+      }
+
+      if (UserService.COOLDOWNS[player.userID] > CurrentTime())
+      {
+          var msg = lang.GetMessage("Cooldown", this, player.UserIDString).Replace("%TIME%",
+              $"{(UserService.COOLDOWNS[player.userID] - CurrentTime()).ToString("0")}");
+
+          SoundToast(player, msg, 1);
+          return;
+      }*/
+
+      DrawReportInterface(player);
+    }
 
     [ConsoleCommand("ra.help")]
     private void CmdConsoleHelp(ConsoleSystem.Arg args)
@@ -1612,18 +2359,28 @@ namespace Oxide.Plugins
       SendMessage(player, message);
     }
 
-    private void SendMessage(BasePlayer player, string message)
+    private void SendMessage(BasePlayer player, string message, string initiator_steam_id = "")
     {
+      if (initiator_steam_id.Length == 0)
+      {
+        initiator_steam_id = _Settings.chat_default_avatar_steamid;
+      }
+
       if (_Settings.do_not_interact_player)
       {
         return;
       }
 
-      player.ChatMessage(message);
+      player.SendConsoleCommand("chat.add", 0, initiator_steam_id, message);
     }
 
     private bool CloseConnection(string steamId, string reason)
     {
+      Log(
+        $"Закрываем соединение с {steamId}: {reason}",
+        $"Closing connection with {steamId}: {reason}"
+      );
+
       if (_Settings.do_not_interact_player)
       {
         Puts("Игнорируем закрытие соединения с игроком (отключено в настройках плагина)");
@@ -1637,7 +2394,14 @@ namespace Oxide.Plugins
         return true;
       }
 
-      var loading = ServerMgr.Instance.connectionQueue.queue.Find(v => v.userid.ToString() == steamId);
+      var connection = ConnectionAuth.m_AuthConnection.Find(v => v.userid.ToString() == steamId);
+      if (connection != null)
+      {
+        Network.Net.sv.Kick(connection, reason);
+        return true;
+      }
+
+      var loading = ServerMgr.Instance.connectionQueue.joining.Find(v => v.userid.ToString() == steamId);
       if (loading != null)
       {
         Network.Net.sv.Kick(loading, reason);
@@ -1657,6 +2421,36 @@ namespace Oxide.Plugins
     #endregion
 
     #region Utils
+
+    private double CurrentTime() => DateTime.Now.Subtract(new DateTime(1970, 1, 1)).TotalSeconds;
+
+    private void SoundToast(BasePlayer player, string text, int type)
+    {
+      if (_Settings.do_not_interact_player)
+      {
+        return;
+      }
+
+      Effect effect = new Effect("assets/bundled/prefabs/fx/notice/item.select.fx.prefab", player, 0, new Vector3(), new Vector3());
+      EffectNetwork.Send(effect, player.Connection);
+
+      player.Command("gametip.showtoast", type, text);
+    }
+
+    private static List<char> Letters = new List<char> { '☼', 's', 't', 'r', 'e', 'т', 'ы', 'в', 'о', 'ч', 'х', 'а', 'р', 'u', 'c', 'h', 'a', 'n', 'z', 'o', '^', 'm', 'l', 'b', 'i', 'p', 'w', 'f', 'k', 'y', 'v', '$', '+', 'x', '1', '®', 'd', '#', 'г', 'ш', 'к', '.', 'я', 'у', 'с', 'ь', 'ц', 'и', 'б', 'е', 'л', 'й', '_', 'м', 'п', 'н', 'g', 'q', '3', '4', '2', ']', 'j', '[', '8', '{', '}', '_', '!', '@', '#', '$', '%', '&', '?', '-', '+', '=', '~', ' ', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', 'а', 'б', 'в', 'г', 'д', 'е', 'ё', 'ж', 'з', 'и', 'й', 'к', 'л', 'м', 'н', 'о', 'п', 'р', 'с', 'т', 'у', 'ф', 'х', 'ц', 'ч', 'ш', 'щ', 'ь', 'ы', 'ъ', 'э', 'ю', 'я' };
+
+    private static string NormalizeString(string text)
+    {
+      string name = "";
+
+      foreach (var @char in text)
+      {
+        if (Letters.Contains(@char.ToString().ToLower().ToCharArray()[0]))
+          name += @char;
+      }
+
+      return name;
+    }
 
     private static string GridReference(Vector3 position)
     {
