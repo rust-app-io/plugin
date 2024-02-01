@@ -1532,7 +1532,7 @@ namespace Oxide.Plugins
     private class Configuration
     {
       [JsonProperty("Ignore all players manipulation")]
-      public bool do_not_interact_player = true;
+      public bool do_not_interact_player = false;
 
       [JsonProperty("[UI] Chat commands")]
       public List<string> report_ui_commands = new List<string>();
@@ -1574,7 +1574,7 @@ namespace Oxide.Plugins
       {
         return new Configuration
         {
-          do_not_interact_player = true,
+          do_not_interact_player = false,
 
           report_ui_commands = new List<string> { "report", "reports" },
           report_ui_reasons = new List<string> { "Чит", "Макрос", "Багоюз" },
