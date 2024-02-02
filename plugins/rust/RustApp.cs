@@ -2024,7 +2024,7 @@ namespace Oxide.Plugins
 
       var owner = stash.OwnerID;
 
-      if (player.userID == stash.OwnerID)
+      if (player.userID == stash.OwnerID || owner == 0)
       {
         return;
       }
