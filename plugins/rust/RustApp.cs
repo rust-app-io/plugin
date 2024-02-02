@@ -38,7 +38,7 @@ using Rust;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.0.0")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.0.1")]
   public class RustApp : RustPlugin
   {
     #region Classes
