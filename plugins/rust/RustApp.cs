@@ -1410,7 +1410,6 @@ namespace Oxide.Plugins
           var msg = _Settings.ban_broadcast_format.Replace("%TARGET%", payload.name).Replace("%REASON%", payload.reason);
 
           _RustApp.SendGlobalMessage(msg);
-          _RustApp.Puts(msg);
         }
 
         var player = BasePlayer.Find(payload.steam_id);
