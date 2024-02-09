@@ -947,10 +947,12 @@ namespace Oxide.Plugins
 
       public void @FetchBans(Dictionary<string, string> entries, Action<string, BanEntry> onBan, Action onException)
       {
+        /*
         _RustApp.Log(
           $"Проверяем блокировки игроков ({entries.Keys.Count} шт)",
           $"Fetch players bans ({entries.Keys.Count} pc)"
         );
+        */
 
         var players = new List<BanFetchPayload>();
 
