@@ -377,10 +377,12 @@ namespace Oxide.Plugins
           }
           catch
           {
+            /**
             _RustApp.Warning(
               "Обнаружен плагин NoEscape, но не удалось вызвать API",
               "Detected plugin NoEscape, but failed to call API"
             );
+            */
           }
         }
 
