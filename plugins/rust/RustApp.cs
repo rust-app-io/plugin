@@ -34,6 +34,7 @@ using ConVar;
 using Oxide.Core.Database;
 using Facepunch;
 using Rust;
+using Steamworks;
 
 
 namespace Oxide.Plugins
@@ -566,7 +567,7 @@ namespace Oxide.Plugins
         var obj = new
         {
           name = ConVar.Server.hostname,
-          level = ConVar.Server.level,
+          level = SteamServer.MapName ?? ConVar.Server.level,
           description = ConVar.Server.description + " " + ConVar.Server.motd,
 
           avatar_big = ConVar.Server.logoimage,
@@ -1160,7 +1161,7 @@ namespace Oxide.Plugins
         var payload = new
         {
           hostname = ConVar.Server.hostname,
-          level = ConVar.Server.level,
+          level = SteamServer.MapName ?? ConVar.Server.level,
 
           avatar_url = ConVar.Server.logoimage,
           banner_url = ConVar.Server.headerimage,
