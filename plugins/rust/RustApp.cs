@@ -39,7 +39,7 @@ using Steamworks;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.0.1")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.1.0")]
   public class RustApp : RustPlugin
   {
     #region Classes
@@ -2246,19 +2246,19 @@ namespace Oxide.Plugins
 
     private void ChatCmdReport(BasePlayer player)
     {
-      /*if (!UserService.COOLDOWNS.ContainsKey(player.userID))
+      if (!_Cooldowns.ContainsKey(player.userID))
       {
-          UserService.COOLDOWNS.Add(player.userID, 0);
+        _Cooldowns.Add(player.userID, 0);
       }
 
-      if (UserService.COOLDOWNS[player.userID] > CurrentTime())
+      if (_Cooldowns[player.userID] > CurrentTime())
       {
-          var msg = lang.GetMessage("Cooldown", this, player.UserIDString).Replace("%TIME%",
-              $"{(UserService.COOLDOWNS[player.userID] - CurrentTime()).ToString("0")}");
+        var msg = lang.GetMessage("Cooldown", this, player.UserIDString).Replace("%TIME%",
+            $"{(_Cooldowns[player.userID] - CurrentTime()).ToString("0")}");
 
-          SoundToast(player, msg, 1);
-          return;
-      }*/
+        SoundToast(player, msg, 1);
+        return;
+      }
 
       DrawReportInterface(player);
     }
@@ -2342,7 +2342,7 @@ namespace Oxide.Plugins
 
     #endregion
 
-    #region User Manipulation
+    #region User Manipulation 
 
     private void SendGlobalMessage(string message)
     {
