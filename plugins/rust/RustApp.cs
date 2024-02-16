@@ -1,4 +1,4 @@
-﻿#define RU
+#define RU
 
 using Newtonsoft.Json;
 using Oxide.Core;
@@ -1192,7 +1192,7 @@ namespace Oxide.Plugins
 
     public class QueueWorker : BaseWorker
     {
-      private Dictionary<string, bool> Notices = new Dictionary<string, bool>();
+      public Dictionary<string, bool> Notices = new Dictionary<string, bool>();
 
       public class QueueElement
       {
@@ -2053,6 +2053,11 @@ namespace Oxide.Plugins
 
     private void OnPlayerDisconnected(BasePlayer player, string reason)
     {
+      if (_Worker.Queue.Notices.ContainsKey(player.UserIDString))
+    {
+        _Worker.Queue.Notices.Remove(player.UserIDString);
+      }
+
       _Worker?.Update.SaveDisconnect(player, reason);
     }
 
