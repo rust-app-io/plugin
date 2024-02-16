@@ -1,4 +1,4 @@
-#define RU
+﻿#define RU
 
 using Newtonsoft.Json;
 using Oxide.Core;
@@ -39,10 +39,10 @@ using Steamworks;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.1.0")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.2.0")]
   public class RustApp : RustPlugin
   {
-    #region Classes
+    #region Classes 
 
     // From RustStats by Sanlerus  
     public static class EncodingBase64
@@ -401,6 +401,25 @@ namespace Oxide.Plugins
         return list.FirstOrDefault()?.IsAuthed(player) ?? false;
       }
 
+      private static bool NoLicense(Network.Connection connection)
+      {
+        if (_RustApp.MultiFighting == null || !_RustApp.MultiFighting.IsLoaded)
+        {
+          return false;
+        }
+
+        try
+        {
+          var isSteam = (bool)_RustApp.MultiFighting.Call("IsSteam", connection);
+
+          return !isSteam;
+        }
+        catch
+        {
+          return false;
+        }
+      }
+
       public static PluginPlayerPayload FromPlayer(BasePlayer player)
       {
         var payload = new PluginPlayerPayload();
@@ -418,6 +437,7 @@ namespace Oxide.Plugins
         payload.can_build = PluginPlayerPayload.IsBuildingAuthed(player);
 
         payload.is_raiding = PluginPlayerPayload.IsRaidBlocked(player);
+        payload.no_license = PluginPlayerPayload.NoLicense(player.Connection);
 
         if (player.Team != null)
         {
@@ -440,6 +460,8 @@ namespace Oxide.Plugins
 
         payload.status = status;
 
+        payload.no_license = PluginPlayerPayload.NoLicense(connection);
+
         var team = RelationshipManager.ServerInstance.FindPlayersTeam(connection.userid);
         if (team != null)
         {
@@ -461,6 +483,7 @@ namespace Oxide.Plugins
 
       public bool can_build = false;
       public bool is_raiding = false;
+      public bool no_license = false;
 
       public string status;
 
@@ -1479,6 +1502,8 @@ namespace Oxide.Plugins
             $"Player {player.userID} was notified about check"
           );
 
+          Interface.Oxide.CallHook("RustApp_OnCheckStarted", player);
+
           _RustApp.DrawInterface(player);
         }
 
@@ -1885,7 +1910,7 @@ namespace Oxide.Plugins
 
 
     // References for RB plugins to get RB status
-    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock;
+    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting;
 
     #endregion
 
@@ -2054,7 +2079,7 @@ namespace Oxide.Plugins
     private void OnPlayerDisconnected(BasePlayer player, string reason)
     {
       if (_Worker.Queue.Notices.ContainsKey(player.UserIDString))
-    {
+      {
         _Worker.Queue.Notices.Remove(player.UserIDString);
       }
 
