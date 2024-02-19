@@ -39,7 +39,7 @@ using Steamworks;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.2.0")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.2.1")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -1181,6 +1181,9 @@ namespace Oxide.Plugins
         players.AddRange(ServerMgr.Instance.connectionQueue.queue.Select(v => PluginPlayerPayload.FromConnection(v, "queued")));
         players.AddRange(ServerMgr.Instance.connectionQueue.joining.Select(v => PluginPlayerPayload.FromConnection(v, "joining")));
 
+        var disconnected = DisconnectHistory.ToDictionary(v => v.Key, v => v.Value);
+        var team_changes = TeamChangeHistory.ToDictionary(v => v.Key, v => v.Value);
+
         var payload = new
         {
           hostname = ConVar.Server.hostname,
@@ -1194,22 +1197,74 @@ namespace Oxide.Plugins
           performance = _RustApp.TotalHookTime.ToString(),
 
           players,
-          disconnected = DisconnectHistory,
-          team_changes = TeamChangeHistory
+          disconnected = disconnected,
+          team_changes = team_changes
         };
 
         Request<object>(CourtUrls.SendState, RequestMethod.PUT, payload)
           .Execute(
             (data, raw) =>
             {
-              DisconnectHistory.Clear();
-              TeamChangeHistory.Clear();
             },
-            (err) => _RustApp.Error(
-              $"Не удалось отправить состояние сервера ({err})",
-              $"Failed to send server status ({err})"
-            )
+            (err) =>
+            {
+              _RustApp.Error(
+                $"Не удалось отправить состояние сервера ({err})",
+                $"Failed to send server status ({err})"
+              );
+
+              /**
+              Возвращаем неудачно отправленные дисконекты
+              */
+
+              var resurrectCollectionDisconnects = new Dictionary<string, string>();
+
+              foreach (var disconnect in disconnected)
+              {
+                if (!resurrectCollectionDisconnects.ContainsKey(disconnect.Key))
+                {
+                  resurrectCollectionDisconnects.Add(disconnect.Key, disconnect.Value);
+                }
+              }
+
+              foreach (var disconnect in DisconnectHistory)
+              {
+                if (!resurrectCollectionDisconnects.ContainsKey(disconnect.Key))
+                {
+                  resurrectCollectionDisconnects.Add(disconnect.Key, disconnect.Value);
+                }
+              }
+
+              DisconnectHistory = resurrectCollectionDisconnects;
+
+              /**
+              Возвращаем неудачно отправленные изменения команды
+              */
+
+              var resurrectCollectionTeamChanges = new Dictionary<string, string>();
+
+              foreach (var teamChange in team_changes)
+              {
+                if (!resurrectCollectionTeamChanges.ContainsKey(teamChange.Key))
+                {
+                  resurrectCollectionTeamChanges.Add(teamChange.Key, teamChange.Value);
+                }
+              }
+
+              foreach (var teamChange in TeamChangeHistory)
+              {
+                if (!resurrectCollectionTeamChanges.ContainsKey(teamChange.Key))
+                {
+                  resurrectCollectionTeamChanges.Add(teamChange.Key, teamChange.Value);
+                }
+              }
+
+              TeamChangeHistory = resurrectCollectionTeamChanges;
+            }
           );
+
+        DisconnectHistory = new Dictionary<string, string>();
+        TeamChangeHistory = new Dictionary<string, string>();
       }
     }
 
