@@ -39,7 +39,7 @@ using Steamworks;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.2.1")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.2.2")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -2308,6 +2308,20 @@ namespace Oxide.Plugins
           }
         case "report":
           {
+            if (!_Cooldowns.ContainsKey(player.userID))
+            {
+              _Cooldowns.Add(player.userID, 0);
+            }
+
+            if (_Cooldowns[player.userID] > CurrentTime())
+            {
+              var msg = lang.GetMessage("Cooldown", this, player.UserIDString).Replace("%TIME%",
+                  $"{(_Cooldowns[player.userID] - CurrentTime()).ToString("0")}");
+
+              SoundToast(player, msg, 1);
+              return;
+            }
+
             string targetId = args.Args[1];
             string reason = args.Args[2].Replace("0", "");
 
