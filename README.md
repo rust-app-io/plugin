@@ -33,10 +33,12 @@ plugins.Find("RustApp")?.Call("RA_ReportSend", initiatorId, targetID, reason, <o
 
 ## Hooks
 
+> В момент когда игроку показывает уведомление о вызове на проверку
 ```csharp
 RustApp_OnCheckNoticeShowed(BasePlayer player)
 ```
 
+> В момент когда игроку убирают уведомление о вызове на проверку
 ```csharp
 RustApp_OnCheckNoticeHidden(BasePlayer player)
 ```
