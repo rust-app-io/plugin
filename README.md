@@ -31,14 +31,12 @@ plugins.Find("RustApp")?.Call("RA_DirectMessageHandler", senderId, targetId, mes
 plugins.Find("RustApp")?.Call("RA_ReportSend", initiatorId, targetID, reason, <optional> message)
 ```
 
-## Хуки
-
-Мы предоставляем несколько хуков:
+## Hooks
 
 ```csharp
-RustApp_OnCheckNoticeShowed(BasePlayer player) -> в момент, когда игроку показывает табличка о вызове на проверку
+RustApp_OnCheckNoticeShowed(BasePlayer player)
 ```
 
 ```csharp
-RustApp_OnCheckNoticeHidden(BasePlayer player) -> в момент, когда игроку убирают табличку о вызове на проверку
+RustApp_OnCheckNoticeHidden(BasePlayer player)
 ```
