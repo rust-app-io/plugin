@@ -1552,6 +1552,8 @@ namespace Oxide.Plugins
             $"Notify about check was removed from player {player.userID}"
           );
 
+          Interface.Oxide.CallHook("RustApp_OnCheckNoticeHidden", player);
+
           CuiHelper.DestroyUi(player, CheckLayer);
         }
         else
@@ -1561,6 +1563,9 @@ namespace Oxide.Plugins
             $"Player {player.userID} was notified about check"
           );
 
+          Interface.Oxide.CallHook("RustApp_OnCheckNoticeShowed", player);
+
+          // Deprecated, will be deleted in the future
           Interface.Oxide.CallHook("RustApp_OnCheckStarted", player);
 
           _RustApp.DrawInterface(player);
