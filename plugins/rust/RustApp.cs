@@ -834,6 +834,7 @@ namespace Oxide.Plugins
         public string steam_id;
         public string ban_ip;
         public string reason;
+        public long expired_at;
         public bool ban_ip_active;
         public bool computed_is_active;
       }
@@ -901,7 +902,10 @@ namespace Oxide.Plugins
             {
               if (ban.steam_id == steamId)
               {
-                _RustApp.CloseConnection(steamId, _Settings.ban_reason_format.Replace("%REASON%", ban.reason));
+                var format = ban.expired_at == 0 ? _Settings.ban_reason_format : _Settings.ban_reason_format_temporary;
+                var time = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(ban.expired_at + 3 * 60 * 60 * 1_000).ToString("dd.MM.yyyy HH:mm");
+
+                _RustApp.CloseConnection(steamId, format.Replace("%REASON%", ban.reason).Replace("%TIME%", time));
               }
               else
               {
@@ -1649,11 +1653,14 @@ namespace Oxide.Plugins
       public string ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>";
 
       [JsonProperty("[Ban] Kick message format (%REASON% - ban reason)")]
-      public string ban_reason_format = "Вы забанены на этом сервере, причина: %REASON%";
+      public string ban_reason_format = "Вы навсегда забанены на этом сервере причина: %REASON%";
+
+      [JsonProperty("[Ban] Kick message format temporary (%REASON% - ban reason)")]
+      public string ban_reason_format_temporary = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%";
 
       [JsonProperty("[Ban] Message format when kicking due to IP")]
       public string ban_reason_ip_format = "Вам ограничен вход на сервер!";
-
+      //
       public static Configuration Generate()
       {
         return new Configuration
@@ -1671,7 +1678,8 @@ namespace Oxide.Plugins
 
           ban_enable_broadcast = true,
           ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
-          ban_reason_format = "Вы забанены на этом сервере, причина: %REASON%",
+          ban_reason_format = "Вы навсегда забанены на этом сервере, причина: %REASON%",
+          ban_reason_format_temporary = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%",
           ban_reason_ip_format = "Вам ограничен вход на сервер!",
         };
       }
