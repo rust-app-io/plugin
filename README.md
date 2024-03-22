@@ -18,7 +18,7 @@
 
 <details><summary>Репорты из своей системы</summary>
 
-   <br>Для отправки репортов в RustApp можно использовать и свою систему жалоб, но для этого необходимо интегрировать свой плагин с плагином RustApp.
+   <br>Для отправки репортов в RustApp можно использовать и свою систему жалоб, но для этого необходимо связать свой плагин с плагином RustApp.
    
    ```csharp
    plugins.Find("RustApp")?.Call("RA_ReportSend", initiatorId, targetID, reason, <optional> message)
