@@ -462,7 +462,7 @@ namespace Oxide.Plugins
 
         payload.no_license = PluginPlayerPayload.NoLicense(connection);
 
-        var team = RelationshipManager.ServerInstance.FindPlayersTeam(connection.userid);
+        var team = RelationshipManager.Instance.FindPlayersTeam(connection.userid);
         if (team != null)
         {
           payload.team = team.members
