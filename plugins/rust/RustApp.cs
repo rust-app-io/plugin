@@ -39,7 +39,7 @@ using Steamworks;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.2.2")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.3.0")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -1325,6 +1325,12 @@ namespace Oxide.Plugins
 
         public string mode;
       }
+
+      private class QueueExecuteCommand
+      {
+        public List<string> commands;
+      }
+
       protected override void OnReady()
       {
         InvokeRepeating(nameof(QueueRetreive), 0f, 1f);
@@ -1425,6 +1431,10 @@ namespace Oxide.Plugins
             {
               return OnChatMessage(JsonConvert.DeserializeObject<QueueChatMessage>(element.request.data.ToString()));
             }
+          case "court/execute-command":
+            {
+              return OnExecuteCommand(JsonConvert.DeserializeObject<QueueExecuteCommand>(element.request.data.ToString()));
+            }
           default:
             {
               _RustApp.Log(
@@ -1511,6 +1521,53 @@ namespace Oxide.Plugins
         }
 
         return true;
+      }
+
+      private object OnExecuteCommand(QueueExecuteCommand payload)
+      {
+        var responses = new List<object>();
+
+        var index = 0;
+
+        payload.commands.ForEach((v) =>
+        {
+          if (_Settings.custom_actions_allow)
+          {
+            var res = ConsoleSystem.Run(ConsoleSystem.Option.Server, v);
+
+            try
+            {
+              responses.Add(new
+              {
+                success = true,
+                command = v,
+                data = JsonConvert.DeserializeObject(res?.ToString() ?? "Command without response")
+              });
+            }
+            catch
+            {
+              responses.Add(new
+              {
+                success = true,
+                command = v,
+                data = res
+              });
+            }
+          }
+          else
+          {
+            responses.Add(new
+            {
+              success = false,
+              command = v,
+              data = "Custom actions are disabled"
+            });
+          }
+
+          index++;
+        });
+
+        return responses;
       }
 
       private object OnChatMessage(QueueChatMessage payload)
@@ -1665,7 +1722,10 @@ namespace Oxide.Plugins
 
       [JsonProperty("[Ban] Message format when kicking due to IP")]
       public string ban_reason_ip_format = "Вам ограничен вход на сервер!";
-      //
+
+      [JsonProperty("[Custom Actions] Allow custom actions")]
+      public bool custom_actions_allow = true;
+
       public static Configuration Generate()
       {
         return new Configuration
@@ -1686,6 +1746,8 @@ namespace Oxide.Plugins
           ban_reason_format = "Вы навсегда забанены на этом сервере, причина: %REASON%",
           ban_reason_format_temporary = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%",
           ban_reason_ip_format = "Вам ограничен вход на сервер!",
+
+          custom_actions_allow = true
         };
       }
     }
