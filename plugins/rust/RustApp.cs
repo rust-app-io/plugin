@@ -877,6 +877,13 @@ namespace Oxide.Plugins
           return;
         }
 
+        // Вызов хука на возможность игнорировать проверку
+        var over = Interface.Oxide.CallHook("RustApp_CanIgnoreBan", steamId);
+        if (over != null)
+        {
+          return;
+        }
+
         PlayersCollection[steamId] = ip;
       }
 
@@ -896,13 +903,6 @@ namespace Oxide.Plugins
             if (PlayersCollection.ContainsKey(steamId))
             {
               PlayersCollection.Remove(steamId);
-            }
-
-            // Вызов хука на возможность игнорировать проверку
-            var over = Interface.Oxide.CallHook("RustApp_CanIgnoreBan", steamId);
-            if (over != null)
-            {
-              return;
             }
 
             if (ban != null)
