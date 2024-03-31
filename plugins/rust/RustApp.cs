@@ -39,7 +39,7 @@ using Steamworks;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.3.0")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.3.1")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -898,6 +898,13 @@ namespace Oxide.Plugins
               PlayersCollection.Remove(steamId);
             }
 
+            // Вызов хука на возможность игнорировать проверку
+            var over = Interface.Oxide.CallHook("RustApp_CanIgnoreBan", steamId);
+            if (over != null)
+            {
+              return;
+            }
+
             if (ban != null)
             {
               if (ban.steam_id == steamId)
@@ -1074,6 +1081,13 @@ namespace Oxide.Plugins
 
       public void SaveReport(PluginReportEntry report)
       {
+        // Вызов хука на возможность игнорировать проверку
+        var over = Interface.Oxide.CallHook("RustApp_CanIgnoreReport", report.target_steam_id, report.initiator_steam_id);
+        if (over != null)
+        {
+          return;
+        }
+
         ReportCollection.Add(report);
       }
 
@@ -1464,6 +1478,17 @@ namespace Oxide.Plugins
         if (player == null || !player.IsConnected)
         {
           return "Player not found or offline";
+        }
+
+        var over = Interface.Oxide.CallHook("RustApp_CanIgnoreCheck", player);
+        if (over != null)
+        {
+          if (over is string)
+          {
+            return over;
+          }
+
+          return "Plugin declined notice change via hook";
         }
 
         if (!Notices.ContainsKey(payload.steam_id))
@@ -2420,6 +2445,12 @@ namespace Oxide.Plugins
 
     private void ChatCmdReport(BasePlayer player)
     {
+      var over = Interface.Oxide.CallHook("RustApp_CanOpenReportUI", player);
+      if (over != null)
+      {
+        return;
+      }
+
       if (!_Cooldowns.ContainsKey(player.userID))
       {
         _Cooldowns.Add(player.userID, 0);
