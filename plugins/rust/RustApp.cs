@@ -39,7 +39,7 @@ using Steamworks;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.3.1")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.3.2")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -247,6 +247,7 @@ namespace Oxide.Plugins
       public static string SendChat = $"{CourtUrls.Base}/plugin/chat";
       public static string SendAlerts = $"{CourtUrls.Base}/plugin/alerts";
       public static string SendReports = $"{CourtUrls.Base}/plugin/reports";
+      public static string BanCreate = $"{CourtUrls.Base}/plugin/ban";
     }
 
     private static class QueueUrls
@@ -807,6 +808,32 @@ namespace Oxide.Plugins
             (data, raw) => callback(true),
             (err) => callback(false)
           );
+      }
+
+      public void @SendBan(string steam_id, string reason, string duration, bool global)
+      {
+        if (!IsReady())
+        {
+          return;
+        }
+
+        Request<object>(CourtUrls.BanCreate, RequestMethod.POST, new
+        {
+          target_steam_id = steam_id,
+          reason = reason,
+          global = global,
+          duration = duration.Length > 0 ? duration : null,
+        })
+        .Execute(
+          (data, raw) => _RustApp.Log(
+            $"Игрок {steam_id} заблокирован за {reason}",
+            $"Player {steam_id} banned for {reason}"
+          ),
+          (err) => _RustApp.Log(
+            $"Не удалось заблокировать {steam_id}. Причина: {err}",
+            $"Failed to ban {steam_id}. Reason: {err}"
+          )
+        );
       }
     }
 
@@ -2528,6 +2555,45 @@ namespace Oxide.Plugins
         Puts($"< {value.response}");
       }
     }
+
+    [ConsoleCommand("ra.ban_server")]
+    private void CmdConsoleBan(ConsoleSystem.Arg args)
+    {
+      if (!args.HasArgs(2))
+      {
+        Log(
+          "ra.ban_server <steam_id> <reason> <duration?>\n<duration> - необязателен, заполняется в формате 2d5h",
+          "ra.ban_server <steam_id> <причина> <время?>\n<duration> - optional, use as 2d10h"
+        );
+        return;
+      }
+
+      var steam_id = args.Args[0];
+      var reason = args.Args[1];
+      var duration = args.HasArgs(3) ? args.Args[2] : "";
+
+      _Worker.Action.SendBan(steam_id, reason, duration, false);
+    }
+
+    [ConsoleCommand("ra.ban_global")]
+    private void CmdConsoleBanGlobal(ConsoleSystem.Arg args)
+    {
+      if (!args.HasArgs(2))
+      {
+        Log(
+          "ra.ban_global <steam_id> <reason> <duration?>\n<duration> - необязателен, заполняется в формате 2d5h",
+          "ra.ban_global <steam_id> <причина> <время?>\n<duration> - optional, use as 2d10h"
+        );
+        return;
+      }
+
+      var steam_id = args.Args[0];
+      var reason = args.Args[1];
+      var duration = args.HasArgs(3) ? args.Args[2] : "";
+
+      _Worker.Action.SendBan(steam_id, reason, duration, true);
+    }
+
 
     [ConsoleCommand("ra.pair")]
     private void CmdConsoleCourtSetup(ConsoleSystem.Arg args)
