@@ -39,7 +39,7 @@ using Steamworks;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.3.2")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.3.3")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -898,16 +898,16 @@ namespace Oxide.Plugins
 
       public void FetchBan(string steamId, string ip)
       {
-        if (!PlayersCollection.ContainsKey(steamId))
-        {
-          PlayersCollection.Add(steamId, ip);
-          return;
-        }
-
         // Вызов хука на возможность игнорировать проверку
         var over = Interface.Oxide.CallHook("RustApp_CanIgnoreBan", steamId);
         if (over != null)
         {
+          return;
+        }
+
+        if (!PlayersCollection.ContainsKey(steamId))
+        {
+          PlayersCollection.Add(steamId, ip);
           return;
         }
 
@@ -1554,6 +1554,13 @@ namespace Oxide.Plugins
 
       private object OnQueueBan(QueueBanPayload payload)
       {
+        // Вызов хука на возможность игнорировать проверку
+        var over = Interface.Oxide.CallHook("RustApp_CanIgnoreBan", payload.steam_id);
+        if (over != null)
+        {
+          return "Plugin overrided queue-ban";
+        }
+
         if (_Settings.ban_enable_broadcast)
         {
           var msg = _Settings.ban_broadcast_format.Replace("%TARGET%", payload.name).Replace("%REASON%", payload.reason);

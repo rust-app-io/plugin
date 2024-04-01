@@ -53,7 +53,7 @@ object RustApp_CanIgnoreBan(string steam_id)
 
 Вызывается перед открытием UI жалоб, если вернуть не null - интерфейс открыт не будет
 ```csharp
-object RustApp_CanOpenReportUI(string steam_id)
+object RustApp_CanOpenReportUI(BasePlayer player)
 ```
 
 ### События
