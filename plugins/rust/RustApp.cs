@@ -39,7 +39,7 @@ using Steamworks;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.3.3")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.4.0")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -2566,6 +2566,11 @@ namespace Oxide.Plugins
     [ConsoleCommand("ra.ban_server")]
     private void CmdConsoleBan(ConsoleSystem.Arg args)
     {
+      if (args.Player() != null && !args.Player().IsAdmin)
+      {
+        return;
+      }
+
       if (!args.HasArgs(2))
       {
         Log(
@@ -2585,6 +2590,11 @@ namespace Oxide.Plugins
     [ConsoleCommand("ra.ban_global")]
     private void CmdConsoleBanGlobal(ConsoleSystem.Arg args)
     {
+      if (args.Player() != null && !args.Player().IsAdmin)
+      {
+        return;
+      }
+
       if (!args.HasArgs(2))
       {
         Log(
