@@ -39,7 +39,7 @@ using Steamworks;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.3.0")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.4.0")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -247,6 +247,7 @@ namespace Oxide.Plugins
       public static string SendChat = $"{CourtUrls.Base}/plugin/chat";
       public static string SendAlerts = $"{CourtUrls.Base}/plugin/alerts";
       public static string SendReports = $"{CourtUrls.Base}/plugin/reports";
+      public static string BanCreate = $"{CourtUrls.Base}/plugin/ban";
     }
 
     private static class QueueUrls
@@ -808,6 +809,32 @@ namespace Oxide.Plugins
             (err) => callback(false)
           );
       }
+
+      public void @SendBan(string steam_id, string reason, string duration, bool global)
+      {
+        if (!IsReady())
+        {
+          return;
+        }
+
+        Request<object>(CourtUrls.BanCreate, RequestMethod.POST, new
+        {
+          target_steam_id = steam_id,
+          reason = reason,
+          global = global,
+          duration = duration.Length > 0 ? duration : null,
+        })
+        .Execute(
+          (data, raw) => _RustApp.Log(
+            $"Игрок {steam_id} заблокирован за {reason}",
+            $"Player {steam_id} banned for {reason}"
+          ),
+          (err) => _RustApp.Log(
+            $"Не удалось заблокировать {steam_id}. Причина: {err}",
+            $"Failed to ban {steam_id}. Reason: {err}"
+          )
+        );
+      }
     }
 
     public class BanWorker : BaseWorker
@@ -871,6 +898,13 @@ namespace Oxide.Plugins
 
       public void FetchBan(string steamId, string ip)
       {
+        // Вызов хука на возможность игнорировать проверку
+        var over = Interface.Oxide.CallHook("RustApp_CanIgnoreBan", steamId);
+        if (over != null)
+        {
+          return;
+        }
+
         if (!PlayersCollection.ContainsKey(steamId))
         {
           PlayersCollection.Add(steamId, ip);
@@ -1074,6 +1108,13 @@ namespace Oxide.Plugins
 
       public void SaveReport(PluginReportEntry report)
       {
+        // Вызов хука на возможность игнорировать проверку
+        var over = Interface.Oxide.CallHook("RustApp_CanIgnoreReport", report.target_steam_id, report.initiator_steam_id);
+        if (over != null)
+        {
+          return;
+        }
+
         ReportCollection.Add(report);
       }
 
@@ -1466,6 +1507,17 @@ namespace Oxide.Plugins
           return "Player not found or offline";
         }
 
+        var over = Interface.Oxide.CallHook("RustApp_CanIgnoreCheck", player);
+        if (over != null)
+        {
+          if (over is string)
+          {
+            return over;
+          }
+
+          return "Plugin declined notice change via hook";
+        }
+
         if (!Notices.ContainsKey(payload.steam_id))
         {
           Notices.Add(payload.steam_id, payload.value);
@@ -1502,6 +1554,13 @@ namespace Oxide.Plugins
 
       private object OnQueueBan(QueueBanPayload payload)
       {
+        // Вызов хука на возможность игнорировать проверку
+        var over = Interface.Oxide.CallHook("RustApp_CanIgnoreBan", payload.steam_id);
+        if (over != null)
+        {
+          return "Plugin overrided queue-ban";
+        }
+
         if (_Settings.ban_enable_broadcast)
         {
           var msg = _Settings.ban_broadcast_format.Replace("%TARGET%", payload.name).Replace("%REASON%", payload.reason);
@@ -2420,6 +2479,12 @@ namespace Oxide.Plugins
 
     private void ChatCmdReport(BasePlayer player)
     {
+      var over = Interface.Oxide.CallHook("RustApp_CanOpenReportUI", player);
+      if (over != null)
+      {
+        return;
+      }
+
       if (!_Cooldowns.ContainsKey(player.userID))
       {
         _Cooldowns.Add(player.userID, 0);
@@ -2497,6 +2562,55 @@ namespace Oxide.Plugins
         Puts($"< {value.response}");
       }
     }
+
+    [ConsoleCommand("ra.ban_server")]
+    private void CmdConsoleBan(ConsoleSystem.Arg args)
+    {
+      if (args.Player() != null && !args.Player().IsAdmin)
+      {
+        return;
+      }
+
+      if (!args.HasArgs(2))
+      {
+        Log(
+          "ra.ban_server <steam_id> <reason> <duration?>\n<duration> - необязателен, заполняется в формате 2d5h",
+          "ra.ban_server <steam_id> <причина> <время?>\n<duration> - optional, use as 2d10h"
+        );
+        return;
+      }
+
+      var steam_id = args.Args[0];
+      var reason = args.Args[1];
+      var duration = args.HasArgs(3) ? args.Args[2] : "";
+
+      _Worker.Action.SendBan(steam_id, reason, duration, false);
+    }
+
+    [ConsoleCommand("ra.ban_global")]
+    private void CmdConsoleBanGlobal(ConsoleSystem.Arg args)
+    {
+      if (args.Player() != null && !args.Player().IsAdmin)
+      {
+        return;
+      }
+
+      if (!args.HasArgs(2))
+      {
+        Log(
+          "ra.ban_global <steam_id> <reason> <duration?>\n<duration> - необязателен, заполняется в формате 2d5h",
+          "ra.ban_global <steam_id> <причина> <время?>\n<duration> - optional, use as 2d10h"
+        );
+        return;
+      }
+
+      var steam_id = args.Args[0];
+      var reason = args.Args[1];
+      var duration = args.HasArgs(3) ? args.Args[2] : "";
+
+      _Worker.Action.SendBan(steam_id, reason, duration, true);
+    }
+
 
     [ConsoleCommand("ra.pair")]
     private void CmdConsoleCourtSetup(ConsoleSystem.Arg args)
