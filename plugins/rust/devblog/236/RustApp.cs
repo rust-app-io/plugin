@@ -2565,12 +2565,17 @@ namespace Oxide.Plugins
     }
 
     [ConsoleCommand("ra.ban_server")]
-    private void CmdConsoleBan(ConsoleSystem.Arg args)
+    private void CmdConsoleBanServerDeprecated(ConsoleSystem.Arg args)
     {
       if (args.Player() != null && !args.Player().IsAdmin)
       {
         return;
       }
+
+      Log(
+        "Команда 'ra.ban_server' устарела и скоро будет удалена",
+        "Command 'ra.ban_server' deprecated and will be deleted soon"
+      );
 
       if (!args.HasArgs(2))
       {
@@ -2589,12 +2594,17 @@ namespace Oxide.Plugins
     }
 
     [ConsoleCommand("ra.ban_global")]
-    private void CmdConsoleBanGlobal(ConsoleSystem.Arg args)
+    private void CmdConsoleBanGlobalDeprecated(ConsoleSystem.Arg args)
     {
       if (args.Player() != null && !args.Player().IsAdmin)
       {
         return;
       }
+
+      Log(
+        "Команда 'ra.ban_global' устарела и скоро будет удалена",
+        "Command 'ra.ban_global' deprecated and will be deleted soon"
+      );
 
       if (!args.HasArgs(2))
       {
