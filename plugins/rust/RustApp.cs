@@ -39,7 +39,7 @@ using Steamworks;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.4.0")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.4.1")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -810,7 +810,7 @@ namespace Oxide.Plugins
           );
       }
 
-      public void @SendBan(string steam_id, string reason, string duration, bool global)
+      public void @SendBan(string steam_id, string reason, string duration, bool global, bool ban_ip)
       {
         if (!IsReady())
         {
@@ -822,6 +822,7 @@ namespace Oxide.Plugins
           target_steam_id = steam_id,
           reason = reason,
           global = global,
+          ban_ip = ban_ip,
           duration = duration.Length > 0 ? duration : null,
         })
         .Execute(
@@ -2564,12 +2565,17 @@ namespace Oxide.Plugins
     }
 
     [ConsoleCommand("ra.ban_server")]
-    private void CmdConsoleBan(ConsoleSystem.Arg args)
+    private void CmdConsoleBanServerDeprecated(ConsoleSystem.Arg args)
     {
       if (args.Player() != null && !args.Player().IsAdmin)
       {
         return;
       }
+
+      Log(
+        "Команда 'ra.ban_server' устарела и скоро будет удалена",
+        "Command 'ra.ban_server' deprecated and will be deleted soon"
+      );
 
       if (!args.HasArgs(2))
       {
@@ -2584,16 +2590,21 @@ namespace Oxide.Plugins
       var reason = args.Args[1];
       var duration = args.HasArgs(3) ? args.Args[2] : "";
 
-      _Worker.Action.SendBan(steam_id, reason, duration, false);
+      _Worker.Action.SendBan(steam_id, reason, duration, false, true);
     }
 
     [ConsoleCommand("ra.ban_global")]
-    private void CmdConsoleBanGlobal(ConsoleSystem.Arg args)
+    private void CmdConsoleBanGlobalDeprecated(ConsoleSystem.Arg args)
     {
       if (args.Player() != null && !args.Player().IsAdmin)
       {
         return;
       }
+
+      Log(
+        "Команда 'ra.ban_global' устарела и скоро будет удалена",
+        "Command 'ra.ban_global' deprecated and will be deleted soon"
+      );
 
       if (!args.HasArgs(2))
       {
@@ -2608,9 +2619,56 @@ namespace Oxide.Plugins
       var reason = args.Args[1];
       var duration = args.HasArgs(3) ? args.Args[2] : "";
 
-      _Worker.Action.SendBan(steam_id, reason, duration, true);
+      _Worker.Action.SendBan(steam_id, reason, duration, true, true);
     }
 
+    [ConsoleCommand("ra.ban")]
+    private void CmdConsoleBan(ConsoleSystem.Arg args)
+    {
+      if (args.Player() != null && !args.Player().IsAdmin)
+      {
+        return;
+      }
+
+      if (!args.HasArgs(4))
+      {
+        Log(
+          "Неправильный формат команды!\nФормат: ra.ban <тип:global|server> <steam_id64> <причина> <ip:boolean> <duration?>\n\n- <type:global|server> - тип блокировки, 'global' - на всех серверах, 'server' - только на этом\n- <ip:boolean> - блокировать ИП, '0' - нет, '1' - да\n- <duration> - необязателен, заполняется в формате 2d5h",
+          "Wrong command format!\nFormat: ra.ban <type> <steam_id64> <причина> <with ipip> <время?>\n<duration> - optional, use as 2d10h"
+        );
+        return;
+      }
+
+      var type = args.Args[0];
+      if (type != "global" && type != "server")
+      {
+        Log(
+          "Указан неверное значение <type>. Должен быть 'global' - для межсерверного бана, и 'server' - для текущего сервера",
+          "Wrong value of <type>. Should be 'global' - for cross-server ban, и 'server' - for this server"
+        );
+        return;
+      }
+
+      var steam_id = args.Args[1];
+      var reason = args.Args[2];
+      var ip = args.Args[3];
+
+      if (ip != "0" && ip != "1")
+      {
+        Log(
+          "Указан неверное значение <ip>. Должен быть '0' - не блокировать ИП, и '1' - блокировать ИП",
+          "Wrong value of <ip>. Should be '0' - ban without IP, и '1' - ban with IP"
+        );
+        return;
+      }
+
+      var global_bool = type == "global" ? true : false;
+      var ip_bool = ip == "1" ? true : false;
+
+      var duration = args.HasArgs(5) ? args.Args[4] : "";
+
+      _Worker.Action.SendBan(steam_id, reason, duration, global_bool, ip_bool);
+    }
 
     [ConsoleCommand("ra.pair")]
     private void CmdConsoleCourtSetup(ConsoleSystem.Arg args)
