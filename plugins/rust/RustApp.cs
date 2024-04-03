@@ -2630,42 +2630,24 @@ namespace Oxide.Plugins
         return;
       }
 
-      if (!args.HasArgs(4))
+      var clearArgs = (args.Args ?? new string[0]).Where(v => v != "--ban-ip" && v != "--global").ToList();
+
+      if (clearArgs.Count() < 2)
       {
         Log(
-          "Неправильный формат команды!\nФормат: ra.ban <тип:global|server> <steam_id64> <причина> <ip:boolean> <duration?>\n\n- <type:global|server> - тип блокировки, 'global' - на всех серверах, 'server' - только на этом\n- <ip:boolean> - блокировать ИП, '0' - нет, '1' - да\n- <duration> - необязателен, заполняется в формате 2d5h",
-          "Wrong command format!\nFormat: ra.ban <type> <steam_id64> <причина> <with ipip> <время?>\n<duration> - optional, use as 2d10h"
+          "Неверный формат команды!\nПравильный формат: ra.ban <steam-id> <причина> <время (необяз)>\n\nВозможны дополнительные опции:\n'--ban-ip' - заблокирует IP\n'--global' - заблокирует на всех серверах\n\nПример блокировки с IP, на всех серверах: ra.ban 7656119812110397 \"cheat\" 7d --ban-ip --global",
+          "Incorrect command format!\nCorrect format: ra.ban <steam-id> <reason> <time (optional)>\n\nAdditional options are available:\n'--ban-ip' - bans IP\n'--global' - bans globally\n\nExample of banning with IP, globally: ra.ban 7656119812110397 \"cheat\" 7d --ban-ip --global"
         );
         return;
       }
 
-      var type = args.Args[0];
-      if (type != "global" && type != "server")
-      {
-        Log(
-          "Указан неверное значение <type>. Должен быть 'global' - для межсерверного бана, и 'server' - для текущего сервера",
-          "Wrong value of <type>. Should be 'global' - for cross-server ban, и 'server' - for this server"
-        );
-        return;
-      }
+      var steam_id = clearArgs[0];
+      var reason = clearArgs[1];
+      var duration = clearArgs.Count() == 3 ? clearArgs[2] : "";
 
-      var steam_id = args.Args[1];
-      var reason = args.Args[2];
-      var ip = args.Args[3];
 
-      if (ip != "0" && ip != "1")
-      {
-        Log(
-          "Указан неверное значение <ip>. Должен быть '0' - не блокировать ИП, и '1' - блокировать ИП",
-          "Wrong value of <ip>. Should be '0' - ban without IP, и '1' - ban with IP"
-        );
-        return;
-      }
-
-      var global_bool = type == "global" ? true : false;
-      var ip_bool = ip == "1" ? true : false;
-
-      var duration = args.HasArgs(5) ? args.Args[4] : "";
+      var global_bool = args.FullString.Contains("--global");
+      var ip_bool = args.FullString.Contains("--ban-ip");
 
       _Worker.Action.SendBan(steam_id, reason, duration, global_bool, ip_bool);
     }
