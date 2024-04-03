@@ -80,7 +80,7 @@ namespace Oxide.Plugins
         #region Commands
 
         [ConsoleCommand("ra.gs_salary")]
-        private void GiveRub_ConsoleCommand(ConsoleSystem.Arg args)
+        private void ExtConsoleCommandGameStore(ConsoleSystem.Arg args)
         {
             if (args.Player() != null && !args.Player().IsAdmin)
             {
@@ -153,8 +153,8 @@ namespace Oxide.Plugins
             // Please, do not change this mess. It can cause ban in game-store
             var mess = "Зарплата модератору";
 
-            var base_url = $"https://gamestores.ru/api";
-            var reserve_url = "https://gamestores.app/api";
+            var base_url = $"https://gamestores.app/api";
+            var reserve_url = "https://gamestores.ru/api";
 
             var query = $"?shop_id={_Settings.gs_shop_id}&secret={_Settings.gs_secret_key}&action=moneys&type=plus&steam_id={steamId}&amount={amount}&mess={mess}";
 
