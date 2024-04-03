@@ -2660,55 +2660,6 @@ namespace Oxide.Plugins
       _Worker.Action.SendBan(steam_id, reason, duration, global_bool, ip_bool);
     }
 
-    [ConsoleCommand("ra.ban_server_with_ip")]
-    private void CmdConsoleBanWithIp(ConsoleSystem.Arg args)
-    {
-      if (args.Player() != null && !args.Player().IsAdmin)
-      {
-        return;
-      }
-
-      if (!args.HasArgs(2))
-      {
-        Log(
-          "ra.ban_server_with_ip <steam_id> <reason> <duration?>\n<duration> - необязателен, заполняется в формате 2d5h",
-          "ra.ban_server_with_ip <steam_id> <причина> <время?>\n<duration> - optional, use as 2d10h"
-        );
-        return;
-      }
-
-      var steam_id = args.Args[0];
-      var reason = args.Args[1];
-      var duration = args.HasArgs(3) ? args.Args[2] : "";
-
-      _Worker.Action.SendBan(steam_id, reason, duration, false, true);
-    }
-
-    [ConsoleCommand("ra.ban_global_with_ip")]
-    private void CmdConsoleBanGlobalWithIp(ConsoleSystem.Arg args)
-    {
-      if (args.Player() != null && !args.Player().IsAdmin)
-      {
-        return;
-      }
-
-      if (!args.HasArgs(2))
-      {
-        Log(
-          "ra.ban_global_with_ip <steam_id> <reason> <duration?>\n<duration> - необязателен, заполняется в формате 2d5h",
-          "ra.ban_global_with_ip <steam_id> <причина> <время?>\n<duration> - optional, use as 2d10h"
-        );
-        return;
-      }
-
-      var steam_id = args.Args[0];
-      var reason = args.Args[1];
-      var duration = args.HasArgs(3) ? args.Args[2] : "";
-
-      _Worker.Action.SendBan(steam_id, reason, duration, true, true);
-    }
-
-
     [ConsoleCommand("ra.pair")]
     private void CmdConsoleCourtSetup(ConsoleSystem.Arg args)
     {
