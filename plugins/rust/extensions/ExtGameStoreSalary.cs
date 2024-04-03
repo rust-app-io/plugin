@@ -9,8 +9,8 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("ExtDonateSalary", "RustApp.Io (by EricovvDev)", "1.0.0")]
-    class ExtDonateSalary : RustPlugin
+    [Info("ExtGameStoreSalary", "RustApp.Io (by EricovvDev)", "1.0.0")]
+    class ExtGameStoreSalary : RustPlugin
     {
         #region Configuration
 
