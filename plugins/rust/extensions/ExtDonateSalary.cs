@@ -30,7 +30,8 @@ namespace Oxide.Plugins
                 return new Configuration
                 {
                     gs_secret_key = "",
-                    gs_shop_id = ""
+                    gs_shop_id = "",
+                    gs_use_reserve = false
                 };
             }
         }
