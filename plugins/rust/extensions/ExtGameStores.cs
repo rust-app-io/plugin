@@ -7,7 +7,7 @@ using System.Threading.Tasks;
 
 namespace Oxide.Plugins
 {
-    [Info("ExtGameStores", "EricovvDev for RustApp", "1.0.0")]
+    [Info("ExtGameStores", "EricovvDev for RustApp", "1.0.1")]
     class ExtGameStores : RustPlugin
     {
         private ConfigData configuration;
