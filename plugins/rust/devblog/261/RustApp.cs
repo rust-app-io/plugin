@@ -39,7 +39,7 @@ using Steamworks;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts & Frizen(adaptation)", "1.4.1")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts & Frizen(adaptation)", "1.4.2")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -826,10 +826,15 @@ namespace Oxide.Plugins
           duration = duration.Length > 0 ? duration : null,
         })
         .Execute(
-          (data, raw) => _RustApp.Log(
-            $"Игрок {steam_id} заблокирован за {reason}",
-            $"Player {steam_id} banned for {reason}"
-          ),
+          (data, raw) =>
+          {
+            _RustApp.Log(
+              $"Игрок {steam_id} заблокирован за {reason}",
+              $"Player {steam_id} banned for {reason}"
+            );
+
+            _RustApp.CloseConnection(steam_id, reason);
+          },
           (err) => _RustApp.Log(
             $"Не удалось заблокировать {steam_id}. Причина: {err}",
             $"Failed to ban {steam_id}. Reason: {err}"
