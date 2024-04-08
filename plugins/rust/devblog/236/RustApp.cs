@@ -39,7 +39,7 @@ using Steamworks;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts & Frizen(adaptation)", "1.4.2")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts & Frizen(adaptation)", "1.4.3")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -248,6 +248,7 @@ namespace Oxide.Plugins
       public static string SendAlerts = $"{CourtUrls.Base}/plugin/alerts";
       public static string SendReports = $"{CourtUrls.Base}/plugin/reports";
       public static string BanCreate = $"{CourtUrls.Base}/plugin/ban";
+      public static string BanDelete = $"{CourtUrls.Base}/plugin/unban";
     }
 
     private static class QueueUrls
@@ -838,6 +839,31 @@ namespace Oxide.Plugins
           (err) => _RustApp.Log(
             $"Не удалось заблокировать {steam_id}. Причина: {err}",
             $"Failed to ban {steam_id}. Reason: {err}"
+          )
+        );
+      }
+      public void @SendBanDelete(string steam_id)
+      {
+        if (!IsReady())
+        {
+          return;
+        }
+
+        Request<object>(CourtUrls.BanDelete, RequestMethod.POST, new
+        {
+          target_steam_id = steam_id,
+        })
+        .Execute(
+          (data, raw) =>
+          {
+            _RustApp.Log(
+              $"Игрок {steam_id} разблокирован",
+              $"Player {steam_id} unbanned"
+            );
+          },
+          (err) => _RustApp.Log(
+            $"Не удалось разблокировать {steam_id}. Причина: {err}",
+            $"Failed to unban {steam_id}. Reason: {err}"
           )
         );
       }
@@ -2671,6 +2697,30 @@ namespace Oxide.Plugins
       }
 
       _Worker?.StartPair(args.Args[0]);
+    }
+
+    [ConsoleCommand("ra.unban")]
+    private void CmdConsoleBanDelete(ConsoleSystem.Arg args)
+    {
+      if (args.Player() != null && !args.Player().IsAdmin)
+      {
+        return;
+      }
+
+      var clearArgs = (args.Args ?? new string[0]).ToList();
+
+      if (clearArgs.Count() != 1)
+      {
+        Log(
+          "Неверный формат команды!\nПравильный формат: ra.unban <steam-id>",
+          "Incorrect command format!\nCorrect format: ra.unban <steam-id>"
+        );
+        return;
+      }
+
+      var steam_id = clearArgs[0];
+
+      _Worker.Action.SendBanDelete(steam_id);
     }
 
     #endregion
