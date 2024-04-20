@@ -1686,16 +1686,8 @@ namespace Oxide.Plugins
           _RustApp.SendGlobalMessage(msg);
         }
 
-        var player = BasePlayer.Find(payload.steam_id);
-        if (player == null)
-        {
-          return "Player is disconnected or not exists";
-        }
-
-        if (player.IsConnected)
-        {
-          _RustApp._Worker.Ban.FetchBan(player);
-        }
+        // Ip doesnot matter in this context
+        _RustApp._Worker.Ban.FetchBan(payload.steam_id, "1.1.1.1");
 
         return true;
       }
@@ -3000,6 +2992,7 @@ namespace Oxide.Plugins
       var player = BasePlayer.Find(steamId);
       if (player != null && player.IsConnected)
       {
+        Puts("Кик через игрока");
         player.Kick(reason);
         return true;
       }
@@ -3007,6 +3000,7 @@ namespace Oxide.Plugins
       var connection = ConnectionAuth.m_AuthConnection.Find(v => v.userid.ToString() == steamId);
       if (connection != null)
       {
+        Puts("Кик через connect");
         Network.Net.sv.Kick(connection, reason);
         return true;
       }
@@ -3014,6 +3008,7 @@ namespace Oxide.Plugins
       var loading = ServerMgr.Instance.connectionQueue.joining.Find(v => v.userid.ToString() == steamId);
       if (loading != null)
       {
+        Puts("Кик через loading");
         Network.Net.sv.Kick(loading, reason);
         return true;
       }
@@ -3021,6 +3016,7 @@ namespace Oxide.Plugins
       var queued = ServerMgr.Instance.connectionQueue.queue.Find(v => v.userid.ToString() == steamId);
       if (queued != null)
       {
+        Puts("Кик через queued");
         Network.Net.sv.Kick(queued, reason);
         return true;
       }
