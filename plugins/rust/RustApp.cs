@@ -34,14 +34,15 @@ using ConVar;
 using Oxide.Core.Database;
 using Facepunch;
 using Rust;
+using Steamworks;
 
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.0.0")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.4.3")]
   public class RustApp : RustPlugin
   {
-    #region Classes
+    #region Classes 
 
     // From RustStats by Sanlerus  
     public static class EncodingBase64
@@ -246,6 +247,8 @@ namespace Oxide.Plugins
       public static string SendChat = $"{CourtUrls.Base}/plugin/chat";
       public static string SendAlerts = $"{CourtUrls.Base}/plugin/alerts";
       public static string SendReports = $"{CourtUrls.Base}/plugin/reports";
+      public static string BanCreate = $"{CourtUrls.Base}/plugin/ban";
+      public static string BanDelete = $"{CourtUrls.Base}/plugin/unban";
     }
 
     private static class QueueUrls
@@ -377,10 +380,12 @@ namespace Oxide.Plugins
           }
           catch
           {
+            /**
             _RustApp.Warning(
               "Обнаружен плагин NoEscape, но не удалось вызвать API",
               "Detected plugin NoEscape, but failed to call API"
             );
+            */
           }
         }
 
@@ -396,6 +401,25 @@ namespace Oxide.Plugins
         Vis.Entities(player.transform.position, 16f, list, Layers.PreventBuilding);
 
         return list.FirstOrDefault()?.IsAuthed(player) ?? false;
+      }
+
+      private static bool NoLicense(Network.Connection connection)
+      {
+        if (_RustApp.MultiFighting == null || !_RustApp.MultiFighting.IsLoaded)
+        {
+          return false;
+        }
+
+        try
+        {
+          var isSteam = (bool)_RustApp.MultiFighting.Call("IsSteam", connection);
+
+          return !isSteam;
+        }
+        catch
+        {
+          return false;
+        }
       }
 
       public static PluginPlayerPayload FromPlayer(BasePlayer player)
@@ -415,6 +439,7 @@ namespace Oxide.Plugins
         payload.can_build = PluginPlayerPayload.IsBuildingAuthed(player);
 
         payload.is_raiding = PluginPlayerPayload.IsRaidBlocked(player);
+        payload.no_license = PluginPlayerPayload.NoLicense(player.Connection);
 
         if (player.Team != null)
         {
@@ -437,6 +462,8 @@ namespace Oxide.Plugins
 
         payload.status = status;
 
+        payload.no_license = PluginPlayerPayload.NoLicense(connection);
+
         var team = RelationshipManager.ServerInstance.FindPlayersTeam(connection.userid);
         if (team != null)
         {
@@ -458,6 +485,7 @@ namespace Oxide.Plugins
 
       public bool can_build = false;
       public bool is_raiding = false;
+      public bool no_license = false;
 
       public string status;
 
@@ -564,7 +592,7 @@ namespace Oxide.Plugins
         var obj = new
         {
           name = ConVar.Server.hostname,
-          level = ConVar.Server.level,
+          level = SteamServer.MapName ?? ConVar.Server.level,
           description = ConVar.Server.description + " " + ConVar.Server.motd,
 
           avatar_big = ConVar.Server.logoimage,
@@ -782,6 +810,64 @@ namespace Oxide.Plugins
             (err) => callback(false)
           );
       }
+
+      public void @SendBan(string steam_id, string reason, string duration, bool global, bool ban_ip)
+      {
+        if (!IsReady())
+        {
+          return;
+        }
+
+        Request<object>(CourtUrls.BanCreate, RequestMethod.POST, new
+        {
+          target_steam_id = steam_id,
+          reason = reason,
+          global = global,
+          ban_ip = ban_ip,
+          duration = duration.Length > 0 ? duration : null,
+        })
+        .Execute(
+          (data, raw) =>
+          {
+            _RustApp.Log(
+              $"Игрок {steam_id} заблокирован за {reason}",
+              $"Player {steam_id} banned for {reason}"
+            );
+
+            _RustApp.CloseConnection(steam_id, reason);
+          },
+          (err) => _RustApp.Log(
+            $"Не удалось заблокировать {steam_id}. Причина: {err}",
+            $"Failed to ban {steam_id}. Reason: {err}"
+          )
+        );
+      }
+
+      public void @SendBanDelete(string steam_id)
+      {
+        if (!IsReady())
+        {
+          return;
+        }
+
+        Request<object>(CourtUrls.BanDelete, RequestMethod.POST, new
+        {
+          target_steam_id = steam_id,
+        })
+        .Execute(
+          (data, raw) =>
+          {
+            _RustApp.Log(
+              $"Игрок {steam_id} разблокирован",
+              $"Player {steam_id} unbanned"
+            );
+          },
+          (err) => _RustApp.Log(
+            $"Не удалось разблокировать {steam_id}. Причина: {err}",
+            $"Failed to unban {steam_id}. Reason: {err}"
+          )
+        );
+      }
     }
 
     public class BanWorker : BaseWorker
@@ -808,6 +894,7 @@ namespace Oxide.Plugins
         public string steam_id;
         public string ban_ip;
         public string reason;
+        public long expired_at;
         public bool ban_ip_active;
         public bool computed_is_active;
       }
@@ -844,6 +931,13 @@ namespace Oxide.Plugins
 
       public void FetchBan(string steamId, string ip)
       {
+        // Вызов хука на возможность игнорировать проверку
+        var over = Interface.Oxide.CallHook("RustApp_CanIgnoreBan", steamId);
+        if (over != null)
+        {
+          return;
+        }
+
         if (!PlayersCollection.ContainsKey(steamId))
         {
           PlayersCollection.Add(steamId, ip);
@@ -875,7 +969,10 @@ namespace Oxide.Plugins
             {
               if (ban.steam_id == steamId)
               {
-                _RustApp.CloseConnection(steamId, _Settings.ban_reason_format.Replace("%REASON%", ban.reason));
+                var format = ban.expired_at == 0 ? _Settings.ban_reason_format : _Settings.ban_reason_format_temporary;
+                var time = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(ban.expired_at + 3 * 60 * 60 * 1_000).ToString("dd.MM.yyyy HH:mm");
+
+                _RustApp.CloseConnection(steamId, format.Replace("%REASON%", ban.reason).Replace("%TIME%", time));
               }
               else
               {
@@ -947,10 +1044,12 @@ namespace Oxide.Plugins
 
       public void @FetchBans(Dictionary<string, string> entries, Action<string, BanEntry> onBan, Action onException)
       {
+        /*
         _RustApp.Log(
           $"Проверяем блокировки игроков ({entries.Keys.Count} шт)",
           $"Fetch players bans ({entries.Keys.Count} pc)"
         );
+        */
 
         var players = new List<BanFetchPayload>();
 
@@ -1042,6 +1141,13 @@ namespace Oxide.Plugins
 
       public void SaveReport(PluginReportEntry report)
       {
+        // Вызов хука на возможность игнорировать проверку
+        var over = Interface.Oxide.CallHook("RustApp_CanIgnoreReport", report.target_steam_id, report.initiator_steam_id);
+        if (over != null)
+        {
+          return;
+        }
+
         ReportCollection.Add(report);
       }
 
@@ -1153,10 +1259,13 @@ namespace Oxide.Plugins
         players.AddRange(ServerMgr.Instance.connectionQueue.queue.Select(v => PluginPlayerPayload.FromConnection(v, "queued")));
         players.AddRange(ServerMgr.Instance.connectionQueue.joining.Select(v => PluginPlayerPayload.FromConnection(v, "joining")));
 
+        var disconnected = DisconnectHistory.ToDictionary(v => v.Key, v => v.Value);
+        var team_changes = TeamChangeHistory.ToDictionary(v => v.Key, v => v.Value);
+
         var payload = new
         {
           hostname = ConVar.Server.hostname,
-          level = ConVar.Server.level,
+          level = SteamServer.MapName ?? ConVar.Server.level,
 
           avatar_url = ConVar.Server.logoimage,
           banner_url = ConVar.Server.headerimage,
@@ -1166,28 +1275,80 @@ namespace Oxide.Plugins
           performance = _RustApp.TotalHookTime.ToString(),
 
           players,
-          disconnected = DisconnectHistory,
-          team_changes = TeamChangeHistory
+          disconnected = disconnected,
+          team_changes = team_changes
         };
 
         Request<object>(CourtUrls.SendState, RequestMethod.PUT, payload)
           .Execute(
             (data, raw) =>
             {
-              DisconnectHistory.Clear();
-              TeamChangeHistory.Clear();
             },
-            (err) => _RustApp.Error(
-              $"Не удалось отправить состояние сервера ({err})",
-              $"Failed to send server status ({err})"
-            )
+            (err) =>
+            {
+              _RustApp.Error(
+                $"Не удалось отправить состояние сервера ({err})",
+                $"Failed to send server status ({err})"
+              );
+
+              /**
+              Возвращаем неудачно отправленные дисконекты
+              */
+
+              var resurrectCollectionDisconnects = new Dictionary<string, string>();
+
+              foreach (var disconnect in disconnected)
+              {
+                if (!resurrectCollectionDisconnects.ContainsKey(disconnect.Key))
+                {
+                  resurrectCollectionDisconnects.Add(disconnect.Key, disconnect.Value);
+                }
+              }
+
+              foreach (var disconnect in DisconnectHistory)
+              {
+                if (!resurrectCollectionDisconnects.ContainsKey(disconnect.Key))
+                {
+                  resurrectCollectionDisconnects.Add(disconnect.Key, disconnect.Value);
+                }
+              }
+
+              DisconnectHistory = resurrectCollectionDisconnects;
+
+              /**
+              Возвращаем неудачно отправленные изменения команды
+              */
+
+              var resurrectCollectionTeamChanges = new Dictionary<string, string>();
+
+              foreach (var teamChange in team_changes)
+              {
+                if (!resurrectCollectionTeamChanges.ContainsKey(teamChange.Key))
+                {
+                  resurrectCollectionTeamChanges.Add(teamChange.Key, teamChange.Value);
+                }
+              }
+
+              foreach (var teamChange in TeamChangeHistory)
+              {
+                if (!resurrectCollectionTeamChanges.ContainsKey(teamChange.Key))
+                {
+                  resurrectCollectionTeamChanges.Add(teamChange.Key, teamChange.Value);
+                }
+              }
+
+              TeamChangeHistory = resurrectCollectionTeamChanges;
+            }
           );
+
+        DisconnectHistory = new Dictionary<string, string>();
+        TeamChangeHistory = new Dictionary<string, string>();
       }
     }
 
     public class QueueWorker : BaseWorker
     {
-      private Dictionary<string, bool> Notices = new Dictionary<string, bool>();
+      public Dictionary<string, bool> Notices = new Dictionary<string, bool>();
 
       public class QueueElement
       {
@@ -1238,6 +1399,12 @@ namespace Oxide.Plugins
 
         public string mode;
       }
+
+      private class QueueExecuteCommand
+      {
+        public List<string> commands;
+      }
+
       protected override void OnReady()
       {
         InvokeRepeating(nameof(QueueRetreive), 0f, 1f);
@@ -1338,6 +1505,10 @@ namespace Oxide.Plugins
             {
               return OnChatMessage(JsonConvert.DeserializeObject<QueueChatMessage>(element.request.data.ToString()));
             }
+          case "court/execute-command":
+            {
+              return OnExecuteCommand(JsonConvert.DeserializeObject<QueueExecuteCommand>(element.request.data.ToString()));
+            }
           default:
             {
               _RustApp.Log(
@@ -1367,6 +1538,17 @@ namespace Oxide.Plugins
         if (player == null || !player.IsConnected)
         {
           return "Player not found or offline";
+        }
+
+        var over = Interface.Oxide.CallHook("RustApp_CanIgnoreCheck", player);
+        if (over != null)
+        {
+          if (over is string)
+          {
+            return over;
+          }
+
+          return "Plugin declined notice change via hook";
         }
 
         if (!Notices.ContainsKey(payload.steam_id))
@@ -1405,12 +1587,18 @@ namespace Oxide.Plugins
 
       private object OnQueueBan(QueueBanPayload payload)
       {
+        // Вызов хука на возможность игнорировать проверку
+        var over = Interface.Oxide.CallHook("RustApp_CanIgnoreBan", payload.steam_id);
+        if (over != null)
+        {
+          return "Plugin overrided queue-ban";
+        }
+
         if (_Settings.ban_enable_broadcast)
         {
           var msg = _Settings.ban_broadcast_format.Replace("%TARGET%", payload.name).Replace("%REASON%", payload.reason);
 
           _RustApp.SendGlobalMessage(msg);
-          _RustApp.Puts(msg);
         }
 
         var player = BasePlayer.Find(payload.steam_id);
@@ -1425,6 +1613,53 @@ namespace Oxide.Plugins
         }
 
         return true;
+      }
+
+      private object OnExecuteCommand(QueueExecuteCommand payload)
+      {
+        var responses = new List<object>();
+
+        var index = 0;
+
+        payload.commands.ForEach((v) =>
+        {
+          if (_Settings.custom_actions_allow)
+          {
+            var res = ConsoleSystem.Run(ConsoleSystem.Option.Server, v);
+
+            try
+            {
+              responses.Add(new
+              {
+                success = true,
+                command = v,
+                data = JsonConvert.DeserializeObject(res?.ToString() ?? "Command without response")
+              });
+            }
+            catch
+            {
+              responses.Add(new
+              {
+                success = true,
+                command = v,
+                data = res
+              });
+            }
+          }
+          else
+          {
+            responses.Add(new
+            {
+              success = false,
+              command = v,
+              data = "Custom actions are disabled"
+            });
+          }
+
+          index++;
+        });
+
+        return responses;
       }
 
       private object OnChatMessage(QueueChatMessage payload)
@@ -1466,6 +1701,8 @@ namespace Oxide.Plugins
             $"Notify about check was removed from player {player.userID}"
           );
 
+          Interface.Oxide.CallHook("RustApp_OnCheckNoticeHidden", player);
+
           CuiHelper.DestroyUi(player, CheckLayer);
         }
         else
@@ -1474,6 +1711,11 @@ namespace Oxide.Plugins
             $"Игрок {player.userID} уведомлён о проверке",
             $"Player {player.userID} was notified about check"
           );
+
+          Interface.Oxide.CallHook("RustApp_OnCheckNoticeShowed", player);
+
+          // Deprecated, will be deleted in the future
+          Interface.Oxide.CallHook("RustApp_OnCheckStarted", player);
 
           _RustApp.DrawInterface(player);
         }
@@ -1532,7 +1774,7 @@ namespace Oxide.Plugins
     private class Configuration
     {
       [JsonProperty("Ignore all players manipulation")]
-      public bool do_not_interact_player = true;
+      public bool do_not_interact_player = false;
 
       [JsonProperty("[UI] Chat commands")]
       public List<string> report_ui_commands = new List<string>();
@@ -1565,16 +1807,22 @@ namespace Oxide.Plugins
       public string ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>";
 
       [JsonProperty("[Ban] Kick message format (%REASON% - ban reason)")]
-      public string ban_reason_format = "Вы забанены на этом сервере, причина: %REASON%";
+      public string ban_reason_format = "Вы навсегда забанены на этом сервере причина: %REASON%";
+
+      [JsonProperty("[Ban] Kick message format temporary (%REASON% - ban reason)")]
+      public string ban_reason_format_temporary = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%";
 
       [JsonProperty("[Ban] Message format when kicking due to IP")]
       public string ban_reason_ip_format = "Вам ограничен вход на сервер!";
+
+      [JsonProperty("[Custom Actions] Allow custom actions")]
+      public bool custom_actions_allow = true;
 
       public static Configuration Generate()
       {
         return new Configuration
         {
-          do_not_interact_player = true,
+          do_not_interact_player = false,
 
           report_ui_commands = new List<string> { "report", "reports" },
           report_ui_reasons = new List<string> { "Чит", "Макрос", "Багоюз" },
@@ -1587,8 +1835,11 @@ namespace Oxide.Plugins
 
           ban_enable_broadcast = true,
           ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
-          ban_reason_format = "Вы забанены на этом сервере, причина: %REASON%",
+          ban_reason_format = "Вы навсегда забанены на этом сервере, причина: %REASON%",
+          ban_reason_format_temporary = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%",
           ban_reason_ip_format = "Вам ограничен вход на сервер!",
+
+          custom_actions_allow = true
         };
       }
     }
@@ -1881,7 +2132,7 @@ namespace Oxide.Plugins
 
 
     // References for RB plugins to get RB status
-    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock;
+    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting;
 
     #endregion
 
@@ -2024,7 +2275,7 @@ namespace Oxide.Plugins
 
       var owner = stash.OwnerID;
 
-      if (player.userID == stash.OwnerID)
+      if (player.userID == stash.OwnerID || owner == 0)
       {
         return;
       }
@@ -2049,6 +2300,11 @@ namespace Oxide.Plugins
 
     private void OnPlayerDisconnected(BasePlayer player, string reason)
     {
+      if (_Worker.Queue.Notices.ContainsKey(player.UserIDString))
+      {
+        _Worker.Queue.Notices.Remove(player.UserIDString);
+      }
+
       _Worker?.Update.SaveDisconnect(player, reason);
     }
 
@@ -2219,6 +2475,20 @@ namespace Oxide.Plugins
           }
         case "report":
           {
+            if (!_Cooldowns.ContainsKey(player.userID))
+            {
+              _Cooldowns.Add(player.userID, 0);
+            }
+
+            if (_Cooldowns[player.userID] > CurrentTime())
+            {
+              var msg = lang.GetMessage("Cooldown", this, player.UserIDString).Replace("%TIME%",
+                  $"{(_Cooldowns[player.userID] - CurrentTime()).ToString("0")}");
+
+              SoundToast(player, msg, 1);
+              return;
+            }
+
             string targetId = args.Args[1];
             string reason = args.Args[2].Replace("0", "");
 
@@ -2242,19 +2512,25 @@ namespace Oxide.Plugins
 
     private void ChatCmdReport(BasePlayer player)
     {
-      /*if (!UserService.COOLDOWNS.ContainsKey(player.userID))
+      var over = Interface.Oxide.CallHook("RustApp_CanOpenReportUI", player);
+      if (over != null)
       {
-          UserService.COOLDOWNS.Add(player.userID, 0);
+        return;
       }
 
-      if (UserService.COOLDOWNS[player.userID] > CurrentTime())
+      if (!_Cooldowns.ContainsKey(player.userID))
       {
-          var msg = lang.GetMessage("Cooldown", this, player.UserIDString).Replace("%TIME%",
-              $"{(UserService.COOLDOWNS[player.userID] - CurrentTime()).ToString("0")}");
+        _Cooldowns.Add(player.userID, 0);
+      }
 
-          SoundToast(player, msg, 1);
-          return;
-      }*/
+      if (_Cooldowns[player.userID] > CurrentTime())
+      {
+        var msg = lang.GetMessage("Cooldown", this, player.UserIDString).Replace("%TIME%",
+            $"{(_Cooldowns[player.userID] - CurrentTime()).ToString("0")}");
+
+        SoundToast(player, msg, 1);
+        return;
+      }
 
       DrawReportInterface(player);
     }
@@ -2320,6 +2596,118 @@ namespace Oxide.Plugins
       }
     }
 
+    [ConsoleCommand("ra.ban_server")]
+    private void CmdConsoleBanServerDeprecated(ConsoleSystem.Arg args)
+    {
+      if (args.Player() != null && !args.Player().IsAdmin)
+      {
+        return;
+      }
+
+      Log(
+        "Команда 'ra.ban_server' устарела и скоро будет удалена",
+        "Command 'ra.ban_server' deprecated and will be deleted soon"
+      );
+
+      if (!args.HasArgs(2))
+      {
+        Log(
+          "ra.ban_server <steam_id> <reason> <duration?>\n<duration> - необязателен, заполняется в формате 2d5h",
+          "ra.ban_server <steam_id> <причина> <время?>\n<duration> - optional, use as 2d10h"
+        );
+        return;
+      }
+
+      var steam_id = args.Args[0];
+      var reason = args.Args[1];
+      var duration = args.HasArgs(3) ? args.Args[2] : "";
+
+      _Worker.Action.SendBan(steam_id, reason, duration, false, true);
+    }
+
+    [ConsoleCommand("ra.ban_global")]
+    private void CmdConsoleBanGlobalDeprecated(ConsoleSystem.Arg args)
+    {
+      if (args.Player() != null && !args.Player().IsAdmin)
+      {
+        return;
+      }
+
+      Log(
+        "Команда 'ra.ban_global' устарела и скоро будет удалена",
+        "Command 'ra.ban_global' deprecated and will be deleted soon"
+      );
+
+      if (!args.HasArgs(2))
+      {
+        Log(
+          "ra.ban_global <steam_id> <reason> <duration?>\n<duration> - необязателен, заполняется в формате 2d5h",
+          "ra.ban_global <steam_id> <причина> <время?>\n<duration> - optional, use as 2d10h"
+        );
+        return;
+      }
+
+      var steam_id = args.Args[0];
+      var reason = args.Args[1];
+      var duration = args.HasArgs(3) ? args.Args[2] : "";
+
+      _Worker.Action.SendBan(steam_id, reason, duration, true, true);
+    }
+
+    [ConsoleCommand("ra.ban")]
+    private void CmdConsoleBan(ConsoleSystem.Arg args)
+    {
+      if (args.Player() != null && !args.Player().IsAdmin)
+      {
+        return;
+      }
+
+      var clearArgs = (args.Args ?? new string[0]).Where(v => v != "--ban-ip" && v != "--global").ToList();
+
+      if (clearArgs.Count() < 2)
+      {
+        Log(
+          "Неверный формат команды!\nПравильный формат: ra.ban <steam-id> <причина> <время (необяз)>\n\nВозможны дополнительные опции:\n'--ban-ip' - заблокирует IP\n'--global' - заблокирует на всех серверах\n\nПример блокировки с IP, на всех серверах: ra.ban 7656119812110397 \"cheat\" 7d --ban-ip --global",
+          "Incorrect command format!\nCorrect format: ra.ban <steam-id> <reason> <time (optional)>\n\nAdditional options are available:\n'--ban-ip' - bans IP\n'--global' - bans globally\n\nExample of banning with IP, globally: ra.ban 7656119812110397 \"cheat\" 7d --ban-ip --global"
+        );
+        return;
+      }
+
+      var steam_id = clearArgs[0];
+      var reason = clearArgs[1];
+      var duration = clearArgs.Count() == 3 ? clearArgs[2] : "";
+
+
+      var global_bool = args.FullString.Contains("--global");
+      var ip_bool = args.FullString.Contains("--ban-ip");
+
+      _Worker.Action.SendBan(steam_id, reason, duration, global_bool, ip_bool);
+    }
+
+    [ConsoleCommand("ra.unban")]
+    private void CmdConsoleBanDelete(ConsoleSystem.Arg args)
+    {
+      if (args.Player() != null && !args.Player().IsAdmin)
+      {
+        return;
+      }
+
+      var clearArgs = (args.Args ?? new string[0]).ToList();
+
+      if (clearArgs.Count() != 1)
+      {
+        Log(
+          "Неверный формат команды!\nПравильный формат: ra.unban <steam-id>",
+          "Incorrect command format!\nCorrect format: ra.unban <steam-id>"
+        );
+        return;
+      }
+
+      var steam_id = clearArgs[0];
+
+      _Worker.Action.SendBanDelete(steam_id);
+    }
+
     [ConsoleCommand("ra.pair")]
     private void CmdConsoleCourtSetup(ConsoleSystem.Arg args)
     {
@@ -2338,7 +2726,7 @@ namespace Oxide.Plugins
 
     #endregion
 
-    #region User Manipulation
+    #region User Manipulation 
 
     private void SendGlobalMessage(string message)
     {
