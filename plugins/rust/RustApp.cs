@@ -2046,8 +2046,6 @@ namespace Oxide.Plugins
       var list = BasePlayer.activePlayerList
           .ToList();
 
-      list.AddRange(BasePlayer.sleepingPlayerList);
-
       var finalList = list
           .FindAll(v => v.displayName.ToLower().Contains(search) || v.UserIDString.ToLower().Contains(search) || search == null)
           .Skip(page * 18)
