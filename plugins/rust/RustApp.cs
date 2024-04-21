@@ -2046,6 +2046,8 @@ namespace Oxide.Plugins
       var list = BasePlayer.activePlayerList
           .ToList();
 
+      list.AddRange(BasePlayer.sleepingPlayerList);
+
       var finalList = list
           .FindAll(v => v.displayName.ToLower().Contains(search) || v.UserIDString.ToLower().Contains(search) || search == null)
           .Skip(page * 18)
@@ -2191,7 +2193,6 @@ namespace Oxide.Plugins
 
             string normaliseName = NormalizeString(target.displayName);
 
-            var was_checked = _Checks.LastChecks.ContainsKey(target.UserIDString) && CurrentTime() - _Checks.LastChecks[target.UserIDString] < _Settings.report_ui_show_check_in * 24 * 60 * 60;
             string name = normaliseName.Length > 14 ? normaliseName.Substring(0, 15) + ".." : normaliseName;
 
             container.Add(new CuiLabel
@@ -2213,6 +2214,7 @@ namespace Oxide.Plugins
               Text = { Text = "" }
             }, ReportLayer + $".{target.UserIDString}");
 
+            var was_checked = _Checks.LastChecks.ContainsKey(target.UserIDString) && CurrentTime() - _Checks.LastChecks[target.UserIDString] < _Settings.report_ui_show_check_in * 24 * 60 * 60;
             if (was_checked)
             {
               container.Add(new CuiPanel
@@ -2656,6 +2658,22 @@ namespace Oxide.Plugins
                           new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
                       }
             });
+
+            var was_checked = _Checks.LastChecks.ContainsKey(target.UserIDString) && CurrentTime() - _Checks.LastChecks[target.UserIDString] < _Settings.report_ui_show_check_in * 24 * 60 * 60;
+            if (was_checked)
+            {
+              container.Add(new CuiPanel
+              {
+                RectTransform = { AnchorMin = "0 1", AnchorMax = "1 1", OffsetMin = "5 -25", OffsetMax = "-5 -5" },
+                Image = { Color = "0.239 0.568 0.294 1", Material = "assets/icons/greyout.mat" },
+              }, ReportLayer + $".T", ReportLayer + $".T.Recent");
+
+              container.Add(new CuiLabel
+              {
+                RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "0 0", OffsetMax = "0 0" },
+                Text = { Text = lang.GetMessage("UI.CheckMark", this, player.UserIDString), Align = TextAnchor.MiddleCenter, Font = "robotocondensed-regular.ttf", FontSize = 12, Color = "0.639 0.968 0.694 1" }
+              }, ReportLayer + $".T.Recent");
+            }
 
             for (var i = 0; i < _Settings.report_ui_reasons.Count; i++)
             {
