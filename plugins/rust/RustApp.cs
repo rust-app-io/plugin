@@ -1714,7 +1714,7 @@ namespace Oxide.Plugins
         int received = 0;
         int error = 0;
 
-        Interface.Oxide.CallHook("RustApp_OnAnnounceBan", payload.suspect_id, payload.targets);
+        Interface.Oxide.CallHook("RustApp_OnPaidAnnounceBan", payload.suspect_id, payload.targets);
 
         if (!payload.broadcast)
         {
@@ -1756,7 +1756,7 @@ namespace Oxide.Plugins
           _Checks.LastChecks[payload.suspect_id] = _RustApp.CurrentTime();
         }
 
-        Interface.Oxide.CallHook("RustApp_OnAnnounceClean", payload.suspect_id, payload.targets);
+        Interface.Oxide.CallHook("RustApp_OnPaidAnnounceClean", payload.suspect_id, payload.targets);
 
         CheckInfo.write(_Checks);
 
@@ -1884,9 +1884,6 @@ namespace Oxide.Plugins
           );
 
           Interface.Oxide.CallHook("RustApp_OnCheckNoticeShowed", player);
-
-          // Deprecated, will be deleted in the future
-          Interface.Oxide.CallHook("RustApp_OnCheckStarted", player);
 
           _RustApp.DrawInterface(player);
         }
