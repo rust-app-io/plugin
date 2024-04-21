@@ -2194,9 +2194,9 @@ namespace Oxide.Plugins
 
             string normaliseName = NormalizeString(target.displayName);
 
-            //var was_checked = _Checks.LastChecks.ContainsKey(target.UserIDString) && CurrentTime() - _Checks.LastChecks[target.UserIDString] < _Settings.report_ui_show_check_in * 24 * 60 * 60;
+            var was_checked = _Checks.LastChecks.ContainsKey(target.UserIDString) && CurrentTime() - _Checks.LastChecks[target.UserIDString] < _Settings.report_ui_show_check_in * 24 * 60 * 60;
             string name = normaliseName.Length > 14 ? normaliseName.Substring(0, 15) + ".." : normaliseName;
-            var was_checked = true;
+
             container.Add(new CuiLabel
             {
               RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "6 16", OffsetMax = "0 0" },
