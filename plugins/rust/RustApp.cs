@@ -1730,7 +1730,7 @@ namespace Oxide.Plugins
             continue;
           }
 
-          var msg = _RustApp.lang.GetMessage("Paid.Announce.Clean", _RustApp, player.UserIDString);
+          var msg = _RustApp.lang.GetMessage("Paid.Announce.Ban", _RustApp, player.UserIDString);
 
           msg = msg.Replace("%SUSPECT_NAME%", payload.suspect_name).Replace("%SUSPECT_ID%", payload.suspect_id).Replace("%REASON%", payload.reason);
 
@@ -1774,7 +1774,7 @@ namespace Oxide.Plugins
             continue;
           }
 
-          var msg = _RustApp.lang.GetMessage("Check.Result.Clear.Format", _RustApp, player.UserIDString);
+          var msg = _RustApp.lang.GetMessage("Paid.Announce.Clean", _RustApp, player.UserIDString);
 
           msg = msg.Replace("%SUSPECT_NAME%", payload.suspect_name).Replace("%SUSPECT_ID%", payload.suspect_id);
 
@@ -2224,7 +2224,7 @@ namespace Oxide.Plugins
               container.Add(new CuiLabel
               {
                 RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "0 0", OffsetMax = "0 0" },
-                Text = { Text = "Проверен", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-regular.ttf", FontSize = 12, Color = "0.639 0.968 0.694 1" }
+                Text = { Text = lang.GetMessage("UI.CheckMark", this, player.UserIDString), Align = TextAnchor.MiddleCenter, Font = "robotocondensed-regular.ttf", FontSize = 12, Color = "0.639 0.968 0.694 1" }
               }, ReportLayer + $".{target.UserIDString}.Recent");
             }
           }
@@ -2358,9 +2358,9 @@ namespace Oxide.Plugins
         ["Contact.SentWait"] = "If you sent the correct discord - wait for a friend request.",
         ["Check.Text"] = "<color=#c6bdb4><size=32><b>YOU ARE SUMMONED FOR A CHECK-UP</b></size></color>\n<color=#958D85>You have <color=#c6bdb4><b>3 minutes</b></color> to send discord and accept the friend request.\nUse the <b><color=#c6bdb4>/contact</color></b> command to send discord.\n\nTo contact a moderator - use chat, not a command.</color>",
         ["Chat.Direct.Toast"] = "Received a message from admin, look at the chat!",
-
-        ["Check.Result.Clear.Format"] = "Your complaint about the player \"%SUSPECT_NAME%\" has been checked!\n<size=12><color=#81C5F480>As a result of the check, no violations were found</color ></size>",
-        ["Paid.Announce.Clean"] = "Your complaint about the player \"%SUSPECT_NAME%\" has been verified!\n<color=#F7D4D080><size=12>Player banned, reason: %REASON%</ size></color>",
+        ["UI.CheckMark"] = "Checked",
+        ["Paid.Announce.Clean"] = "Your complaint about the player \"%SUSPECT_NAME%\" has been checked!\n<size=12><color=#81C5F480>As a result of the check, no violations were found</color ></size>",
+        ["Paid.Announce.Ban"] = "Your complaint about the player \"%SUSPECT_NAME%\" has been verified!\n<color=#F7D4D080><size=12>Player banned, reason: %REASON%</ size></color>",
       }, this, "en");
 
       lang.RegisterMessages(new Dictionary<string, string>
@@ -2380,8 +2380,9 @@ namespace Oxide.Plugins
         ["Contact.SentWait"] = "<size=12>Если вы отправили корректный дискорд - ждите заявку в друзья.</size>",
         ["Check.Text"] = "<color=#c6bdb4><size=32><b>ВЫ ВЫЗВАНЫ НА ПРОВЕРКУ</b></size></color>\n<color=#958D85>У вас есть <color=#c6bdb4><b>3 минуты</b></color> чтобы отправить дискорд и принять заявку в друзья.\nИспользуйте команду <b><color=#c6bdb4>/contact</color></b> чтобы отправить дискорд.\n\nДля связи с модератором - используйте чат, а не команду.</color>",
         ["Chat.Direct.Toast"] = "Получено сообщение от админа, посмотрите в чат!",
-        ["Check.Result.Clear.Format"] = "Ваша жалоба на игрока \"%SUSPECT_NAME%\" была проверена!\n<size=12><color=#81C5F480>В результате проверки, нарушений не обнаружено</color></size>",
-        ["Paid.Announce.Clean"] = "Ваша жалоба на игрока \"%SUSPECT_NAME%\" была проверена!\n<color=#F7D4D080><size=12>Игрок заблокирован, причина: %REASON%</size></color>",
+        ["UI.CheckMark"] = "Проверен",
+        ["Paid.Announce.Clean"] = "Ваша жалоба на игрока \"%SUSPECT_NAME%\" была проверена!\n<size=12><color=#81C5F480>В результате проверки, нарушений не обнаружено</color></size>",
+        ["Paid.Announce.Ban"] = "Ваша жалоба на игрока \"%SUSPECT_NAME%\" была проверена!\n<color=#F7D4D080><size=12>Игрок заблокирован, причина: %REASON%</size></color>",
       }, this, "ru");
     }
 
