@@ -39,7 +39,7 @@ using Steamworks;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "Hougan & Xacku & Olkuts & Frizen(adaptation)", "1.5.0devblog236")]
+    [Info("RustApp", "Hougan & Xacku & Olkuts & Frizen(adaptation)", "1.5.0devblog261")]
     public class RustApp : RustPlugin
     {
         #region Classes 
