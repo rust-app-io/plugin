@@ -82,8 +82,6 @@ RustApp_OnCheckNoticeShowed(BasePlayer player)
 RustApp_OnCheckNoticeHidden(BasePlayer player)
 ```
 
-#### События ниже - доступны только начиная с определённого тарифа
-
 `Starter` Игрок был заблокирован. Третий аргумент - список игроков которые жаловались на этого игрока
 ```csharp
 RustApp_OnPaidAnnounceBan(BasePlayer player, string steam_id, List<string> initiators)
