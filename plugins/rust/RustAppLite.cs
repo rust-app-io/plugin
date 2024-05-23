@@ -19,6 +19,8 @@ namespace Oxide.Plugins
 
     private class Configuration
     {
+      [JsonProperty("[General] Language")]
+      public string language = "ru";
 
       [JsonProperty("[UI] Chat commands")]
       public List<string> report_ui_commands = new List<string>();
@@ -39,6 +41,8 @@ namespace Oxide.Plugins
       {
         return new Configuration
         {
+          language = "ru",
+
           report_ui_commands = new List<string> { "report", "reports" },
           report_ui_reasons = new List<string> { "Чит", "Макрос", "Багоюз" },
           report_ui_cooldown = 300,
@@ -68,6 +72,91 @@ namespace Oxide.Plugins
     protected override void SaveConfig() => Config.WriteObject(_Settings);
 
     #endregion
+
+    #region DiscordEmbedMessage
+    public class DiscordMessage
+    {
+      public string content { get; set; }
+      public DiscordEmbed[] embeds { get; set; }
+
+      public DiscordMessage(string Content, DiscordEmbed[] Embeds = null)
+      {
+        content = Content;
+        embeds = Embeds;
+      }
+
+      public void Send(string url)
+      {
+        _RustAppLite.webrequest.Enqueue(url, JsonConvert.SerializeObject(this), (code, response) => { }, _RustAppLite, Core.Libraries.RequestMethod.POST, _Headeers, 30f);
+      }
+
+      public static Dictionary<string, string> _Headeers = new Dictionary<string, string>
+      {
+        ["Content-Type"] = "application/json"
+      };
+    }
+    public class DiscordEmbed
+    {
+      public string title { get; set; }
+      public string description { get; set; }
+      public int? color { get; set; }
+      public DiscordField[] fields { get; set; }
+      public DiscordFooter footer { get; set; }
+      public DiscordAuthor author { get; set; }
+
+      public DiscordEmbed(string Title, string Description, int? Color = null, DiscordField[] Fields = null, DiscordFooter Footer = null, DiscordAuthor Author = null)
+      {
+        title = Title;
+        description = Description;
+        color = Color;
+        fields = Fields;
+        footer = Footer;
+        author = Author;
+      }
+    }
+    public class DiscordFooter
+    {
+      public string text { get; set; }
+      public string icon_url { get; set; }
+      public string proxy_icon_url { get; set; }
+
+      public DiscordFooter(string Text, string Icon_url, string Proxy_icon_url = null)
+      {
+        text = Text;
+        icon_url = Icon_url;
+        proxy_icon_url = Proxy_icon_url;
+      }
+    }
+    public class DiscordAuthor
+    {
+      public string name { get; set; }
+      public string url { get; set; }
+      public string icon_url { get; set; }
+      public string proxy_icon_url { get; set; }
+
+      public DiscordAuthor(string Name, string Url, string Icon_url, string Proxy_icon_url = null)
+      {
+        name = Name;
+        url = Url;
+        icon_url = Icon_url;
+        proxy_icon_url = Proxy_icon_url;
+      }
+    }
+    public class DiscordField
+    {
+      public string name { get; set; }
+      public string value { get; set; }
+      public bool inline { get; set; }
+
+      public DiscordField(string Name, string Value, bool Inline = false)
+      {
+        name = Name;
+        value = Value;
+        inline = Inline;
+      }
+
+    }
+    #endregion DiscordEmbedMessage
 
     #region Interfaces
 
@@ -334,6 +423,8 @@ namespace Oxide.Plugins
     {
       _RustAppLite = this;
 
+      RA_ReportSend("76561198200771707", "76561198200771707", "test", "comment");
+
       if (plugins.Find("ImageLibrary") == null)
       {
         Error(
@@ -346,13 +437,30 @@ namespace Oxide.Plugins
       if (_Settings.discord_webhook == null || _Settings.discord_webhook.Length < 5)
       {
         Error(
-          "Установите discord_webhook в конфигурации плагина, и перезапустите его o.reload RustAppSimple",
-          "Setup discord_webhook in plugin config, then reload it o.reload RustAppSimple"
+          "Установите discord_webhook в конфигурации плагина, и перезапустите плагин o.reload RustAppSimple",
+          "Setup discord_webhook in plugin config, then reload plugin o.reload RustAppSimple"
         );
         return;
       }
 
+      _Settings.report_ui_commands.ForEach(v =>
+      {
+        cmd.AddChatCommand(v, this, nameof(ChatCmdReport));
+      });
+
       RegisterMessages();
+      WriteLiteMarker();
+    }
+
+    private void WriteLiteMarker()
+    {
+      if (Interface.Oxide.DataFileSystem.ExistsDatafile(Name))
+      {
+        return;
+      }
+
+      // Is using in main plugin to detect users, who switched from Lite to main branch
+      Interface.Oxide.DataFileSystem.WriteObject(Name, CurrentTime());
     }
 
     private void RegisterMessages()
@@ -513,10 +621,10 @@ namespace Oxide.Plugins
             {
               Parent = ReportLayer + $".T",
               Components =
-                      {
-                          new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
-                          new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
-                      }
+              {
+                  new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
+                  new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
+              }
             });
 
             for (var i = 0; i < _Settings.report_ui_reasons.Count; i++)
@@ -625,6 +733,24 @@ namespace Oxide.Plugins
 
     private void RA_ReportSend(string initiator_steam_id, string target_steam_id, string reason, string message = "")
     {
+      var author = permission.GetUserData(initiator_steam_id);
+      var target = permission.GetUserData(target_steam_id);
+
+      var list = new DiscordField[3] {
+        new DiscordField($"SteamID", target_steam_id, true),
+        new DiscordField(Msg("Причина", "Reason"), reason, true),
+        null
+      };
+
+      if (message != null && message.Length > 0)
+      {
+        list[2] = new DiscordField(Msg("Комментарий", "Command"), $"```{message}```", false);
+      }
+
+      DiscordEmbed embed = new DiscordEmbed("Получена новая жалоба", $"[{author.LastSeenNickname}](https://rustapp.io '{author.LastSeenNickname}') пожаловался на [{target.LastSeenNickname}](https://rustapp.io '{target.LastSeenNickname}')", null, list, null);
+      DiscordMessage req = new DiscordMessage(null, new DiscordEmbed[1] { embed });
+
+      req.Send(_Settings.discord_webhook);
     }
 
     #endregion
@@ -660,38 +786,50 @@ namespace Oxide.Plugins
 
     public string Msg(string ru, string en)
     {
-#if RU
-      return ru;
-#else
-      return en;
-#endif
+      if (_Settings.language == "ru")
+      {
+        return ru;
+      }
+      else
+      {
+        return en;
+      }
     }
 
     public void Log(string ru, string en)
     {
-#if RU
-      Puts(ru);
-#else
-      Puts(en);
-#endif
+      if (_Settings.language == "ru")
+      {
+        Puts(ru);
+      }
+      else
+      {
+        Puts(en);
+      }
     }
 
     public void Warning(string ru, string en)
     {
-#if RU
-      PrintWarning(ru);
-#else
-      PrintWarning(en);
-#endif
+      if (_Settings.language == "ru")
+      {
+        PrintWarning(ru);
+      }
+      else
+      {
+        PrintWarning(en);
+      }
     }
 
     public void Error(string ru, string en)
     {
-#if RU
-      PrintError(ru);
-#else
-      PrintError(en);
-#endif
+      if (_Settings.language == "ru")
+      {
+        PrintError(ru);
+      }
+      else
+      {
+        PrintError(en);
+      }
     }
 
     #endregion
