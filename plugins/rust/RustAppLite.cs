@@ -13,6 +13,7 @@ using System;
 namespace Oxide.Plugins
 {
   [Info("RustAppLite", "RustApp.IO", "1.0.0")]
+  [Description("Simple plugin for receiving reports.")]
   public class RustAppLite : RustPlugin
   {
     #region Configuration
@@ -20,7 +21,7 @@ namespace Oxide.Plugins
     private class Configuration
     {
       [JsonProperty("[General] Language (en/ru)")]
-      public string language = "ru";
+      public string language = "en";
 
       [JsonProperty("[UI] Chat commands")]
       public List<string> report_ui_commands = new List<string>();
@@ -188,14 +189,12 @@ namespace Oxide.Plugins
 
       if (!redraw)
       {
-        CuiHelper.DestroyUi(player, ReportLayer);
-
         container.Add(new CuiPanel
         {
           CursorEnabled = true,
           RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" },
           Image = { Color = "0 0 0 0.8", Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat" }
-        }, "Overlay", ReportLayer);
+        }, "Overlay", ReportLayer, ReportLayer);
 
         container.Add(new CuiButton()
         {
@@ -204,8 +203,6 @@ namespace Oxide.Plugins
           Text = { Text = "" }
         }, ReportLayer);
       }
-
-      CuiHelper.DestroyUi(player, ReportLayer + ".C");
 
       container.Add(new CuiPanel
       {
