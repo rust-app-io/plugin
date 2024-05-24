@@ -19,7 +19,7 @@ namespace Oxide.Plugins
 
     private class Configuration
     {
-      [JsonProperty("[General] Language")]
+      [JsonProperty("[General] Language (en/ru)")]
       public string language = "ru";
 
       [JsonProperty("[UI] Chat commands")]
@@ -415,15 +415,13 @@ namespace Oxide.Plugins
     private static Configuration _Settings;
     private Dictionary<ulong, double> _Cooldowns = new Dictionary<ulong, double>();
 
-    #endregion 
+    #endregion
 
     #region Initialization
 
     private void OnServerInitialized()
     {
       _RustAppLite = this;
-
-      RA_ReportSend("76561198200771707", "76561198200771707", "test", "comment");
 
       if (plugins.Find("ImageLibrary") == null)
       {
@@ -447,6 +445,11 @@ namespace Oxide.Plugins
       {
         cmd.AddChatCommand(v, this, nameof(ChatCmdReport));
       });
+
+      Log(
+        "\nВы пользуетесь упрощённой версией плагина RustApp!\nВ полной версии есть\n — вызов на проверку\n — проверка на АФК\n — история чата / команд\n — и многое другое на сайте: https://rustapp.io",
+        "\nYou are using a simplified version of the RustApp plugin!\nThe full version contains\n - call for verification\n - check for AFK\n - chat / command history\n - and much more on the website: https://rustapp.io"
+      );
 
       RegisterMessages();
       WriteLiteMarker();
@@ -736,18 +739,21 @@ namespace Oxide.Plugins
       var author = permission.GetUserData(initiator_steam_id);
       var target = permission.GetUserData(target_steam_id);
 
-      var list = new DiscordField[3] {
-        new DiscordField($"SteamID", target_steam_id, true),
-        new DiscordField(Msg("Причина", "Reason"), reason, true),
+      var list = new DiscordField[4] {
+        new DiscordField(Msg("Никнейм", "Nickname"), $"```{target.LastSeenNickname}```", false),
+        new DiscordField($"SteamID", $"```{target_steam_id}```", true),
+        new DiscordField(Msg("Причина", "Reason"), @$"```ansi
+[2;31m{reason}[0m
+```", true),
         null
       };
 
       if (message != null && message.Length > 0)
       {
-        list[2] = new DiscordField(Msg("Комментарий", "Command"), $"```{message}```", false);
+        list[3] = new DiscordField(Msg("Комментарий", "Command"), $"```{message}```", false);
       }
 
-      DiscordEmbed embed = new DiscordEmbed("Получена новая жалоба", $"[{author.LastSeenNickname}](https://rustapp.io '{author.LastSeenNickname}') пожаловался на [{target.LastSeenNickname}](https://rustapp.io '{target.LastSeenNickname}')", null, list, null);
+      DiscordEmbed embed = new DiscordEmbed("", $" ", null, list, new DiscordFooter($"{Msg("Отправил жалобу", "Report sent")}: {author.LastSeenNickname} [{initiator_steam_id}]", "", ""));
       DiscordMessage req = new DiscordMessage(null, new DiscordEmbed[1] { embed });
 
       req.Send(_Settings.discord_webhook);
