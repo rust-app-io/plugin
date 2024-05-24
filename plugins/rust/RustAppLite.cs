@@ -12,7 +12,7 @@ using System;
 
 namespace Oxide.Plugins
 {
-  [Info("RustAppLite", "RustApp.IO", "1.0.0")]
+  [Info("RustAppLite", "RustApp.IO", "1.0.1")]
   [Description("Simple plugin for receiving reports.")]
   public class RustAppLite : RustPlugin
   {
@@ -21,7 +21,7 @@ namespace Oxide.Plugins
     private class Configuration
     {
       [JsonProperty("[General] Language (en/ru)")]
-      public string language = "en";
+      public string language = "ru";
 
       [JsonProperty("[UI] Chat commands")]
       public List<string> report_ui_commands = new List<string>();
