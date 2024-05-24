@@ -31,7 +31,7 @@ namespace Oxide.Plugins
       [JsonProperty("[UI] Cooldown between reports (seconds)")]
       public int report_ui_cooldown = 300;
 
-      [JsonProperty("[UI] Auto-parse bans from F7 (ingame reports)")]
+      [JsonProperty("[UI] Auto-parse reports from F7 (ingame reports)")]
       public bool report_ui_auto_parse = true;
 
       [JsonProperty("[Discord] Webhook to send reports")]
@@ -44,7 +44,7 @@ namespace Oxide.Plugins
           language = "ru",
 
           report_ui_commands = new List<string> { "report", "reports" },
-          report_ui_reasons = new List<string> { "Чит", "Макрос", "Багоюз" },
+          report_ui_reasons = new List<string> { "Cheat", "Abusive", "Spam" },
           report_ui_cooldown = 300,
           report_ui_auto_parse = true,
           discord_webhook = ""
@@ -406,8 +406,8 @@ namespace Oxide.Plugins
       if (_Settings.discord_webhook == null || _Settings.discord_webhook.Length < 5)
       {
         Error(
-          "Установите discord_webhook в конфигурации плагина, и перезапустите плагин o.reload RustAppSimple",
-          "Setup discord_webhook in plugin config, then reload plugin o.reload RustAppSimple"
+          "Установите discord_webhook в конфигурации плагина, и перезапустите плагин o.reload RustAppLite",
+          "Setup discord_webhook in plugin config, then reload plugin o.reload RustAppLite"
         );
         return;
       }
@@ -418,8 +418,8 @@ namespace Oxide.Plugins
       });
 
       Log(
-        "\nВы пользуетесь упрощённой версией плагина RustApp!\nВ полной версии есть\n — вызов на проверку\n — проверка на АФК\n — история чата / команд\n — и многое другое на сайте: https://rustapp.io",
-        "\nYou are using a simplified version of the RustApp plugin!\nThe full version contains\n - call for verification\n - check for AFK\n - chat / command history\n - and much more on the website: https://rustapp.io"
+        "\nВы пользуетесь упрощённой версией плагина RustApp!\nВ полной версии есть:\n — вызов на проверку\n — проверка на АФК\n — история чата / команд\n — и многое другое на сайте: https://rustapp.io",
+        "\nYou are using a simplified version of the RustApp plugin!\nThe full version contains:\n - call for verification\n - check for AFK\n - chat / command history\n - and much more on the website: https://rustapp.io"
       );
 
       RegisterMessages();
@@ -593,7 +593,7 @@ namespace Oxide.Plugins
               {
                 RectTransform = { AnchorMin = $"{(leftAlign ? 0 : 1)} 0", AnchorMax = $"{(leftAlign ? 0 : 1)} 0", OffsetMin = $"{(leftAlign ? -offXMax : offXMin)} 15", OffsetMax = $"{(leftAlign ? -offXMin : offXMax)} 45" },
                 Button = { FadeIn = 0.4f + i * 0.2f, Color = HexToRustFormat("#D0C6BD4D"), Command = $"RAL_CommandHandler report {target.UserIDString} {_Settings.report_ui_reasons[i].Replace(" ", "0")}" },
-                Text = { FadeIn = 0.4f, Text = $"{_Settings.report_ui_reasons[i]}", Align = TextAnchor.MiddleCenter, Color = HexToRustFormat("#D0C6BD"), Font = "robotocondensed-bold.ttf", FontSize = 16 }
+                Text = { FadeIn = 0.4f + i * 0.2f, Text = $"{_Settings.report_ui_reasons[i]}", Align = TextAnchor.MiddleCenter, Color = HexToRustFormat("#D0C6BD"), Font = "robotocondensed-bold.ttf", FontSize = 16 }
               }, ReportLayer + $".T");
             }
 
