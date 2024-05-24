@@ -1951,7 +1951,7 @@ namespace Oxide.Plugins
             [JsonProperty("[UI] Cooldown between reports (seconds)")]
             public int report_ui_cooldown = 300;
 
-            [JsonProperty("[UI] Auto-parse bans from F7 (ingame reports)")]
+            [JsonProperty("[UI] Auto-parse reports from F7 (ingame reports)")]
             public bool report_ui_auto_parse = true;
 
             [JsonProperty("[UI • Starter Plan] Show 'recently checked' checkbox (amount of days)")]
