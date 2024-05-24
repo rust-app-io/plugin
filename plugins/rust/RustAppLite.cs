@@ -704,7 +704,7 @@ namespace Oxide.Plugins
 
       if (message != null && message.Length > 0)
       {
-        list[3] = new DiscordField(Msg("Комментарий", "Command"), $"```{message}```", false);
+        list[3] = new DiscordField(Msg("Комментарий", "Comment"), $"```{message}```", false);
       }
 
       DiscordEmbed embed = new DiscordEmbed("", $" ", null, list.Where(v => v != null).ToArray(), new DiscordFooter($"{Msg("Отправил жалобу", "Report sent")}: {author.LastSeenNickname} [{initiator_steam_id}]", "", ""));
