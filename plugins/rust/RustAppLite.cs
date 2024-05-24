@@ -707,7 +707,7 @@ namespace Oxide.Plugins
         list[3] = new DiscordField(Msg("Комментарий", "Command"), $"```{message}```", false);
       }
 
-      DiscordEmbed embed = new DiscordEmbed("", $" ", null, list, new DiscordFooter($"{Msg("Отправил жалобу", "Report sent")}: {author.LastSeenNickname} [{initiator_steam_id}]", "", ""));
+      DiscordEmbed embed = new DiscordEmbed("", $" ", null, list.Where(v => v != null).ToArray(), new DiscordFooter($"{Msg("Отправил жалобу", "Report sent")}: {author.LastSeenNickname} [{initiator_steam_id}]", "", ""));
       DiscordMessage req = new DiscordMessage(null, new DiscordEmbed[1] { embed });
 
       req.Send(_Settings.discord_webhook);
