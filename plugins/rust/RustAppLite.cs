@@ -190,18 +190,17 @@ namespace Oxide.Plugins
       {
         CuiHelper.DestroyUi(player, ReportLayer);
 
-
         container.Add(new CuiPanel
         {
           CursorEnabled = true,
           RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" },
-          Image = { Color = HexToRustFormat("#282828E6"), Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat" }
+          Image = { Color = "0 0 0 0.8", Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat" }
         }, "Overlay", ReportLayer);
 
         container.Add(new CuiButton()
         {
           RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" },
-          Button = { Close = ReportLayer, Color = "0 0 0 0" },
+          Button = { Color = HexToRustFormat("#343434"), Sprite = "assets/content/ui/ui.background.transparent.radial.psd", Close = ReportLayer },
           Text = { Text = "" }
         }, ReportLayer);
       }
@@ -212,7 +211,7 @@ namespace Oxide.Plugins
       {
         RectTransform = { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = "-368 -200", OffsetMax = "368 142" },
         Image = { Color = "1 0 0 0" }
-      }, ReportLayer, ReportLayer + ".C");
+      }, ReportLayer, ReportLayer + ".C", ReportLayer + ".C");
 
       container.Add(new CuiPanel
       {
@@ -225,21 +224,21 @@ namespace Oxide.Plugins
       container.Add(new CuiButton()
       {
         RectTransform = { AnchorMin = "0 0", AnchorMax = "1 0.5", OffsetMin = "0 0", OffsetMax = "0 -4" },
-        Button = { Color = $"0.7 0.7 0.7 {(list.Count > 18 && finalList.Count() == 18 ? 0.5 : 0.3)}", Command = list.Count > 18 && finalList.Count() == 18 ? $"RAL_CommandHandler search {page + 1}" : "" },
-        Text = { Text = "↓", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-bold.ttf", FontSize = 24, Color = $"0.7 0.7 0.7 {(list.Count > 18 && finalList.Count() == 18 ? 0.9 : 0.2)}" }
+        Button = { Color = HexToRustFormat($"#{(list.Count > 18 && finalList.Count() == 18 ? "D0C6BD4D" : "D0C6BD33")}"), Command = list.Count > 18 && finalList.Count() == 18 ? $"RAL_CommandHandler search {page + 1}" : "" },
+        Text = { Text = "↓", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-bold.ttf", FontSize = 24, Color = HexToRustFormat($"{(list.Count > 18 && finalList.Count() == 18 ? "D0C6BD" : "D0C6BD4D")}") }
       }, ReportLayer + ".R", ReportLayer + ".RD");
 
       container.Add(new CuiButton()
       {
         RectTransform = { AnchorMin = "0 0.5", AnchorMax = "1 1", OffsetMin = "0 4", OffsetMax = "0 0" },
-        Button = { Color = $"0.7 0.7 0.7 {(page == 0 ? 0.3 : 0.5)}", Command = page == 0 ? "" : $"RAL_CommandHandler search {page - 1}" },
-        Text = { Text = "↑", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-bold.ttf", FontSize = 24, Color = $"0.7 0.7 0.7 {(page == 0 ? 0.2 : 0.9)}" }
+        Button = { Color = HexToRustFormat($"#{(page == 0 ? "D0C6BD33" : "D0C6BD4D")}"), Command = page == 0 ? "" : $"RAL_CommandHandler search {page - 1}" },
+        Text = { Text = "↑", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-bold.ttf", FontSize = 24, Color = HexToRustFormat($"{(page == 0 ? "D0C6BD4D" : "D0C6BD")}") }
       }, ReportLayer + ".R", ReportLayer + ".RU");
 
       container.Add(new CuiPanel
       {
         RectTransform = { AnchorMin = "1 1", AnchorMax = "1 1", OffsetMin = "-250 8", OffsetMax = "0 43" },
-        Image = { Color = "1 1 1 0.20" }
+        Image = { Color = HexToRustFormat("#D0C6BD33") }
       }, ReportLayer + ".C", ReportLayer + ".S");
 
       container.Add(new CuiElement
@@ -247,7 +246,7 @@ namespace Oxide.Plugins
         Parent = ReportLayer + ".S",
         Components =
             {
-                new CuiInputFieldComponent { Text = $"{lang.GetMessage("Header.Search.Placeholder", this, player.UserIDString)}", FontSize = 14, Font = "robotocondensed-regular.ttf", Align = TextAnchor.MiddleLeft, Command = "RAL_CommandHandler search 0", NeedsKeyboard = true},
+                new CuiInputFieldComponent { Text = $"{lang.GetMessage("Header.Search.Placeholder", this, player.UserIDString)}", FontSize = 14, Font = "robotocondensed-regular.ttf", Color = HexToRustFormat("#D0C6BD80"), Align = TextAnchor.MiddleLeft, Command = "RAL_CommandHandler search 0", NeedsKeyboard = true},
                 new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "10 0", OffsetMax = "-85 0"}
             }
       });
@@ -255,8 +254,8 @@ namespace Oxide.Plugins
       container.Add(new CuiButton
       {
         RectTransform = { AnchorMin = "1 0", AnchorMax = "1 1", OffsetMin = "-75 0", OffsetMax = "0 0" },
-        Button = { Color = "0.7 0.7 0.7 0.5" },
-        Text = { Text = $"{lang.GetMessage("Header.Search", this, player.UserIDString)}", Font = "robotocondensed-regular.ttf", FontSize = 14, Align = TextAnchor.MiddleCenter }
+        Button = { Color = HexToRustFormat("#D0C6BD"), Material = "assets/icons/greyout.mat" },
+        Text = { Text = $"{lang.GetMessage("Header.Search", this, player.UserIDString)}", Font = "robotocondensed-bold.ttf", Color = HexToRustFormat("#443F3B"), FontSize = 14, Align = TextAnchor.MiddleCenter }
       }, ReportLayer + ".S", ReportLayer + ".SB");
 
       container.Add(new CuiPanel
@@ -268,13 +267,13 @@ namespace Oxide.Plugins
       container.Add(new CuiLabel()
       {
         RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "0 0", OffsetMax = "0 0" },
-        Text = { Text = $"{lang.GetMessage("Header.Find", this, player.UserIDString)} {(search != null && search.Length > 0 ? $"- {(search.Length > 20 ? search.Substring(0, 14).ToUpper() + "..." : search.ToUpper())}" : "")}", Font = "robotocondensed-bold.ttf", FontSize = 24, Align = TextAnchor.UpperLeft }
+        Text = { Text = $"{lang.GetMessage("Header.Find", this, player.UserIDString)} {(search != null && search.Length > 0 ? $"- {(search.Length > 20 ? search.Substring(0, 14).ToUpper() + "..." : search.ToUpper())}" : "")}", Font = "robotocondensed-bold.ttf", Color = HexToRustFormat("#D0C6BD"), FontSize = 24, Align = TextAnchor.UpperLeft }
       }, ReportLayer + ".LT");
 
       container.Add(new CuiLabel()
       {
         RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "0 0", OffsetMax = "0 0" },
-        Text = { Text = search == null || search.Length == 0 ? lang.GetMessage("Header.SubDefault", this, player.UserIDString) : finalList.Count() == 0 ? lang.GetMessage("Header.SubFindEmpty", this, player.UserIDString) : lang.GetMessage("Header.SubFindResults", this, player.UserIDString), Font = "robotocondensed-regular.ttf", FontSize = 14, Align = TextAnchor.LowerLeft, Color = "1 1 1 0.5" }
+        Text = { Text = search == null || search.Length == 0 ? lang.GetMessage("Header.SubDefault", this, player.UserIDString) : finalList.Count() == 0 ? lang.GetMessage("Header.SubFindEmpty", this, player.UserIDString) : lang.GetMessage("Header.SubFindResults", this, player.UserIDString), Font = "robotocondensed-regular.ttf", Color = HexToRustFormat("#D0C6BD4D"), FontSize = 14, Align = TextAnchor.LowerLeft }
       }, ReportLayer + ".LT");
 
 
@@ -294,7 +293,7 @@ namespace Oxide.Plugins
             container.Add(new CuiPanel
             {
               RectTransform = { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = $"{x * size + lineMargin * x} -{(y + 1) * size + lineMargin * y}", OffsetMax = $"{(x + 1) * size + lineMargin * x} -{y * size + lineMargin * y}" },
-              Image = { Color = "0.8 0.8 0.8 1" }
+              Image = { Color = HexToRustFormat("#D0C6BD33") }
             }, ReportLayer + ".L", ReportLayer + $".{target.UserIDString}");
 
             container.Add(new CuiElement
@@ -320,13 +319,13 @@ namespace Oxide.Plugins
             container.Add(new CuiLabel
             {
               RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "6 16", OffsetMax = "0 0" },
-              Text = { Text = name, Align = TextAnchor.LowerLeft, Font = "robotocondensed-bold.ttf", FontSize = 13, Color = HexToRustFormat("#FFFFFF") }
+              Text = { Text = name, Align = TextAnchor.LowerLeft, Font = "robotocondensed-bold.ttf", FontSize = 13, Color = HexToRustFormat("#D0C6BD") }
             }, ReportLayer + $".{target.UserIDString}");
 
             container.Add(new CuiLabel
             {
               RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "6 5", OffsetMax = "0 0" },
-              Text = { Text = target.UserIDString, Align = TextAnchor.LowerLeft, Font = "robotocondensed-regular.ttf", FontSize = 10, Color = HexToRustFormat("#FFFFFF80") }
+              Text = { Text = target.UserIDString, Align = TextAnchor.LowerLeft, Font = "robotocondensed-regular.ttf", FontSize = 10, Color = HexToRustFormat("#D0C6BD80") }
             }, ReportLayer + $".{target.UserIDString}");
 
             container.Add(new CuiButton()
@@ -341,41 +340,13 @@ namespace Oxide.Plugins
             container.Add(new CuiPanel
             {
               RectTransform = { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = $"{x * size + lineMargin * x} -{(y + 1) * size + lineMargin * y}", OffsetMax = $"{(x + 1) * size + lineMargin * x} -{y * size + lineMargin * y}" },
-              Image = { Color = "0.8 0.8 0.8 0.25" }
+              Image = { Color = HexToRustFormat("#D0C6BD33") }
             }, ReportLayer + ".L");
           }
         }
       }
 
       CuiHelper.AddUi(player, container);
-    }
-
-    private const string CheckLayer = "RP_PrivateLayer";
-
-    private void DrawInterface(BasePlayer player)
-    {
-      CuiHelper.DestroyUi(player, CheckLayer);
-      CuiElementContainer container = new CuiElementContainer();
-
-      container.Add(new CuiButton
-      {
-        RectTransform = { AnchorMin = "0 0.5", AnchorMax = "1 1", OffsetMin = $"-500 -500", OffsetMax = $"500 500" },
-        Button = { Color = HexToRustFormat("#1C1C1C"), Sprite = "assets/content/ui/ui.circlegradient.png" },
-        Text = { Text = "", Align = TextAnchor.MiddleCenter }
-      }, "Under", CheckLayer);
-
-      string text = lang.GetMessage("Check.Text", this, player.UserIDString);
-
-      container.Add(new CuiLabel
-      {
-        RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" },
-        Text = { Text = text, Align = TextAnchor.MiddleCenter, Font = "robotocondensed-regular.ttf", FontSize = 16 }
-      }, CheckLayer);
-
-      CuiHelper.AddUi(player, container);
-
-      Effect effect = new Effect("ASSETS/BUNDLED/PREFABS/FX/INVITE_NOTICE.PREFAB".ToLower(), player, 0, new Vector3(), new Vector3());
-      EffectNetwork.Send(effect, player.Connection);
     }
 
     private static string HexToRustFormat(string hex)
@@ -480,14 +451,6 @@ namespace Oxide.Plugins
         ["Subject.SubHead"] = "For player %PLAYER%",
         ["Cooldown"] = "Wait %TIME% sec.",
         ["Sent"] = "Report succesful sent",
-        ["Contact.Error"] = "You did not sent your Discord",
-        ["Contact.Sent"] = "You sent:",
-        ["Contact.SentWait"] = "If you sent the correct discord - wait for a friend request.",
-        ["Check.Text"] = "<color=#c6bdb4><size=32><b>YOU ARE SUMMONED FOR A CHECK-UP</b></size></color>\n<color=#958D85>You have <color=#c6bdb4><b>3 minutes</b></color> to send discord and accept the friend request.\nUse the <b><color=#c6bdb4>/contact</color></b> command to send discord.\n\nTo contact a moderator - use chat, not a command.</color>",
-        ["Chat.Direct.Toast"] = "Received a message from admin, look at the chat!",
-        ["UI.CheckMark"] = "Checked",
-        ["Paid.Announce.Clean"] = "Your complaint about \"%SUSPECT_NAME%\" has been checked!\n<size=12><color=#81C5F480>As a result of the check, no violations were found</color ></size>",
-        ["Paid.Announce.Ban"] = "Your complaint about \"%SUSPECT_NAME%\" has been verified!\n<color=#F7D4D080><size=12>Player banned, reason: %REASON%</ size></color>",
       }, this, "en");
 
       lang.RegisterMessages(new Dictionary<string, string>
@@ -502,14 +465,6 @@ namespace Oxide.Plugins
         ["Subject.SubHead"] = "На игрока %PLAYER%",
         ["Cooldown"] = "Подожди %TIME% сек.",
         ["Sent"] = "Жалоба успешно отправлена",
-        ["Contact.Error"] = "Вы не отправили свой Discord",
-        ["Contact.Sent"] = "Вы отправили:",
-        ["Contact.SentWait"] = "<size=12>Если вы отправили корректный дискорд - ждите заявку в друзья.</size>",
-        ["Check.Text"] = "<color=#c6bdb4><size=32><b>ВЫ ВЫЗВАНЫ НА ПРОВЕРКУ</b></size></color>\n<color=#958D85>У вас есть <color=#c6bdb4><b>3 минуты</b></color> чтобы отправить дискорд и принять заявку в друзья.\nИспользуйте команду <b><color=#c6bdb4>/contact</color></b> чтобы отправить дискорд.\n\nДля связи с модератором - используйте чат, а не команду.</color>",
-        ["Chat.Direct.Toast"] = "Получено сообщение от админа, посмотрите в чат!",
-        ["UI.CheckMark"] = "Проверен",
-        ["Paid.Announce.Clean"] = "Ваша жалоба на \"%SUSPECT_NAME%\" была проверена!\n<size=12><color=#81C5F480>В результате проверки, нарушений не обнаружено</color></size>",
-        ["Paid.Announce.Ban"] = "Ваша жалоба на \"%SUSPECT_NAME%\" была проверена!\n<color=#F7D4D080><size=12>Игрок заблокирован, причина: %REASON%</size></color>",
       }, this, "ru");
     }
 
@@ -518,7 +473,6 @@ namespace Oxide.Plugins
     {
       foreach (var player in BasePlayer.activePlayerList)
       {
-        CuiHelper.DestroyUi(player, CheckLayer);
         CuiHelper.DestroyUi(player, ReportLayer);
       }
     }
@@ -598,7 +552,7 @@ namespace Oxide.Plugins
             container.Add(new CuiButton()
             {
               RectTransform = { AnchorMin = $"{(leftAlign ? -1 : 2)} 0", AnchorMax = $"{(leftAlign ? -2 : 3)} 1", OffsetMin = $"-500 -500", OffsetMax = $"500 500" },
-              Button = { Close = $"{ReportLayer}.T", Color = HexToRustFormat("#282828"), Sprite = "assets/content/ui/ui.circlegradient.png" }
+              Button = { Close = $"{ReportLayer}.T", Color = HexToRustFormat("#343434"), Sprite = "assets/content/ui/ui.circlegradient.png" }
             }, ReportLayer + $".T");
 
             container.Add(new CuiButton()
@@ -611,13 +565,13 @@ namespace Oxide.Plugins
             container.Add(new CuiLabel
             {
               RectTransform = { AnchorMin = $"{(leftAlign ? "0" : "1")} 0", AnchorMax = $"{(leftAlign ? "0" : "1")} 1", OffsetMin = $"{(leftAlign ? "-350" : "20")} 0", OffsetMax = $"{(leftAlign ? "-20" : "350")} -5" },
-              Text = { FadeIn = 0.4f, Text = lang.GetMessage("Subject.Head", this, player.UserIDString), Font = "robotocondensed-bold.ttf", FontSize = 24, Align = leftAlign ? TextAnchor.UpperRight : TextAnchor.UpperLeft }
+              Text = { FadeIn = 0.4f, Text = lang.GetMessage("Subject.Head", this, player.UserIDString), Font = "robotocondensed-bold.ttf", Color = HexToRustFormat("#D0C6BD"), FontSize = 24, Align = leftAlign ? TextAnchor.UpperRight : TextAnchor.UpperLeft }
             }, ReportLayer + ".T");
 
             container.Add(new CuiLabel
             {
               RectTransform = { AnchorMin = $"{(leftAlign ? "0" : "1")} 0", AnchorMax = $"{(leftAlign ? "0" : "1")} 1", OffsetMin = $"{(leftAlign ? "-250" : "20")} 0", OffsetMax = $"{(leftAlign ? "-20" : "250")} -35" },
-              Text = { FadeIn = 0.4f, Text = $"{lang.GetMessage("Subject.SubHead", this, player.UserIDString).Replace("%PLAYER%", $"<b>{target.displayName}</b>")}", Font = "robotocondensed-regular.ttf", FontSize = 14, Color = "1 1 1 0.7", Align = leftAlign ? TextAnchor.UpperRight : TextAnchor.UpperLeft }
+              Text = { FadeIn = 0.4f, Text = $"{lang.GetMessage("Subject.SubHead", this, player.UserIDString).Replace("%PLAYER%", $"<b>{target.displayName}</b>")}", Font = "robotocondensed-regular.ttf", Color = HexToRustFormat("#D0C6BD80"), FontSize = 14, Align = leftAlign ? TextAnchor.UpperRight : TextAnchor.UpperLeft }
             }, ReportLayer + ".T");
 
             container.Add(new CuiElement
@@ -638,8 +592,8 @@ namespace Oxide.Plugins
               container.Add(new CuiButton()
               {
                 RectTransform = { AnchorMin = $"{(leftAlign ? 0 : 1)} 0", AnchorMax = $"{(leftAlign ? 0 : 1)} 0", OffsetMin = $"{(leftAlign ? -offXMax : offXMin)} 15", OffsetMax = $"{(leftAlign ? -offXMin : offXMax)} 45" },
-                Button = { FadeIn = 0.4f + i * 0.2f, Color = HexToRustFormat("#FFFFFF4D"), Command = $"RAL_CommandHandler report {target.UserIDString} {_Settings.report_ui_reasons[i].Replace(" ", "0")}" },
-                Text = { FadeIn = 0.4f, Text = $"{_Settings.report_ui_reasons[i]}", Align = TextAnchor.MiddleCenter, Color = "1 1 1 1", Font = "robotocondensed-regular.ttf", FontSize = 16 }
+                Button = { FadeIn = 0.4f + i * 0.2f, Color = HexToRustFormat("#D0C6BD4D"), Command = $"RAL_CommandHandler report {target.UserIDString} {_Settings.report_ui_reasons[i].Replace(" ", "0")}" },
+                Text = { FadeIn = 0.4f, Text = $"{_Settings.report_ui_reasons[i]}", Align = TextAnchor.MiddleCenter, Color = HexToRustFormat("#D0C6BD"), Font = "robotocondensed-bold.ttf", FontSize = 16 }
               }, ReportLayer + $".T");
             }
 

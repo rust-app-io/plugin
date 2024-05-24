@@ -2322,6 +2322,15 @@ namespace Oxide.Plugins
     {
       _RustApp = this;
 
+      if (plugins.Find("RustAppLite") != null && plugins.Find("RustAppLite").IsLoaded)
+      {
+        Error(
+          "Обнаружена 'Lite' версия плагина, для начала удалите RustAppLite.cs",
+          "Detected 'Lite' version of plugin, delete RustAppLite.cs to start"
+        );
+        return;
+      }
+
       if (plugins.Find("ImageLibrary") == null)
       {
         Error(
