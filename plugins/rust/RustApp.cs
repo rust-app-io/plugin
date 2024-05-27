@@ -52,7 +52,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.5.0")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.6.0")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -980,7 +980,6 @@ namespace Oxide.Plugins
           .Execute(
             (data, raw) =>
             {
-              Interface.Oxide.LogWarning("Загружено");
             },
             (err) =>
             {
