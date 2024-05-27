@@ -35,7 +35,20 @@ using Oxide.Core.Database;
 using Facepunch;
 using Rust;
 using Steamworks;
+using System;
+using System.Collections.Generic;
+using System.ComponentModel;
+using System.Drawing;
+using System.Drawing.Imaging;
+using System.IO;
+using System.Text;
+using UnityEngine;
 
+// Logic from DiscordSignLogger by MJSU 
+// https://umod.org/plugins/discord-sign-logger
+using Color = System.Drawing.Color;
+using Graphics = System.Drawing.Graphics;
+using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
@@ -148,6 +161,14 @@ namespace Oxide.Plugins
               webRequest.uploadHandler.contentType = "application/json";
               break;
             }
+          case RequestMethod.DELETE:
+            {
+              webRequest = UnityWebRequest.Delete(url);
+
+              webRequest.uploadHandler = (UploadHandler)new UploadHandlerRaw(body);
+              webRequest.uploadHandler.contentType = "application/json";
+              break;
+            }
         }
 
         if (webRequest == null)
@@ -253,6 +274,9 @@ namespace Oxide.Plugins
       public static string SendAlerts = $"{CourtUrls.Base}/plugin/alerts";
       public static string SendCustomAlert = $"{CourtUrls.Base}/plugin/custom-alert";
       public static string SendReports = $"{CourtUrls.Base}/plugin/reports";
+      public static string SendDestroyedSignage = $"{CourtUrls.Base}/plugin/signage";
+      public static string SendSignage = $"{CourtUrls.Base}/plugin/signage";
+      public static string SendWipe = $"{CourtUrls.Base}/plugin/wipe";
       public static string BanCreate = $"{CourtUrls.Base}/plugin/ban";
       public static string BanDelete = $"{CourtUrls.Base}/plugin/unban";
     }
@@ -840,6 +864,19 @@ namespace Oxide.Plugins
             (err) => callback(false)
           );
       }
+      public void @SendWipe(Action<bool> callback)
+      {
+        if (!IsReady())
+        {
+          return;
+        }
+
+        Request<object>(CourtUrls.SendWipe, RequestMethod.POST)
+          .Execute(
+            (data, raw) => callback(true),
+            (err) => callback(false)
+          );
+      }
 
       public void @SendBan(string steam_id, string reason, string duration, bool global, bool ban_ip)
       {
@@ -899,7 +936,6 @@ namespace Oxide.Plugins
         );
       }
 
-
       public void @SendCustomAlert(string message, [CanBeNull] object data)
       {
         if (!IsReady())
@@ -916,6 +952,41 @@ namespace Oxide.Plugins
               _RustApp.Error(
                 $"Не удалось отправить кастомное оповещение ({message})",
                 $"Failed to send custom-alert ({message})"
+              );
+            }
+          );
+      }
+
+      public void @SendSignage(BaseImageUpdate upload)
+      {
+        if (!IsReady())
+        {
+          return;
+        }
+
+        var obj = new
+        {
+          steam_id = upload.PlayerId.ToString(),
+          net_id = upload.Entity.net.ID.Value,
+
+          base64_image = Convert.ToBase64String(upload.GetImage()),
+
+          type = upload.Entity.ShortPrefabName,
+          position = upload.Entity.transform.position.ToString(),
+          square = GridReference(upload.Entity.transform.position)
+        };
+
+        Request<string>(CourtUrls.SendSignage, RequestMethod.POST, obj)
+          .Execute(
+            (data, raw) =>
+            {
+              Interface.Oxide.LogWarning("Загружено");
+            },
+            (err) =>
+            {
+              _RustApp.Error(
+                $"Не удалось отправить табличку ({err})",
+                $"Failed to send signage ({err})"
               );
             }
           );
@@ -1147,6 +1218,7 @@ namespace Oxide.Plugins
       private List<PluginChatMessageEntry> ChatCollection = new List<PluginChatMessageEntry>();
       private Dictionary<string, string> DisconnectHistory = new Dictionary<string, string>();
       private Dictionary<string, string> TeamChangeHistory = new Dictionary<string, string>();
+      private List<string> DestroyedSignsCollection = new List<string>();
 
       protected override void OnReady()
       {
@@ -1154,11 +1226,13 @@ namespace Oxide.Plugins
         CancelInvoke(nameof(SendUpdate));
         CancelInvoke(nameof(SendReports));
         CancelInvoke(nameof(SendAlerts));
+        CancelInvoke(nameof(SendDestroyedSigns));
 
         InvokeRepeating(nameof(SendChat), 0, 1f);
         InvokeRepeating(nameof(SendUpdate), 0, 5f);
         InvokeRepeating(nameof(SendReports), 0, 1f);
         InvokeRepeating(nameof(SendAlerts), 0, 5f);
+        InvokeRepeating(nameof(SendDestroyedSigns), 0, 5f);
       }
 
       public void SaveChat(PluginChatMessageEntry message)
@@ -1169,6 +1243,11 @@ namespace Oxide.Plugins
       public void SaveAlert(PluginPlayerAlertEntry playerAlert)
       {
         PlayerAlertCollection.Add(playerAlert);
+      }
+
+      public void SaveDestroyedSign(string net_id)
+      {
+        DestroyedSignsCollection.Add(net_id);
       }
 
       public void SaveDisconnect(BasePlayer player, string reason)
@@ -1201,6 +1280,39 @@ namespace Oxide.Plugins
         }
 
         ReportCollection.Add(report);
+      }
+
+      private void SendDestroyedSigns()
+      {
+        if (!IsReady() || DestroyedSignsCollection.Count == 0)
+        {
+          return;
+        }
+
+        var destroyed_signs = DestroyedSignsCollection.ToList();
+
+        Request<string>(CourtUrls.SendDestroyedSignage, RequestMethod.DELETE, new { net_ids = destroyed_signs })
+          .Execute(
+            null,
+            (err) =>
+            {
+              _RustApp.Puts(err);
+              _RustApp.Error(
+                $"Не удалось отправить удаленные картинки ({destroyed_signs.Count} шт)",
+                $"Failed to send destroyed signs ({destroyed_signs.Count} pc)"
+              );
+
+              // Возвращаем неудачно отправленные сообщения обратно в массив
+              var resurrectCollection = new List<string>();
+
+              resurrectCollection.AddRange(destroyed_signs);
+              resurrectCollection.AddRange(DestroyedSignsCollection);
+
+              DestroyedSignsCollection = resurrectCollection;
+            }
+          );
+
+        DestroyedSignsCollection = new List<string>();
       }
 
       private void SendAlerts()
@@ -1484,6 +1596,12 @@ namespace Oxide.Plugins
         public List<string> commands;
       }
 
+      private class QueueDeleteEntityPayload
+      {
+        public string net_id;
+      }
+
+
       protected override void OnReady()
       {
         InvokeRepeating(nameof(QueueRetreive), 0f, 1f);
@@ -1592,6 +1710,10 @@ namespace Oxide.Plugins
             {
               return OnExecuteCommand(JsonConvert.DeserializeObject<QueueExecuteCommand>(element.request.data.ToString()));
             }
+          case "court/delete-entity":
+            {
+              return OnDeleteEntity(JsonConvert.DeserializeObject<QueueDeleteEntityPayload>(element.request.data.ToString()));
+            }
 
           // Работают только на платном тарифе
           case "court/paid-announce-ban":
@@ -1615,6 +1737,19 @@ namespace Oxide.Plugins
         }
 
         return null;
+      }
+
+      private object OnDeleteEntity(QueueDeleteEntityPayload payload)
+      {
+        var ent = BaseNetworkable.serverEntities.ToList().Find(v => v.net.ID.Value.ToString() == payload.net_id);
+        if (ent == null)
+        {
+          return false;
+        }
+
+        ent.Kill();
+
+        return true;
       }
 
       private object OnNoticeStateGet(QueueNoticeStateGetPayload payload)
@@ -1951,7 +2086,7 @@ namespace Oxide.Plugins
       [JsonProperty("[UI] Cooldown between reports (seconds)")]
       public int report_ui_cooldown = 300;
 
-      [JsonProperty("[UI] Auto-parse bans from F7 (ingame reports)")]
+      [JsonProperty("[UI] Auto-parse reports from F7 (ingame reports)")]
       public bool report_ui_auto_parse = true;
 
       [JsonProperty("[UI • Starter Plan] Show 'recently checked' checkbox (amount of days)")]
@@ -2293,7 +2428,7 @@ namespace Oxide.Plugins
       var b = byte.Parse(str.Substring(4, 2), NumberStyles.HexNumber);
       var a = byte.Parse(str.Substring(6, 2), NumberStyles.HexNumber);
 
-      Color color = new Color32(r, g, b, a);
+      UnityEngine.Color color = new Color32(r, g, b, a);
 
       return string.Format("{0:F2} {1:F2} {2:F2} {3:F2}", color.r, color.g, color.b, color.a);
     }
@@ -2554,6 +2689,27 @@ namespace Oxide.Plugins
         text = message
       });
     }
+
+    private void OnEntityKill(BaseNetworkable entity)
+    {
+      var whiteList = new List<string> { "photoframe", "spinner.wheel" };
+
+      if (!entity.ShortPrefabName.StartsWith("sign.") || whiteList.Any(v => entity.ShortPrefabName.Contains(v)))
+      {
+        return;
+      }
+
+      _Worker.Update.SaveDestroyedSign(entity.net.ID.Value.ToString());
+    }
+
+    private void OnNewSave(string saveName)
+    {
+      timer.Once(10, () =>
+      {
+        _Worker.Action.SendWipe((a) => { });
+      });
+    }
+
 
     #endregion
 
@@ -3152,5 +3308,237 @@ namespace Oxide.Plugins
     }
 
     #endregion
+
+    #region SignFeed
+
+    // A lot of code references at Discord Sign Logger by MJSU
+    // Original author and plugin on UMod: https://umod.org/plugins/discord-sign-logger
+
+    public abstract class BaseImageUpdate
+    {
+      public BasePlayer Player { get; }
+      public ulong PlayerId { get; }
+      public string DisplayName { get; }
+      public BaseEntity Entity { get; }
+      public int ItemId { get; protected set; }
+
+      public uint TextureIndex { get; protected set; }
+      public abstract bool SupportsTextureIndex { get; }
+
+      protected BaseImageUpdate(BasePlayer player, BaseEntity entity)
+      {
+        Player = player;
+        DisplayName = player.displayName;
+        PlayerId = player.userID;
+        Entity = entity;
+      }
+
+      public abstract byte[] GetImage();
+    }
+
+    public class FireworkUpdate : BaseImageUpdate
+    {
+      static readonly Hash<UnityEngine.Color, Brush> FireworkBrushes = new Hash<UnityEngine.Color, Brush>();
+
+      public override bool SupportsTextureIndex => false;
+      public PatternFirework Firework => (PatternFirework)Entity;
+
+      public FireworkUpdate(BasePlayer player, PatternFirework entity) : base(player, entity)
+      {
+
+      }
+
+      public override byte[] GetImage()
+      {
+        PatternFirework firework = Firework;
+        List<Star> stars = firework.Design.stars;
+
+        using (Bitmap image = new Bitmap(250, 250))
+        {
+          using (Graphics g = Graphics.FromImage(image))
+          {
+            for (int index = 0; index < stars.Count; index++)
+            {
+              Star star = stars[index];
+              int x = (int)((star.position.x + 1) * 125);
+              int y = (int)((-star.position.y + 1) * 125);
+              g.FillEllipse(GetBrush(star.color), x, y, 19, 19);
+            }
+
+            return GetImageBytes(image);
+          }
+        }
+      }
+
+      private Brush GetBrush(UnityEngine.Color color)
+      {
+        Brush brush = FireworkUpdate.FireworkBrushes[color];
+        if (brush == null)
+        {
+          brush = new SolidBrush(FromUnityColor(color));
+          FireworkUpdate.FireworkBrushes[color] = brush;
+        }
+
+        return brush;
+      }
+
+      private Color FromUnityColor(UnityEngine.Color color)
+      {
+        int red = FromUnityColorField(color.r);
+        int green = FromUnityColorField(color.g);
+        int blue = FromUnityColorField(color.b);
+        int alpha = FromUnityColorField(color.a);
+
+        return Color.FromArgb(alpha, red, green, blue);
+      }
+
+      private int FromUnityColorField(float color)
+      {
+        return (int)(color * 255);
+      }
+
+      private byte[] GetImageBytes(Bitmap image)
+      {
+        MemoryStream stream = Facepunch.Pool.Get<MemoryStream>();
+        image.Save(stream, ImageFormat.Png);
+        byte[] bytes = stream.ToArray();
+        Facepunch.Pool.FreeMemoryStream(ref stream);
+        return bytes;
+      }
+    }
+
+    public class PaintedItemUpdate : BaseImageUpdate
+    {
+      private readonly byte[] _image;
+
+      public PaintedItemUpdate(BasePlayer player, PaintedItemStorageEntity entity, Item item, byte[] image) : base(player, entity)
+      {
+        _image = image;
+        ItemId = item.info.itemid;
+      }
+
+      public override bool SupportsTextureIndex => false;
+      public override byte[] GetImage()
+      {
+        return _image;
+      }
+    }
+
+    public class SignageUpdate : BaseImageUpdate
+    {
+      public string Url { get; }
+      public override bool SupportsTextureIndex => true;
+      public ISignage Signage => (ISignage)Entity;
+
+      public SignageUpdate(BasePlayer player, ISignage entity, uint textureIndex, string url = null) : base(player, (BaseEntity)entity)
+      {
+        TextureIndex = textureIndex;
+        Url = url;
+      }
+
+      public override byte[] GetImage()
+      {
+        ISignage sign = Signage;
+        uint crc = sign.GetTextureCRCs()[TextureIndex];
+
+        return FileStorage.server.Get(crc, FileStorage.Type.png, sign.NetworkID, TextureIndex);
+      }
+    }
+
+    private void OnImagePost(BasePlayer player, string url, bool raw, ISignage signage, uint textureIndex)
+    {
+      _Worker.Action.SendSignage(new SignageUpdate(player, signage, textureIndex, url));
+    }
+
+    private void OnSignUpdated(ISignage signage, BasePlayer player, int textureIndex = 0)
+    {
+      if (player == null)
+      {
+        return;
+      }
+
+      if (signage.GetTextureCRCs()[textureIndex] == 0)
+      {
+        return;
+      }
+
+      _Worker.Action.SendSignage(new SignageUpdate(player, signage, (uint)textureIndex));
+    }
+
+    private void OnItemPainted(PaintedItemStorageEntity entity, Item item, BasePlayer player, byte[] image)
+    {
+      if (entity._currentImageCrc == 0)
+      {
+        return;
+      }
+
+      PaintedItemUpdate update = new PaintedItemUpdate(player, entity, item, image);
+
+      _Worker.Action.SendSignage(new PaintedItemUpdate(player, entity, item, image));
+    }
+
+    private void OnFireworkDesignChanged(PatternFirework firework, ProtoBuf.PatternFirework.Design design, BasePlayer player)
+    {
+      if (design?.stars == null || design.stars.Count == 0)
+      {
+        return;
+      }
+
+      _Worker.Action.SendSignage(new FireworkUpdate(player, firework));
+    }
+
+    private object CanUpdateSign(BasePlayer player, BaseEntity entity)
+    {
+      // TODO: Logic to protect user from sign-usage
+
+      //Client side the sign will still be updated if we block it here. We destroy the entity client side to force a redraw of the image.
+      NextTick(() =>
+      {
+        entity.DestroyOnClient(player.Connection);
+        entity.SendNetworkUpdate();
+      });
+
+      return null;
+    }
+
+    private object OnFireworkDesignChange(PatternFirework firework, ProtoBuf.PatternFirework.Design design, BasePlayer player)
+    {
+      // TODO: Logic to protect user from sign-usage
+
+      return null;
+    }
+
+    #endregion
+
+    private void OnEntityBuilt(Planner plan, GameObject go)
+    {
+      var player = plan.GetOwnerPlayer();
+      var ent = go.ToBaseEntity();
+
+      if (player == null || ent == null) return;
+
+      string shortName = go.ToBaseEntity().ShortPrefabName;
+      if (!shortName.Contains("sign"))
+      {
+        return;
+      }
+
+      var signage = go.ToBaseEntity().GetComponent<Signage>();
+
+      NextTick(() =>
+      {
+        if (signage == null)
+        {
+          return;
+        }
+
+        if (signage.GetTextureCRCs()[0] == 0)
+        {
+          return;
+        }
+
+        _Worker.Action.SendSignage(new SignageUpdate(player, signage, 0));
+      });
+    }
   }
 }
