@@ -1418,10 +1418,40 @@ namespace Oxide.Plugins
           return;
         }
 
-        var players = BasePlayer.activePlayerList.Select(v => PluginPlayerPayload.FromPlayer(v)).ToList();
+        var players = new List<PluginPlayerPayload>();
 
-        players.AddRange(ServerMgr.Instance.connectionQueue.queue.Select(v => PluginPlayerPayload.FromConnection(v, "queued")));
-        players.AddRange(ServerMgr.Instance.connectionQueue.joining.Select(v => PluginPlayerPayload.FromConnection(v, "joining")));
+        foreach (var player in BasePlayer.activePlayerList)
+        {
+          try
+          {
+            players.Add(PluginPlayerPayload.FromPlayer(player));
+          }
+          catch (Exception exc)
+          {
+          }
+        }
+
+        foreach (var player in ServerMgr.Instance.connectionQueue.queue)
+        {
+          try
+          {
+            players.Add(PluginPlayerPayload.FromConnection(player, "queued"));
+          }
+          catch (Exception exc)
+          {
+          }
+        }
+
+        foreach (var player in ServerMgr.Instance.connectionQueue.joining)
+        {
+          try
+          {
+            players.Add(PluginPlayerPayload.FromConnection(player, "joining"));
+          }
+          catch (Exception exc)
+          {
+          }
+        }
 
         var disconnected = DisconnectHistory.ToDictionary(v => v.Key, v => v.Value);
         var team_changes = TeamChangeHistory.ToDictionary(v => v.Key, v => v.Value);
