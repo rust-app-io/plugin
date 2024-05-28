@@ -8,20 +8,19 @@ using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
 using System;
+using Oxide.Game.Rust.Libraries;
 
 
 namespace Oxide.Plugins
 {
-  [Info("RustAppLite", "RustApp.IO", "1.0.1")]
-  [Description("Simple plugin for receiving reports.")]
+  [Info("RustApp Lite", "RustApp", "1.0.2")]
+  [Description("Get reports on players in Discord, using a nicely designed interface or F7")]
   public class RustAppLite : RustPlugin
   {
     #region Configuration
 
     private class Configuration
     {
-      [JsonProperty("[General] Language (en/ru)")]
-      public string language = "ru";
 
       [JsonProperty("[UI] Chat commands")]
       public List<string> report_ui_commands = new List<string>();
@@ -38,17 +37,32 @@ namespace Oxide.Plugins
       [JsonProperty("[Discord] Webhook to send reports")]
       public string discord_webhook = "";
 
+      [JsonProperty("[Discord-Translations] Nickname field")]
+      public string discord_translations_nickname = "Nickname";
+
+      [JsonProperty("[Discord-Translations] Reason field")]
+      public string discord_translations_reason = "Reason";
+
+      [JsonProperty("[Discord-Translations] Comment field")]
+      public string discord_translations_comment = "Comment";
+
+      [JsonProperty("[Discord-Translations] Report sent text")]
+      public string discord_translations_report_sent = "Report sent";
+
       public static Configuration Generate()
       {
         return new Configuration
         {
-          language = "ru",
-
           report_ui_commands = new List<string> { "report", "reports" },
           report_ui_reasons = new List<string> { "Cheat", "Abusive", "Spam" },
           report_ui_cooldown = 300,
           report_ui_auto_parse = true,
-          discord_webhook = ""
+          discord_webhook = "",
+
+          discord_translations_comment = "Comment",
+          discord_translations_nickname = "Nickname",
+          discord_translations_reason = "Reason",
+          discord_translations_report_sent = "Report sent"
         };
       }
     }
@@ -65,6 +79,8 @@ namespace Oxide.Plugins
         PrintWarning($"Error reading config, creating one new config!");
         LoadDefaultConfig();
       }
+
+
 
       SaveConfig();
     }
@@ -88,7 +104,19 @@ namespace Oxide.Plugins
 
       public void Send(string url)
       {
-        _RustAppLite.webrequest.Enqueue(url, JsonConvert.SerializeObject(this), (code, response) => { }, _RustAppLite, Core.Libraries.RequestMethod.POST, _Headeers, 30f);
+        _RustAppLite.webrequest.Enqueue(url, JsonConvert.SerializeObject(this), (code, response) =>
+        {
+          if (code == 200)
+          {
+            return;
+          }
+
+          _RustAppLite.Error(
+            $"Веб-хук не был отправлен ({response})",
+            $"Webhook was not sent ({response})"
+          );
+
+        }, _RustAppLite, Core.Libraries.RequestMethod.POST, _Headeers, 30f);
       }
 
       public static Dictionary<string, string> _Headeers = new Dictionary<string, string>
@@ -419,6 +447,11 @@ namespace Oxide.Plugins
         "\nYou are using a simplified version of the RustApp plugin!\nThe full version contains:\n - call for verification\n - check for AFK\n - chat / command history\n - and much more on the website: https://rustapp.io"
       );
 
+      if (!_Settings.report_ui_auto_parse)
+      {
+        Unsubscribe(nameof(OnPlayerReported));
+      }
+
       RegisterMessages();
       WriteLiteMarker();
     }
@@ -472,6 +505,9 @@ namespace Oxide.Plugins
       {
         CuiHelper.DestroyUi(player, ReportLayer);
       }
+
+      _RustAppLite = null;
+      _Settings = null;
     }
 
     #endregion
@@ -480,10 +516,7 @@ namespace Oxide.Plugins
 
     private void OnPlayerReported(BasePlayer reporter, string targetName, string targetId, string subject, string message, string type)
     {
-      if (!_Settings.report_ui_auto_parse)
-      {
-        return;
-      }
+      // TODO: Unsubscribed, if _Settings.report_ui_auto_parse is setted to false
 
       var target = BasePlayer.Find(targetId) ?? BasePlayer.FindSleeping(targetId);
       if (target == null)
@@ -623,11 +656,6 @@ namespace Oxide.Plugins
 
             SoundToast(player, lang.GetMessage("Sent", this, player.UserIDString), 2);
 
-            if (!_Cooldowns.ContainsKey(player.userID))
-            {
-              _Cooldowns.Add(player.userID, 0);
-            }
-
             _Cooldowns[player.userID] = CurrentTime() + _Settings.report_ui_cooldown;
             break;
           }
@@ -691,9 +719,9 @@ namespace Oxide.Plugins
       var target = permission.GetUserData(target_steam_id);
 
       var list = new DiscordField[4] {
-        new DiscordField(Msg("Никнейм", "Nickname"), $"```{target.LastSeenNickname}```", false),
+        new DiscordField(_Settings.discord_translations_nickname, $"```{target.LastSeenNickname}```", false),
         new DiscordField($"SteamID", $"```{target_steam_id}```", true),
-        new DiscordField(Msg("Причина", "Reason"), @$"```ansi
+        new DiscordField(_Settings.discord_translations_reason, @$"```ansi
 [2;31m{reason}[0m
 ```", true),
         null
@@ -701,10 +729,10 @@ namespace Oxide.Plugins
 
       if (message != null && message.Length > 0)
       {
-        list[3] = new DiscordField(Msg("Комментарий", "Comment"), $"```{message}```", false);
+        list[3] = new DiscordField(_Settings.discord_translations_comment, $"```{message}```", false);
       }
 
-      DiscordEmbed embed = new DiscordEmbed("", $" ", null, list.Where(v => v != null).ToArray(), new DiscordFooter($"{Msg("Отправил жалобу", "Report sent")}: {author.LastSeenNickname} [{initiator_steam_id}]", "", ""));
+      DiscordEmbed embed = new DiscordEmbed("", $" ", null, list.Where(v => v != null).ToArray(), new DiscordFooter($"{_Settings.discord_translations_report_sent}: {author.LastSeenNickname} [{initiator_steam_id}]", "", ""));
       DiscordMessage req = new DiscordMessage(null, new DiscordEmbed[1] { embed });
 
       req.Send(_Settings.discord_webhook);
@@ -741,21 +769,9 @@ namespace Oxide.Plugins
 
     #region Messages
 
-    public string Msg(string ru, string en)
-    {
-      if (_Settings.language == "ru")
-      {
-        return ru;
-      }
-      else
-      {
-        return en;
-      }
-    }
-
     public void Log(string ru, string en)
     {
-      if (_Settings.language == "ru")
+      if (lang.GetServerLanguage() == "ru")
       {
         Puts(ru);
       }
@@ -767,7 +783,7 @@ namespace Oxide.Plugins
 
     public void Warning(string ru, string en)
     {
-      if (_Settings.language == "ru")
+      if (lang.GetServerLanguage() == "ru")
       {
         PrintWarning(ru);
       }
@@ -779,7 +795,7 @@ namespace Oxide.Plugins
 
     public void Error(string ru, string en)
     {
-      if (_Settings.language == "ru")
+      if (lang.GetServerLanguage() == "ru")
       {
         PrintError(ru);
       }
