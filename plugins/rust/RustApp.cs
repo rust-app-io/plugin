@@ -52,7 +52,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.6.0")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.6.1")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -2074,7 +2074,7 @@ namespace Oxide.Plugins
         return request;
       }
 
-      protected bool IsReady()
+      public bool IsReady()
       {
         if (_RustApp == null || !_RustApp.IsLoaded)
         {
@@ -2721,9 +2721,19 @@ namespace Oxide.Plugins
 
     private void OnEntityKill(BaseNetworkable entity)
     {
+      if (entity?.net?.ID == null || entity?.net?.ID.Value == null || entity?.ShortPrefabName == null)
+      {
+        return;
+      }
+
       var whiteList = new List<string> { "photoframe", "spinner.wheel" };
 
       if (!entity.ShortPrefabName.StartsWith("sign.") || whiteList.Any(v => entity.ShortPrefabName.Contains(v)))
+      {
+        return;
+      }
+
+      if (_Worker?.Update == null || !_Worker.Update.IsReady())
       {
         return;
       }
