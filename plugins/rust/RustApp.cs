@@ -43,9 +43,6 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Text;
 using UnityEngine;
-
-// Logic from DiscordSignLogger by MJSU 
-// https://umod.org/plugins/discord-sign-logger
 using Color = System.Drawing.Color;
 using Graphics = System.Drawing.Graphics;
 using Star = ProtoBuf.PatternFirework.Star;
