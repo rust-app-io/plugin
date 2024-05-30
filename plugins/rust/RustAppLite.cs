@@ -13,7 +13,7 @@ using Oxide.Game.Rust.Libraries;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp Lite", "RustApp", "1.0.2")]
+  [Info("RustApp Lite", "RustApp", "1.0.4")]
   [Description("Get reports on players in Discord, using a nicely designed interface or F7")]
   public class RustAppLite : RustPlugin
   {
@@ -452,7 +452,6 @@ namespace Oxide.Plugins
         Unsubscribe(nameof(OnPlayerReported));
       }
 
-      RegisterMessages();
       WriteLiteMarker();
     }
 
@@ -467,7 +466,7 @@ namespace Oxide.Plugins
       Interface.Oxide.DataFileSystem.WriteObject(Name, CurrentTime());
     }
 
-    private void RegisterMessages()
+    protected override void LoadDefaultMessages()
     {
       lang.RegisterMessages(new Dictionary<string, string>
       {
