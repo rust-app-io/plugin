@@ -13,7 +13,7 @@ using Oxide.Game.Rust.Libraries;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp Lite", "RustApp", "1.0.4")]
+  [Info("RustApp Lite", "RustApp", "1.0.5")]
   [Description("Get reports on players in Discord, using a nicely designed interface or F7")]
   public class RustAppLite : RustPlugin
   {
@@ -190,14 +190,21 @@ namespace Oxide.Plugins
     #region Interfaces
 
     private static string ReportLayer = "RAL_CommandHandlerUI";
-    private void DrawReportInterface(BasePlayer player, int page = 0, string search = "", bool redraw = false)
+    private void DrawReportInterface(BasePlayer player, int page = 0, string search = "", bool redraw = false, BasePlayer preselect = null)
     {
       var lineAmount = 6;
       var lineMargin = 8;
 
       var size = (float)(700 - lineMargin * lineAmount) / lineAmount;
-      var list = BasePlayer.activePlayerList
-          .ToList();
+
+      var list = new List<BasePlayer>();
+
+      if (preselect != null)
+      {
+        list.Add(preselect);
+      }
+
+      list.AddRange(BasePlayer.activePlayerList.ToList().Where(v => v.userID != preselect?.userID));
 
       var finalList = list
           .FindAll(v => v.displayName.ToLower().Contains(search) || v.UserIDString.ToLower().Contains(search) || search == null)
@@ -372,6 +379,11 @@ namespace Oxide.Plugins
       }
 
       CuiHelper.AddUi(player, container);
+
+      if (preselect != null)
+      {
+        player.SendConsoleCommand($"RAL_CommandHandler show {preselect.UserIDString} 0 -{size} {size} 0 false");
+      }
     }
 
     private static string HexToRustFormat(string hex)
@@ -480,6 +492,7 @@ namespace Oxide.Plugins
         ["Subject.SubHead"] = "For player %PLAYER%",
         ["Cooldown"] = "Wait %TIME% sec.",
         ["Sent"] = "Report succesful sent",
+        ["Player.Not.Found"] = "Player with requested ID not found"
       }, this, "en");
 
       lang.RegisterMessages(new Dictionary<string, string>
@@ -494,6 +507,7 @@ namespace Oxide.Plugins
         ["Subject.SubHead"] = "На игрока %PLAYER%",
         ["Cooldown"] = "Подожди %TIME% сек.",
         ["Sent"] = "Жалоба успешно отправлена",
+        ["Player.Not.Found"] = "Игрок с указанным ID не найден"
       }, this, "ru");
     }
 
@@ -661,7 +675,7 @@ namespace Oxide.Plugins
       }
     }
 
-    private void ChatCmdReport(BasePlayer player)
+    private void ChatCmdReport(BasePlayer player, string command, string[] args)
     {
       var over = Interface.Oxide.CallHook("RustApp_CanOpenReportUI", player);
       if (over != null)
@@ -680,6 +694,19 @@ namespace Oxide.Plugins
             $"{(_Cooldowns[player.userID] - CurrentTime()).ToString("0")}");
 
         SoundToast(player, msg, 1);
+        return;
+      }
+
+      if (args != null && args.Length == 1 && args[0].Length == 17)
+      {
+        var target = BasePlayer.FindAwakeOrSleeping(args[0]);
+        if (target == null || !target.IsConnected)
+        {
+          SoundToast(player, lang.GetMessage("Player.Not.Found", this, player.UserIDString), 1);
+          return;
+        }
+
+        DrawReportInterface(player, 0, "", false, target);
         return;
       }
 
