@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.6.1")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.0")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -202,7 +202,7 @@ namespace Oxide.Plugins
 
         if (isError)
         {
-          if (body.Contains("cloudflare"))
+          if (body.Contains("502 bad gateway") || body.Contains("cloudflare"))
           {
             onException?.Invoke("rustapp is restarting, wait please");
           }
@@ -290,7 +290,7 @@ namespace Oxide.Plugins
     {
       private static string Base = "https://ban.rustapp.io";
 
-      public static string Fetch = $"{BanUrls.Base}/plugin";
+      public static string Fetch = $"{BanUrls.Base}/plugin/v2";
     }
 
     class PluginChatMessagesPayload
@@ -1016,6 +1016,9 @@ namespace Oxide.Plugins
         public long expired_at;
         public bool ban_ip_active;
         public bool computed_is_active;
+
+        public int sync_project_id = 0;
+        public bool sync_should_kick = false;
       }
 
       private Dictionary<string, string> PlayersCollection = new Dictionary<string, string>();
@@ -1086,19 +1089,33 @@ namespace Oxide.Plugins
 
             if (ban != null)
             {
+              if (ban.sync_project_id != 0 && !ban.sync_should_kick)
+              {
+                return;
+              }
+
               if (ban.steam_id == steamId)
               {
                 var format = ban.expired_at == 0 ? _Settings.ban_reason_format : _Settings.ban_reason_format_temporary;
+
+                if (ban.sync_project_id != 0)
+                {
+                  format = ban.expired_at == 0 ? _Settings.ban_sync_reason_format : _Settings.ban_sync_reason_format;
+                }
+
                 var time = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(ban.expired_at + 3 * 60 * 60 * 1_000).ToString("dd.MM.yyyy HH:mm");
 
-                _RustApp.CloseConnection(steamId, format.Replace("%REASON%", ban.reason).Replace("%TIME%", time));
+                var text = format.Replace("%REASON%", ban.reason).Replace("%TIME%", time);
+
+                _RustApp.CloseConnection(steamId, text);
               }
               else
               {
                 _RustApp.CloseConnection(steamId, _Settings.ban_reason_ip_format);
+
+                CreateAlertForIpBan(ban, steamId);
               }
 
-              CreateAlertForIpBan(ban, steamId);
             }
           },
           () =>
@@ -1476,10 +1493,10 @@ namespace Oxide.Plugins
             },
             (err) =>
             {
-              _RustApp.Error(
-                $"Не удалось отправить состояние сервера ({err})",
-                $"Failed to send server status ({err})"
-              );
+              //_RustApp.Error(
+              //  $"Не удалось отправить состояние сервера ({err})",
+              //  $"Failed to send server status ({err})"
+              //);
 
               /**
               Возвращаем неудачно отправленные дисконекты
@@ -1538,6 +1555,7 @@ namespace Oxide.Plugins
 
     public class QueueWorker : BaseWorker
     {
+      private List<string> ProcessedQueues = new List<string>();
       public Dictionary<string, bool> Notices = new Dictionary<string, bool>();
 
       public class QueueElement
@@ -1646,11 +1664,18 @@ namespace Oxide.Plugins
 
           foreach (var queue in queues)
           {
+            if (ProcessedQueues.Contains(queue.id))
+            {
+              return;
+            }
+
             try
             {
               var response = QueueProcess(queue);
 
               responses.Add(queue.id, response);
+
+              ProcessedQueues.Add(queue.id);
             }
             catch (Exception exc)
             {
@@ -1679,10 +1704,10 @@ namespace Oxide.Plugins
             (data, raw) => callback(data),
             (err) =>
             {
-              _RustApp.Error(
-                "Не удалось загрузить задачи из очередей",
-                "Failed to retreive queue"
-              );
+              //_RustApp.Error(
+              //  "Не удалось загрузить задачи из очередей",
+              //  "Failed to retreive queue"
+              //);
             }
           );
       }
@@ -1691,8 +1716,14 @@ namespace Oxide.Plugins
       {
         Request<List<QueueElement>>(QueueUrls.Fetch, RequestMethod.PUT, new { data = responses })
           .Execute(
-            (data, raw) => { },
-            (err) => { }
+            (data, raw) =>
+            {
+              ProcessedQueues = new List<string>();
+            },
+            (err) =>
+            {
+              ProcessedQueues = new List<string>();
+            }
           );
       }
 
@@ -2145,6 +2176,12 @@ namespace Oxide.Plugins
       [JsonProperty("[Ban] Message format when kicking due to IP")]
       public string ban_reason_ip_format = "Вам ограничен вход на сервер!";
 
+      [JsonProperty("[Ban-Sync] Kick message format (%REASON% - ban reason)")]
+      public string ban_sync_reason_format = "Обнаружена блокировка на другом проекте, причина: %REASON%";
+
+      [JsonProperty("[Ban-Sync] Kick message format temporary (%REASON% - ban reason)")]
+      public string ban_sync_reason_format_temporary = "Обнаружена блокировка на другом проекте до %TIME% МСК, причина: %REASON%";
+
       [JsonProperty("[Custom Actions] Allow custom actions")]
       public bool custom_actions_allow = true;
 
@@ -2164,9 +2201,13 @@ namespace Oxide.Plugins
 
           ban_enable_broadcast = true,
           ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
+
           ban_reason_format = "Вы навсегда забанены на этом сервере, причина: %REASON%",
           ban_reason_format_temporary = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%",
           ban_reason_ip_format = "Вам ограничен вход на сервер!",
+
+          ban_sync_reason_format = "Обнаружена блокировка на другом проекте, причина: %REASON%",
+          ban_sync_reason_format_temporary = "Обнаружена блокировка на другом проекте до %TIME% МСК, причина: %REASON%",
 
           custom_actions_allow = true
         };
