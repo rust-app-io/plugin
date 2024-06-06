@@ -1104,7 +1104,7 @@ namespace Oxide.Plugins
                 {
                   format = ban.expired_at == 0 ? _Settings.ban_sync_reason_format : _Settings.ban_sync_reason_format;
                 }
-                var time = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(ban.expired_at + 3 * 60 * 60 * 1_000).ToString("dd.MM.yyyy HH:mm");
+                var time = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(ban.expired_at + 3 * 60 * 60 * 1000).ToString("dd.MM.yyyy HH:mm");
                 var text = format.Replace("%REASON%", ban.reason).Replace("%TIME%", time);
                 _RustApp.CloseConnection(steamId, text);
               }
