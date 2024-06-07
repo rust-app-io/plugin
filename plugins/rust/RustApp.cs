@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.0")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.1")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -2702,6 +2702,11 @@ namespace Oxide.Plugins
     private void CanUserLogin(string name, string id, string ipAddress)
     {
       _Worker?.Ban.FetchBan(id, ipAddress);
+    }
+
+    private void OnPlayerConnected(BasePlayer player)
+    {
+      _Worker?.Ban.FetchBan(player);
     }
 
     private void OnPlayerDisconnected(BasePlayer player, string reason)
