@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.1")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.2")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -933,14 +933,14 @@ namespace Oxide.Plugins
         );
       }
 
-      public void @SendCustomAlert(string message, [CanBeNull] object data)
+      public void @SendCustomAlert(string message, object data = null, List<string> custom_links = null, string custom_icon = null)
       {
         if (!IsReady())
         {
           return;
         }
 
-        Request<object>(CourtUrls.SendCustomAlert, RequestMethod.POST, new { msg = message, data })
+        Request<object>(CourtUrls.SendCustomAlert, RequestMethod.POST, new { msg = message, data, custom_links, custom_icon })
           .Execute(
             null,
             (err) =>
@@ -2632,9 +2632,9 @@ namespace Oxide.Plugins
       });
     }
 
-    private void RA_CustomAlert(string message, object data = null)
+    private void RA_CustomAlert(string message, object data = null, List<string> custom_links = null, string custom_icon = null)
     {
-      _Worker?.Action.SendCustomAlert(message, data);
+      _Worker?.Action.SendCustomAlert(message, data, custom_links, custom_icon);
     }
 
     #endregion
@@ -2702,11 +2702,6 @@ namespace Oxide.Plugins
     private void CanUserLogin(string name, string id, string ipAddress)
     {
       _Worker?.Ban.FetchBan(id, ipAddress);
-    }
-
-    private void OnPlayerConnected(BasePlayer player)
-    {
-      _Worker?.Ban.FetchBan(player);
     }
 
     private void OnPlayerDisconnected(BasePlayer player, string reason)

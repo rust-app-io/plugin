@@ -52,7 +52,7 @@ using Apex.DataStructures;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "Hougan & Xacku & Olkuts & Frizen(adaptation)", "1.7.0devblog236")]
+    [Info("RustApp", "Hougan & Xacku & Olkuts & Frizen(adaptation)", "1.7.2devblog236")]
     public class RustApp : RustPlugin
     {
         #region Classes 
@@ -936,23 +936,24 @@ namespace Oxide.Plugins
                 );
             }
 
-            public void @SendCustomAlert(string message, [CanBeNull] object data)
+
+            public void @SendCustomAlert(string message, object data = null, List<string> custom_links = null, string custom_icon = null)
             {
                 if (!IsReady())
                 {
                     return;
                 }
 
-                Request<object>(CourtUrls.SendCustomAlert, RequestMethod.POST, new { msg = message, data })
+                Request<object>(CourtUrls.SendCustomAlert, RequestMethod.POST, new { msg = message, data, custom_links, custom_icon })
                   .Execute(
                     null,
                     (err) =>
                     {
                         _RustApp.Puts(err);
                         _RustApp.Error(
-                  $"Не удалось отправить кастомное оповещение ({message})",
-                  $"Failed to send custom-alert ({message})"
-                );
+                            $"Не удалось отправить кастомное оповещение ({message})",
+                            $"Failed to send custom-alert ({message})"
+                            );
                     }
                   );
             }
@@ -2636,9 +2637,9 @@ namespace Oxide.Plugins
             });
         }
 
-        private void RA_CustomAlert(string message, object data = null)
+        private void RA_CustomAlert(string message, object data = null, List<string> custom_links = null, string custom_icon = null)
         {
-            _Worker?.Action.SendCustomAlert(message, data);
+            _Worker?.Action.SendCustomAlert(message, data, custom_links, custom_icon);
         }
 
         #endregion
