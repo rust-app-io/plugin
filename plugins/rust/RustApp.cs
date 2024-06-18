@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.2")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.3")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -2622,6 +2622,11 @@ namespace Oxide.Plugins
 
     private void RA_ReportSend(string initiator_steam_id, string target_steam_id, string reason, string message = "")
     {
+      if (initiator_steam_id == target_steam_id)
+      {
+        return;
+      }
+
       _Worker?.Update.SaveReport(new PluginReportEntry
       {
         initiator_steam_id = initiator_steam_id,
@@ -2776,7 +2781,8 @@ namespace Oxide.Plugins
 
     private void OnNewSave(string saveName)
     {
-      timer.Once(10, () =>
+      // Remove in 5 minutes
+      timer.Once(300, () =>
       {
         _Worker.Action.SendWipe((a) => { });
       });
