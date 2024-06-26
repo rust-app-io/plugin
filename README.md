@@ -37,12 +37,32 @@
    <br>Вы можете создавать свои собственные оповещения о любых действиях игрока при помощи API.
    
    ```csharp
-   plugins.Find("RustApp")?.Call("RA_CustomAlert", message, <optional> data, <optional> custom_links, <optional> custom_icon)
+   plugins.Find("RustApp")?.Call("RA_CreateAlert", message, object? data, object? meta)
    ```
+
    `string message` - любая произвольная строка\
-   `[CanBeNull] data` - любой объект с нужной вам информацией (кол-во символов не более 512), который будет также отображаться на сайте по кнопке "показать данные" (можно так new { foo = "bar" })\
-   `[CanBeNull] custom_links` - строчный массив с ID игроков к которым должно быть привязано оповещение\
-   `[CanBeNull] custom_icon` - строка с кастомной иконкой (временно ни на что не влияет)\
+   `object? data` - любой объект с нужной вам информацией (кол-во символов не более 512), который будет также отображаться на сайте по кнопке "показать данные" (можно так new { foo = "bar" })\
+   `object? meta` - объект позволяющий настроить отображение оповещения\
+
+   ```csharp
+   interface CustomAlertMeta {
+        // Любая ссылка с картинкой
+        string custom_icon = null;
+        // Если true, не будет отображаться в таблице, а только в профиле игрока
+        bool profile_only = false;
+        // Список SteamID игроков к которым должен быть привязан алерт. По умолчанию те, чьи ID указаны в сообщении
+        List<string> custom_links = null;
+   }
+   ```
+
+   ```csharp
+   // Конкретный пример использования
+   plugins.Find("RustApp").Call("RA_CreateAlert", "Привет от 76561198121100397", new {
+     test_payload = Performance.current.frameRate,
+   }, new {
+     custom_icon = "https://s3.rustapp.io/avatar-project/1695419722879-43ad94311081cd8185649d49.jpg",
+   });
+   ```
 
    ⚠️ Если в `message` будет содержаться SteamID - на сайте он автоматически заменится на имя игрока и позволит открыть профиль (например: "оповещение на 76561198121100397" заменится на "оповещение на **playername**").
 
