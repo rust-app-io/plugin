@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.3")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.4")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -458,7 +458,7 @@ namespace Oxide.Plugins
         payload.coords = GridReference(player.transform.position);
 
         payload.steam_id = player.UserIDString;
-        payload.steam_name = player.displayName;
+        payload.steam_name = player.displayName.Replace("<blank>", "blank");
         payload.ip = player.Connection.IPAddressWithoutPort();
 
         payload.status = "active";
@@ -484,7 +484,7 @@ namespace Oxide.Plugins
         var payload = new PluginPlayerPayload();
 
         payload.steam_id = connection.userid.ToString();
-        payload.steam_name = connection.username;
+        payload.steam_name = connection.username.Replace("<blank>", "blank");
         payload.ip = connection.IPAddressWithoutPort();
 
         payload.status = status;
@@ -933,7 +933,7 @@ namespace Oxide.Plugins
         );
       }
 
-      public void @SendCustomAlert(string message, object data = null, List<string> custom_links = null, string custom_icon = null)
+      public void @SendCustomAlertDeprecated(string message, object data = null, List<string> custom_links = null, string custom_icon = null)
       {
         if (!IsReady())
         {
@@ -941,6 +941,57 @@ namespace Oxide.Plugins
         }
 
         Request<object>(CourtUrls.SendCustomAlert, RequestMethod.POST, new { msg = message, data, custom_links, custom_icon })
+          .Execute(
+            null,
+            (err) =>
+            {
+              _RustApp.Puts(err);
+              _RustApp.Error(
+                $"Не удалось отправить кастомное оповещение ({message})",
+                $"Failed to send custom-alert ({message})"
+              );
+            }
+          );
+      }
+
+      class CustomAlertMeta
+      {
+        public string custom_icon = null;
+        public bool hide_in_table = false;
+        public List<string> custom_links = null;
+      }
+
+      public void @SendCustomAlert(string message, object data = null, object meta = null)
+      {
+        if (!IsReady())
+        {
+          return;
+        }
+
+        CustomAlertMeta json = new CustomAlertMeta();
+
+        try
+        {
+          if (meta != null)
+          {
+            json = JsonConvert.DeserializeObject<CustomAlertMeta>(JsonConvert.SerializeObject(meta ?? new CustomAlertMeta()));
+          }
+        }
+        catch
+        {
+          _RustApp.Error("Переданы неверные параметры CustomAlertMeta, будут использованы стандартные!", "Wrong CustomAlertMeta params, default will be used!");
+        }
+
+
+        Request<object>(CourtUrls.SendCustomAlert, RequestMethod.POST, new
+        {
+          msg = message,
+          data = data,
+
+          custom_icon = json.custom_icon,
+          hide_in_table = json.hide_in_table,
+          custom_links = json.custom_links
+        })
           .Execute(
             null,
             (err) =>
@@ -2190,7 +2241,7 @@ namespace Oxide.Plugins
         return new Configuration
         {
           report_ui_commands = new List<string> { "report", "reports" },
-          report_ui_reasons = new List<string> { "Чит", "Макрос", "Багоюз" },
+          report_ui_reasons = new List<string> { "Cheat", "Macros", "Abuse" },
           report_ui_cooldown = 300,
           report_ui_auto_parse = true,
           report_ui_show_check_in = 7,
@@ -2541,34 +2592,10 @@ namespace Oxide.Plugins
       {
         _Worker = ServerMgr.Instance.gameObject.AddComponent<CourtWorker>();
       });
-
-      RegisterMessages();
     }
 
-    private void RegisterMessages()
+    protected override void LoadDefaultMessages()
     {
-      lang.RegisterMessages(new Dictionary<string, string>
-      {
-        ["Header.Find"] = "FIND PLAYER",
-        ["Header.SubDefault"] = "Who do you want to report?",
-        ["Header.SubFindResults"] = "Here are players, which we found",
-        ["Header.SubFindEmpty"] = "No players was found",
-        ["Header.Search"] = "Search",
-        ["Header.Search.Placeholder"] = "Enter nickname/steamid",
-        ["Subject.Head"] = "Select the reason for the report",
-        ["Subject.SubHead"] = "For player %PLAYER%",
-        ["Cooldown"] = "Wait %TIME% sec.",
-        ["Sent"] = "Report succesful sent",
-        ["Contact.Error"] = "You did not sent your Discord",
-        ["Contact.Sent"] = "You sent:",
-        ["Contact.SentWait"] = "If you sent the correct discord - wait for a friend request.",
-        ["Check.Text"] = "<color=#c6bdb4><size=32><b>YOU ARE SUMMONED FOR A CHECK-UP</b></size></color>\n<color=#958D85>You have <color=#c6bdb4><b>3 minutes</b></color> to send discord and accept the friend request.\nUse the <b><color=#c6bdb4>/contact</color></b> command to send discord.\n\nTo contact a moderator - use chat, not a command.</color>",
-        ["Chat.Direct.Toast"] = "Received a message from admin, look at the chat!",
-        ["UI.CheckMark"] = "Checked",
-        ["Paid.Announce.Clean"] = "Your complaint about \"%SUSPECT_NAME%\" has been checked!\n<size=12><color=#81C5F480>As a result of the check, no violations were found</color ></size>",
-        ["Paid.Announce.Ban"] = "Your complaint about \"%SUSPECT_NAME%\" has been verified!\n<color=#F7D4D080><size=12>Player banned, reason: %REASON%</ size></color>",
-      }, this, "en");
-
       lang.RegisterMessages(new Dictionary<string, string>
       {
         ["Header.Find"] = "НАЙТИ ИГРОКА",
@@ -2590,6 +2617,28 @@ namespace Oxide.Plugins
         ["Paid.Announce.Clean"] = "Ваша жалоба на \"%SUSPECT_NAME%\" была проверена!\n<size=12><color=#81C5F480>В результате проверки, нарушений не обнаружено</color></size>",
         ["Paid.Announce.Ban"] = "Ваша жалоба на \"%SUSPECT_NAME%\" была проверена!\n<color=#F7D4D080><size=12>Игрок заблокирован, причина: %REASON%</size></color>",
       }, this, "ru");
+
+      lang.RegisterMessages(new Dictionary<string, string>
+      {
+        ["Header.Find"] = "FIND PLAYER",
+        ["Header.SubDefault"] = "Who do you want to report?",
+        ["Header.SubFindResults"] = "Here are players, which we found",
+        ["Header.SubFindEmpty"] = "No players was found",
+        ["Header.Search"] = "Search",
+        ["Header.Search.Placeholder"] = "Enter nickname/steamid",
+        ["Subject.Head"] = "Select the reason for the report",
+        ["Subject.SubHead"] = "For player %PLAYER%",
+        ["Cooldown"] = "Wait %TIME% sec.",
+        ["Sent"] = "Report succesful sent",
+        ["Contact.Error"] = "You did not sent your Discord",
+        ["Contact.Sent"] = "You sent:",
+        ["Contact.SentWait"] = "If you sent the correct discord - wait for a friend request.",
+        ["Check.Text"] = "<color=#c6bdb4><size=32><b>YOU ARE SUMMONED FOR A CHECK-UP</b></size></color>\n<color=#958D85>You have <color=#c6bdb4><b>3 minutes</b></color> to send discord and accept the friend request.\nUse the <b><color=#c6bdb4>/contact</color></b> command to send discord.\n\nTo contact a moderator - use chat, not a command.</color>",
+        ["Chat.Direct.Toast"] = "Received a message from admin, look at the chat!",
+        ["UI.CheckMark"] = "Checked",
+        ["Paid.Announce.Clean"] = "Your complaint about \"%SUSPECT_NAME%\" has been checked!\n<size=12><color=#81C5F480>As a result of the check, no violations were found</color ></size>",
+        ["Paid.Announce.Ban"] = "Your complaint about \"%SUSPECT_NAME%\" has been verified!\n<color=#F7D4D080><size=12>Player banned, reason: %REASON%</ size></color>",
+      }, this, "en");
     }
 
 
@@ -2639,7 +2688,14 @@ namespace Oxide.Plugins
 
     private void RA_CustomAlert(string message, object data = null, List<string> custom_links = null, string custom_icon = null)
     {
-      _Worker?.Action.SendCustomAlert(message, data, custom_links, custom_icon);
+      Warning("API 'RA_CustomAlert' устарел, перейдите на 'RA_CreateAlert'", "API 'RA_CustomAlert' is deprecated, use 'RA_CreateAlert' instead");
+
+      _Worker?.Action.SendCustomAlertDeprecated(message, data, custom_links, custom_icon);
+    }
+
+    private void RA_CreateAlert(string message, object data = null, object meta = null)
+    {
+      _Worker?.Action.SendCustomAlert(message, data, meta);
     }
 
     #endregion
@@ -3052,64 +3108,6 @@ namespace Oxide.Plugins
         }
         Puts($"< {value.response}");
       }
-    }
-
-    [ConsoleCommand("ra.ban_server")]
-    private void CmdConsoleBanServerDeprecated(ConsoleSystem.Arg args)
-    {
-      if (args.Player() != null && !args.Player().IsAdmin)
-      {
-        return;
-      }
-
-      Log(
-        "Команда 'ra.ban_server' устарела и скоро будет удалена",
-        "Command 'ra.ban_server' deprecated and will be deleted soon"
-      );
-
-      if (!args.HasArgs(2))
-      {
-        Log(
-          "ra.ban_server <steam_id> <reason> <duration?>\n<duration> - необязателен, заполняется в формате 2d5h",
-          "ra.ban_server <steam_id> <причина> <время?>\n<duration> - optional, use as 2d10h"
-        );
-        return;
-      }
-
-      var steam_id = args.Args[0];
-      var reason = args.Args[1];
-      var duration = args.HasArgs(3) ? args.Args[2] : "";
-
-      _Worker.Action.SendBan(steam_id, reason, duration, false, true);
-    }
-
-    [ConsoleCommand("ra.ban_global")]
-    private void CmdConsoleBanGlobalDeprecated(ConsoleSystem.Arg args)
-    {
-      if (args.Player() != null && !args.Player().IsAdmin)
-      {
-        return;
-      }
-
-      Log(
-        "Команда 'ra.ban_global' устарела и скоро будет удалена",
-        "Command 'ra.ban_global' deprecated and will be deleted soon"
-      );
-
-      if (!args.HasArgs(2))
-      {
-        Log(
-          "ra.ban_global <steam_id> <reason> <duration?>\n<duration> - необязателен, заполняется в формате 2d5h",
-          "ra.ban_global <steam_id> <причина> <время?>\n<duration> - optional, use as 2d10h"
-        );
-        return;
-      }
-
-      var steam_id = args.Args[0];
-      var reason = args.Args[1];
-      var duration = args.HasArgs(3) ? args.Args[2] : "";
-
-      _Worker.Action.SendBan(steam_id, reason, duration, true, true);
     }
 
     [ConsoleCommand("ra.ban")]
