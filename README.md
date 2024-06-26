@@ -49,7 +49,7 @@
         // Любая ссылка с картинкой
         string custom_icon = null;
         // Если true, не будет отображаться в таблице, а только в профиле игрока
-        bool hide_in_table = false;
+        bool profile_only = false;
         // Список SteamID игроков к которым должен быть привязан алерт. По умолчанию те, чьи ID указаны в сообщении
         List<string> custom_links = null;
    }
