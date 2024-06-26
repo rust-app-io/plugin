@@ -1147,11 +1147,11 @@ namespace Oxide.Plugins
 
               if (ban.steam_id == steamId)
               {
-                var format = ban.expired_at == 0 ? _Settings.ban_reason_format : _Settings.ban_reason_format_temporary;
+                var format = ban.expired_at == 0 ? _RustApp.lang.GetMessage("System.Ban.Perm.Kick", _RustApp, steamId) : _RustApp.lang.GetMessage("System.Ban.Temp.Kick", _RustApp, steamId);
 
                 if (ban.sync_project_id != 0)
                 {
-                  format = ban.expired_at == 0 ? _Settings.ban_sync_reason_format : _Settings.ban_sync_reason_format;
+                  format = ban.expired_at == 0 ? _RustApp.lang.GetMessage("System.BanSync.Perm.Kick", _RustApp, steamId) : _RustApp.lang.GetMessage("System.BanSync.Perm.Kick", _RustApp, steamId);
                 }
 
                 var time = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(ban.expired_at + 3 * 60 * 60 * 1_000).ToString("dd.MM.yyyy HH:mm");
@@ -1162,7 +1162,7 @@ namespace Oxide.Plugins
               }
               else
               {
-                _RustApp.CloseConnection(steamId, _Settings.ban_reason_ip_format);
+                _RustApp.CloseConnection(steamId, _RustApp.lang.GetMessage("System.Ban.Ip.Kick", _RustApp, steamId));
 
                 CreateAlertForIpBan(ban, steamId);
               }
@@ -1934,9 +1934,12 @@ namespace Oxide.Plugins
 
         if (_Settings.ban_enable_broadcast)
         {
-          var msg = _Settings.ban_broadcast_format.Replace("%TARGET%", payload.name).Replace("%REASON%", payload.reason);
+          foreach (var player in BasePlayer.activePlayerList)
+          {
+            var msg = _RustApp.lang.GetMessage("System.Ban.Broadcast", _RustApp, player.UserIDString).Replace("%TARGET%", payload.name).Replace("%REASON%", payload.reason);
 
-          _RustApp.SendGlobalMessage(msg);
+            _RustApp.SendMessage(player, msg);
+          }
         }
 
         // Ip doesnot matter in this context
@@ -2078,12 +2081,11 @@ namespace Oxide.Plugins
 
       private object OnChatMessage(QueueChatMessage payload)
       {
-        var format = payload.target_steam_id is string ? _Settings.chat_direct_format : _Settings.chat_global_format;
-
-        var message = format.Replace("%CLIENT_TAG%", payload.initiator_name).Replace("%MSG%", payload.message);
 
         if (payload.target_steam_id is string)
         {
+          var message = _RustApp.lang.GetMessage("System.Chat.Direct", _RustApp, payload.target_steam_id).Replace("%CLIENT_TAG%", payload.initiator_name).Replace("%MSG%", payload.message);
+
           var player = BasePlayer.Find(payload.target_steam_id);
 
           if (player == null || !player.IsConnected)
@@ -2098,6 +2100,8 @@ namespace Oxide.Plugins
         {
           foreach (var player in BasePlayer.activePlayerList)
           {
+            var message = _RustApp.lang.GetMessage("System.Chat.Global", _RustApp, player.UserIDString).Replace("%CLIENT_TAG%", payload.initiator_name).Replace("%MSG%", payload.message);
+
             _RustApp.SendMessage(player, message);
           }
         }
@@ -2203,35 +2207,11 @@ namespace Oxide.Plugins
       [JsonProperty("[Chat] SteamID for message avatar (default account contains RustApp logo)")]
       public string chat_default_avatar_steamid = "76561198134964268";
 
-      [JsonProperty("[Chat] Global message format")]
-      public string chat_global_format = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%";
-
-      [JsonProperty("[Chat] Direct message format")]
-      public string chat_direct_format = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%";
-
       [JsonProperty("[Check] Command to send contact")]
       public string check_contact_command = "contact";
 
       [JsonProperty("[Ban] Enable broadcast server bans")]
       public bool ban_enable_broadcast = true;
-
-      [JsonProperty("[Ban] Ban broadcast format")]
-      public string ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>";
-
-      [JsonProperty("[Ban] Kick message format (%REASON% - ban reason)")]
-      public string ban_reason_format = "Вы навсегда забанены на этом сервере причина: %REASON%";
-
-      [JsonProperty("[Ban] Kick message format temporary (%REASON% - ban reason)")]
-      public string ban_reason_format_temporary = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%";
-
-      [JsonProperty("[Ban] Message format when kicking due to IP")]
-      public string ban_reason_ip_format = "Вам ограничен вход на сервер!";
-
-      [JsonProperty("[Ban-Sync] Kick message format (%REASON% - ban reason)")]
-      public string ban_sync_reason_format = "Обнаружена блокировка на другом проекте, причина: %REASON%";
-
-      [JsonProperty("[Ban-Sync] Kick message format temporary (%REASON% - ban reason)")]
-      public string ban_sync_reason_format_temporary = "Обнаружена блокировка на другом проекте до %TIME% МСК, причина: %REASON%";
 
       [JsonProperty("[Custom Actions] Allow custom actions")]
       public bool custom_actions_allow = true;
@@ -2247,19 +2227,7 @@ namespace Oxide.Plugins
           report_ui_show_check_in = 7,
 
           chat_default_avatar_steamid = "76561198134964268",
-          chat_global_format = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
-          chat_direct_format = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
-
           ban_enable_broadcast = true,
-          ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
-
-          ban_reason_format = "Вы навсегда забанены на этом сервере, причина: %REASON%",
-          ban_reason_format_temporary = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%",
-          ban_reason_ip_format = "Вам ограничен вход на сервер!",
-
-          ban_sync_reason_format = "Обнаружена блокировка на другом проекте, причина: %REASON%",
-          ban_sync_reason_format_temporary = "Обнаружена блокировка на другом проекте до %TIME% МСК, причина: %REASON%",
-
           custom_actions_allow = true
         };
       }
@@ -2616,6 +2584,17 @@ namespace Oxide.Plugins
         ["UI.CheckMark"] = "Проверен",
         ["Paid.Announce.Clean"] = "Ваша жалоба на \"%SUSPECT_NAME%\" была проверена!\n<size=12><color=#81C5F480>В результате проверки, нарушений не обнаружено</color></size>",
         ["Paid.Announce.Ban"] = "Ваша жалоба на \"%SUSPECT_NAME%\" была проверена!\n<color=#F7D4D080><size=12>Игрок заблокирован, причина: %REASON%</size></color>",
+
+        ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
+        ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
+
+        ["System.Ban.Broadcast"] = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
+        ["System.Ban.Temp.Kick"] = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%",
+        ["System.Ban.Perm.Kick"] = "Вы навсегда забанены на этом сервере, причина: %REASON%",
+        ["System.Ban.Ip.Kick"] = "Вам ограничен вход на сервер!",
+
+        ["System.BanSync.Temp.Kick"] = "Обнаружена блокировка на другом проекте до %TIME% МСК, причина: %REASON%",
+        ["System.BanSync.Perm.Kick"] = "Обнаружена блокировка на другом проекте, причина: %REASON%",
       }, this, "ru");
 
       lang.RegisterMessages(new Dictionary<string, string>
@@ -2638,6 +2617,17 @@ namespace Oxide.Plugins
         ["UI.CheckMark"] = "Checked",
         ["Paid.Announce.Clean"] = "Your complaint about \"%SUSPECT_NAME%\" has been checked!\n<size=12><color=#81C5F480>As a result of the check, no violations were found</color ></size>",
         ["Paid.Announce.Ban"] = "Your complaint about \"%SUSPECT_NAME%\" has been verified!\n<color=#F7D4D080><size=12>Player banned, reason: %REASON%</ size></color>",
+
+        ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>DM from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
+        ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Message from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
+
+        ["System.Ban.Broadcast"] = "Player <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>was banned.\n<size=12>- reason: <color=#d3d3d3>%REASON%</color></size>",
+        ["System.Ban.Temp.Kick"] = "You are banned until %TIME% МСК, reason: %REASON%",
+        ["System.Ban.Perm.Kick"] = "You have perm ban, reason: %REASON%",
+        ["System.Ban.Ip.Kick"] = "You are restricted from entering the server!",
+
+        ["System.BanSync.Temp.Kick"] = "Detected ban on another project until %TIME% МСК, reason: %REASON%",
+        ["System.BanSync.Perm.Kick"] = "Detected ban on another project, reason: %REASON%",
       }, this, "en");
     }
 
