@@ -957,7 +957,7 @@ namespace Oxide.Plugins
       class CustomAlertMeta
       {
         public string custom_icon = null;
-        public bool hide_in_table = false;
+        public bool profile_only = false;
         public List<string> custom_links = null;
       }
 
@@ -989,7 +989,7 @@ namespace Oxide.Plugins
           data = data,
 
           custom_icon = json.custom_icon,
-          hide_in_table = json.hide_in_table,
+          hide_in_table = json.profile_only,
           custom_links = json.custom_links
         })
           .Execute(
