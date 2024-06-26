@@ -1151,7 +1151,7 @@ namespace Oxide.Plugins
 
                 if (ban.sync_project_id != 0)
                 {
-                  format = ban.expired_at == 0 ? _RustApp.lang.GetMessage("System.BanSync.Perm.Kick", _RustApp, steamId) : _RustApp.lang.GetMessage("System.BanSync.Perm.Kick", _RustApp, steamId);
+                  format = ban.expired_at == 0 ? _RustApp.lang.GetMessage("System.BanSync.Perm.Kick", _RustApp, steamId) : _RustApp.lang.GetMessage("System.BanSync.Temp.Kick", _RustApp, steamId);
                 }
 
                 var time = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(ban.expired_at + 3 * 60 * 60 * 1_000).ToString("dd.MM.yyyy HH:mm");
