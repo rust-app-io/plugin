@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.4")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.5")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -2787,8 +2787,7 @@ namespace Oxide.Plugins
 
     private void OnPlayerChat(BasePlayer player, string message, ConVar.Chat.ChatChannel channel)
     {
-      // Сохраняем только глобальный и командный чат
-      if (channel != ConVar.Chat.ChatChannel.Team && channel != ConVar.Chat.ChatChannel.Global)
+      if (channel != ConVar.Chat.ChatChannel.Team && channel != ConVar.Chat.ChatChannel.Global && channel != ConVar.Chat.ChatChannel.Local)
       {
         return;
       }
