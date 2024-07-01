@@ -60,7 +60,7 @@
    plugins.Find("RustApp").Call("RA_CreateAlert", "Привет от 76561198121100397", new {
      test_payload = Performance.current.frameRate,
    }, new {
-     custom_icon = "https://s3.rustapp.io/avatar-project/1695419722879-43ad94311081cd8185649d49.jpg",
+     custom_icon = "https://www.rustedit.io/images/imagelibrary/human-skull.png",
    });
    ```
 
