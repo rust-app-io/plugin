@@ -61,6 +61,7 @@
      test_payload = Performance.current.frameRate,
    }, new {
      custom_icon = "https://www.rustedit.io/images/imagelibrary/rock.png",
+     name = "Моё оповещение"
    });
    ```
 
