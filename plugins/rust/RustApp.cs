@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.5")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.6")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -933,35 +933,14 @@ namespace Oxide.Plugins
         );
       }
 
-      public void @SendCustomAlertDeprecated(string message, object data = null, List<string> custom_links = null, string custom_icon = null)
-      {
-        if (!IsReady())
-        {
-          return;
-        }
-
-        Request<object>(CourtUrls.SendCustomAlert, RequestMethod.POST, new { msg = message, data, custom_links, custom_icon })
-          .Execute(
-            null,
-            (err) =>
-            {
-              _RustApp.Puts(err);
-              _RustApp.Error(
-                $"Не удалось отправить кастомное оповещение ({message})",
-                $"Failed to send custom-alert ({message})"
-              );
-            }
-          );
-      }
-
       class CustomAlertMeta
       {
         public string custom_icon = null;
-        public bool profile_only = false;
+        public string name = "";
         public List<string> custom_links = null;
       }
 
-      public void @SendCustomAlert(string message, object data = null, object meta = null)
+      public void @SendCustomAlert(Plugin plugin, string message, object data = null, object meta = null)
       {
         if (!IsReady())
         {
@@ -989,7 +968,8 @@ namespace Oxide.Plugins
           data = data,
 
           custom_icon = json.custom_icon,
-          hide_in_table = json.profile_only,
+          hide_in_table = false,
+          category = $"{plugin.Name} • {json.name}",
           custom_links = json.custom_links
         })
           .Execute(
@@ -2530,7 +2510,7 @@ namespace Oxide.Plugins
     // References for RB plugins to get RB status
     [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting;
 
-    #endregion 
+    #endregion
 
     #region Initialization
 
@@ -2676,16 +2656,9 @@ namespace Oxide.Plugins
       });
     }
 
-    private void RA_CustomAlert(string message, object data = null, List<string> custom_links = null, string custom_icon = null)
+    private void RA_CreateAlert(Plugin plugin, string message, object data = null, object meta = null)
     {
-      Warning("API 'RA_CustomAlert' устарел, перейдите на 'RA_CreateAlert'", "API 'RA_CustomAlert' is deprecated, use 'RA_CreateAlert' instead");
-
-      _Worker?.Action.SendCustomAlertDeprecated(message, data, custom_links, custom_icon);
-    }
-
-    private void RA_CreateAlert(string message, object data = null, object meta = null)
-    {
-      _Worker?.Action.SendCustomAlert(message, data, meta);
+      _Worker?.Action.SendCustomAlert(plugin, message, data, meta);
     }
 
     #endregion

@@ -37,7 +37,7 @@
    <br>Вы можете создавать свои собственные оповещения о любых действиях игрока при помощи API.
    
    ```csharp
-   plugins.Find("RustApp")?.Call("RA_CreateAlert", message, object? data, object? meta)
+   plugins.Find("RustApp")?.Call("RA_CreateAlert", Plugin original, string message, object? data, object? meta)
    ```
 
    `string message` - любая произвольная строка\
@@ -48,8 +48,8 @@
    interface CustomAlertMeta {
         // Любая ссылка с картинкой
         string custom_icon = null;
-        // Если true, не будет отображаться в таблице, а только в профиле игрока
-        bool profile_only = false;
+        // Название оповещение, для фильтрации по нему
+        string name = "";
         // Список SteamID игроков к которым должен быть привязан алерт. По умолчанию те, чьи ID указаны в сообщении
         List<string> custom_links = null;
    }
@@ -57,7 +57,7 @@
 
    ```csharp
    // Конкретный пример использования
-   plugins.Find("RustApp").Call("RA_CreateAlert", "Привет от 76561198121100397", new {
+   plugins.Find("RustApp").Call("RA_CreateAlert", this, "Привет от 76561198121100397", new {
      test_payload = Performance.current.frameRate,
    }, new {
      custom_icon = "https://www.rustedit.io/images/imagelibrary/rock.png",
