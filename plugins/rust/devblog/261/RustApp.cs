@@ -1109,7 +1109,7 @@ namespace Oxide.Plugins
 
         var banChecks = PlayersCollection.ToDictionary(v => v.Key, v => v.Value);
 
-        /*@FetchBans(
+        @FetchBans(
           banChecks,
           (steamId, ban) =>
           {
@@ -1134,7 +1134,7 @@ namespace Oxide.Plugins
                   format = ban.expired_at == 0 ? _RustApp.lang.GetMessage("System.BanSync.Perm.Kick", _RustApp, steamId) : _RustApp.lang.GetMessage("System.BanSync.Temp.Kick", _RustApp, steamId);
                 }
 
-                var time = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(ban.expired_at + 3 * 60 * 60 * 1_000).ToString("dd.MM.yyyy HH:mm");
+                var time = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(ban.expired_at + 3 * 60 * 60 * 1000).ToString("dd.MM.yyyy HH:mm");
 
                 var text = format.Replace("%REASON%", ban.reason).Replace("%TIME%", time);
 
@@ -1182,7 +1182,7 @@ namespace Oxide.Plugins
           }
         );
 
-        PlayersCollection = new Dictionary<string, string>();*/
+        PlayersCollection = new Dictionary<string, string>();
       }
 
       public void CreateAlertForIpBan(BanEntry ban, string steamId)
