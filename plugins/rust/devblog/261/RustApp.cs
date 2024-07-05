@@ -1,4 +1,4 @@
-﻿#define RU
+#define RU
 
 using Newtonsoft.Json;
 using Oxide.Core;
@@ -43,16 +43,13 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Text;
 using UnityEngine;
-
-// Logic from DiscordSignLogger by MJSU 
-// https://umod.org/plugins/discord-sign-logger
 using Color = System.Drawing.Color;
 using Graphics = System.Drawing.Graphics;
 using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts & Frizen(adaptation)", "1.7.2devblog261")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts & King.(ADAPTATION)", "1.7.6")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -461,7 +458,7 @@ namespace Oxide.Plugins
         payload.coords = GridReference(player.transform.position);
 
         payload.steam_id = player.UserIDString;
-        payload.steam_name = player.displayName;
+        payload.steam_name = player.displayName.Replace("<blank>", "blank");
         payload.ip = _RustApp.IPAddressWithoutPort(player.Connection.ipaddress);
 
         payload.status = "active";
@@ -487,7 +484,7 @@ namespace Oxide.Plugins
         var payload = new PluginPlayerPayload();
 
         payload.steam_id = connection.userid.ToString();
-        payload.steam_name = connection.username;
+        payload.steam_name = connection.username.Replace("<blank>", "blank");
         payload.ip = _RustApp.IPAddressWithoutPort(connection.ipaddress);
 
         payload.status = status;
@@ -936,14 +933,45 @@ namespace Oxide.Plugins
         );
       }
 
-      public void @SendCustomAlert(string message, object data = null, List<string> custom_links = null, string custom_icon = null)
+      class CustomAlertMeta
+      {
+        public string custom_icon = null;
+        public string name = "";
+        public List<string> custom_links = null;
+      }
+
+      public void @SendCustomAlert(Plugin plugin, string message, object data = null, object meta = null)
       {
         if (!IsReady())
         {
           return;
         }
 
-        Request<object>(CourtUrls.SendCustomAlert, RequestMethod.POST, new { msg = message, data, custom_links, custom_icon })
+        CustomAlertMeta json = new CustomAlertMeta();
+
+        try
+        {
+          if (meta != null)
+          {
+            json = JsonConvert.DeserializeObject<CustomAlertMeta>(JsonConvert.SerializeObject(meta ?? new CustomAlertMeta()));
+          }
+        }
+        catch
+        {
+          _RustApp.Error("Переданы неверные параметры CustomAlertMeta, будут использованы стандартные!", "Wrong CustomAlertMeta params, default will be used!");
+        }
+
+
+        Request<object>(CourtUrls.SendCustomAlert, RequestMethod.POST, new
+        {
+          msg = message,
+          data = data,
+
+          custom_icon = json.custom_icon,
+          hide_in_table = false,
+          category = $"{plugin.Name} • {json.name}",
+          custom_links = json.custom_links
+        })
           .Execute(
             null,
             (err) =>
@@ -1099,20 +1127,26 @@ namespace Oxide.Plugins
 
               if (ban.steam_id == steamId)
               {
-                var format = ban.expired_at == 0 ? _Settings.ban_reason_format : _Settings.ban_reason_format_temporary;
+                var format = ban.expired_at == 0 ? _RustApp.lang.GetMessage("System.Ban.Perm.Kick", _RustApp, steamId) : _RustApp.lang.GetMessage("System.Ban.Temp.Kick", _RustApp, steamId);
+
                 if (ban.sync_project_id != 0)
                 {
-                  format = ban.expired_at == 0 ? _Settings.ban_sync_reason_format : _Settings.ban_sync_reason_format;
+                  format = ban.expired_at == 0 ? _RustApp.lang.GetMessage("System.BanSync.Perm.Kick", _RustApp, steamId) : _RustApp.lang.GetMessage("System.BanSync.Temp.Kick", _RustApp, steamId);
                 }
+
                 var time = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(ban.expired_at + 3 * 60 * 60 * 1000).ToString("dd.MM.yyyy HH:mm");
+
                 var text = format.Replace("%REASON%", ban.reason).Replace("%TIME%", time);
+
                 _RustApp.CloseConnection(steamId, text);
               }
               else
               {
-                _RustApp.CloseConnection(steamId, _Settings.ban_reason_ip_format);
+                _RustApp.CloseConnection(steamId, _RustApp.lang.GetMessage("System.Ban.Ip.Kick", _RustApp, steamId));
+
                 CreateAlertForIpBan(ban, steamId);
               }
+
             }
           },
           () =>
@@ -1553,7 +1587,6 @@ namespace Oxide.Plugins
     public class QueueWorker : BaseWorker
     {
       private List<string> ProcessedQueues = new List<string>();
-
       public Dictionary<string, bool> Notices = new Dictionary<string, bool>();
 
       public class QueueElement
@@ -1881,9 +1914,12 @@ namespace Oxide.Plugins
 
         if (_Settings.ban_enable_broadcast)
         {
-          var msg = _Settings.ban_broadcast_format.Replace("%TARGET%", payload.name).Replace("%REASON%", payload.reason);
+          foreach (var player in BasePlayer.activePlayerList)
+          {
+            var msg = _RustApp.lang.GetMessage("System.Ban.Broadcast", _RustApp, player.UserIDString).Replace("%TARGET%", payload.name).Replace("%REASON%", payload.reason);
 
-          _RustApp.SendGlobalMessage(msg);
+            _RustApp.SendMessage(player, msg);
+          }
         }
 
         // Ip doesnot matter in this context
@@ -2025,12 +2061,11 @@ namespace Oxide.Plugins
 
       private object OnChatMessage(QueueChatMessage payload)
       {
-        var format = payload.target_steam_id is string ? _Settings.chat_direct_format : _Settings.chat_global_format;
-
-        var message = format.Replace("%CLIENT_TAG%", payload.initiator_name).Replace("%MSG%", payload.message);
 
         if (payload.target_steam_id is string)
         {
+          var message = _RustApp.lang.GetMessage("System.Chat.Direct", _RustApp, payload.target_steam_id).Replace("%CLIENT_TAG%", payload.initiator_name).Replace("%MSG%", payload.message);
+
           var player = BasePlayer.Find(payload.target_steam_id);
 
           if (player == null || !player.IsConnected)
@@ -2045,6 +2080,8 @@ namespace Oxide.Plugins
         {
           foreach (var player in BasePlayer.activePlayerList)
           {
+            var message = _RustApp.lang.GetMessage("System.Chat.Global", _RustApp, player.UserIDString).Replace("%CLIENT_TAG%", payload.initiator_name).Replace("%MSG%", payload.message);
+
             _RustApp.SendMessage(player, message);
           }
         }
@@ -2100,7 +2137,7 @@ namespace Oxide.Plugins
         return request;
       }
 
-      protected bool IsReady()
+      public bool IsReady()
       {
         if (_RustApp == null || !_RustApp.IsLoaded)
         {
@@ -2150,35 +2187,11 @@ namespace Oxide.Plugins
       [JsonProperty("[Chat] SteamID for message avatar (default account contains RustApp logo)")]
       public string chat_default_avatar_steamid = "76561198134964268";
 
-      [JsonProperty("[Chat] Global message format")]
-      public string chat_global_format = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%";
-
-      [JsonProperty("[Chat] Direct message format")]
-      public string chat_direct_format = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%";
-
       [JsonProperty("[Check] Command to send contact")]
       public string check_contact_command = "contact";
 
       [JsonProperty("[Ban] Enable broadcast server bans")]
       public bool ban_enable_broadcast = true;
-
-      [JsonProperty("[Ban] Ban broadcast format")]
-      public string ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>";
-
-      [JsonProperty("[Ban] Kick message format (%REASON% - ban reason)")]
-      public string ban_reason_format = "Вы навсегда забанены на этом сервере причина: %REASON%";
-
-      [JsonProperty("[Ban] Kick message format temporary (%REASON% - ban reason)")]
-      public string ban_reason_format_temporary = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%";
-
-      [JsonProperty("[Ban] Message format when kicking due to IP")]
-      public string ban_reason_ip_format = "Вам ограничен вход на сервер!";
-
-      [JsonProperty("[Ban-Sync] Kick message format (%REASON% - ban reason)")]
-      public string ban_sync_reason_format = "Обнаружена блокировка на другом проекте, причина: %REASON%";
-
-      [JsonProperty("[Ban-Sync] Kick message format temporary (%REASON% - ban reason)")]
-      public string ban_sync_reason_format_temporary = "Обнаружена блокировка на другом проекте до %TIME% МСК, причина: %REASON%";
 
       [JsonProperty("[Custom Actions] Allow custom actions")]
       public bool custom_actions_allow = true;
@@ -2188,24 +2201,13 @@ namespace Oxide.Plugins
         return new Configuration
         {
           report_ui_commands = new List<string> { "report", "reports" },
-          report_ui_reasons = new List<string> { "Чит", "Макрос", "Багоюз" },
+          report_ui_reasons = new List<string> { "Cheat", "Macros", "Abuse" },
           report_ui_cooldown = 300,
           report_ui_auto_parse = true,
           report_ui_show_check_in = 7,
 
           chat_default_avatar_steamid = "76561198134964268",
-          chat_global_format = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
-          chat_direct_format = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
-
           ban_enable_broadcast = true,
-          ban_broadcast_format = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
-          ban_reason_format = "Вы навсегда забанены на этом сервере, причина: %REASON%",
-          ban_reason_format_temporary = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%",
-          ban_reason_ip_format = "Вам ограничен вход на сервер!",
-
-          ban_sync_reason_format = "Обнаружена блокировка на другом проекте, причина: %REASON%",
-          ban_sync_reason_format_temporary = "Обнаружена блокировка на другом проекте до %TIME% МСК, причина: %REASON%",
-
           custom_actions_allow = true
         };
       }
@@ -2263,25 +2265,20 @@ namespace Oxide.Plugins
 
       if (!redraw)
       {
-        CuiHelper.DestroyUi(player, ReportLayer);
-
-
         container.Add(new CuiPanel
         {
           CursorEnabled = true,
           RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" },
-          Image = { Color = HexToRustFormat("#282828E6"), Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat" }
+          Image = { Color = "0 0 0 0.8", Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat" }
         }, "Overlay", ReportLayer);
 
         container.Add(new CuiButton()
         {
           RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" },
-          Button = { Close = ReportLayer, Color = "0 0 0 0" },
+          Button = { Color = HexToRustFormat("#343434"), Sprite = "assets/content/ui/ui.background.transparent.radial.psd", Close = ReportLayer },
           Text = { Text = "" }
         }, ReportLayer);
       }
-
-      CuiHelper.DestroyUi(player, ReportLayer + ".C");
 
       container.Add(new CuiPanel
       {
@@ -2300,21 +2297,21 @@ namespace Oxide.Plugins
       container.Add(new CuiButton()
       {
         RectTransform = { AnchorMin = "0 0", AnchorMax = "1 0.5", OffsetMin = "0 0", OffsetMax = "0 -4" },
-        Button = { Color = $"0.7 0.7 0.7 {(list.Count > 18 && finalList.Count() == 18 ? 0.5 : 0.3)}", Command = list.Count > 18 && finalList.Count() == 18 ? $"UI_RP_ReportPanel search {page + 1}" : "" },
-        Text = { Text = "↓", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-bold.ttf", FontSize = 24, Color = $"0.7 0.7 0.7 {(list.Count > 18 && finalList.Count() == 18 ? 0.9 : 0.2)}" }
+        Button = { Color = HexToRustFormat($"#{(list.Count > 18 && finalList.Count() == 18 ? "D0C6BD4D" : "D0C6BD33")}"), Command = list.Count > 18 && finalList.Count() == 18 ? $"UI_RP_ReportPanel search {page + 1}" : "" },
+        Text = { Text = "↓", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-bold.ttf", FontSize = 24, Color = HexToRustFormat($"{(list.Count > 18 && finalList.Count() == 18 ? "D0C6BD" : "D0C6BD4D")}") }
       }, ReportLayer + ".R", ReportLayer + ".RD");
 
       container.Add(new CuiButton()
       {
         RectTransform = { AnchorMin = "0 0.5", AnchorMax = "1 1", OffsetMin = "0 4", OffsetMax = "0 0" },
-        Button = { Color = $"0.7 0.7 0.7 {(page == 0 ? 0.3 : 0.5)}", Command = page == 0 ? "" : $"UI_RP_ReportPanel search {page - 1}" },
-        Text = { Text = "↑", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-bold.ttf", FontSize = 24, Color = $"0.7 0.7 0.7 {(page == 0 ? 0.2 : 0.9)}" }
+        Button = { Color = HexToRustFormat($"#{(page == 0 ? "D0C6BD33" : "D0C6BD4D")}"), Command = page == 0 ? "" : $"UI_RP_ReportPanel search {page - 1}" },
+        Text = { Text = "↑", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-bold.ttf", FontSize = 24, Color = HexToRustFormat($"{(page == 0 ? "D0C6BD4D" : "D0C6BD")}") }
       }, ReportLayer + ".R", ReportLayer + ".RU");
 
       container.Add(new CuiPanel
       {
         RectTransform = { AnchorMin = "1 1", AnchorMax = "1 1", OffsetMin = "-250 8", OffsetMax = "0 43" },
-        Image = { Color = "1 1 1 0.20" }
+        Image = { Color = HexToRustFormat("#D0C6BD33") }
       }, ReportLayer + ".C", ReportLayer + ".S");
 
       container.Add(new CuiElement
@@ -2322,7 +2319,7 @@ namespace Oxide.Plugins
         Parent = ReportLayer + ".S",
         Components =
             {
-                new CuiInputFieldComponent { Text = $"{lang.GetMessage("Header.Search.Placeholder", this, player.UserIDString)}", FontSize = 14, Font = "robotocondensed-regular.ttf", Align = TextAnchor.MiddleLeft, Command = "UI_RP_ReportPanel search 0"},
+                new CuiInputFieldComponent { Text = $"{lang.GetMessage("Header.Search.Placeholder", this, player.UserIDString)}", FontSize = 14, Font = "robotocondensed-regular.ttf", Color = HexToRustFormat("#D0C6BD80"), Align = TextAnchor.MiddleLeft, Command = "UI_RP_ReportPanel search 0" },
                 new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "10 0", OffsetMax = "-85 0"}
             }
       });
@@ -2330,8 +2327,8 @@ namespace Oxide.Plugins
       container.Add(new CuiButton
       {
         RectTransform = { AnchorMin = "1 0", AnchorMax = "1 1", OffsetMin = "-75 0", OffsetMax = "0 0" },
-        Button = { Color = "0.7 0.7 0.7 0.5" },
-        Text = { Text = $"{lang.GetMessage("Header.Search", this, player.UserIDString)}", Font = "robotocondensed-regular.ttf", FontSize = 14, Align = TextAnchor.MiddleCenter }
+        Button = { Color = HexToRustFormat("#D0C6BD"), Material = "assets/icons/greyout.mat" },
+        Text = { Text = $"{lang.GetMessage("Header.Search", this, player.UserIDString)}", Font = "robotocondensed-bold.ttf", Color = HexToRustFormat("#443F3B"), FontSize = 14, Align = TextAnchor.MiddleCenter }
       }, ReportLayer + ".S", ReportLayer + ".SB");
 
       container.Add(new CuiPanel
@@ -2343,13 +2340,13 @@ namespace Oxide.Plugins
       container.Add(new CuiLabel()
       {
         RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "0 0", OffsetMax = "0 0" },
-        Text = { Text = $"{lang.GetMessage("Header.Find", this, player.UserIDString)} {(search != null && search.Length > 0 ? $"- {(search.Length > 20 ? search.Substring(0, 14).ToUpper() + "..." : search.ToUpper())}" : "")}", Font = "robotocondensed-bold.ttf", FontSize = 24, Align = TextAnchor.UpperLeft }
+        Text = { Text = $"{lang.GetMessage("Header.Find", this, player.UserIDString)} {(search != null && search.Length > 0 ? $"- {(search.Length > 20 ? search.Substring(0, 14).ToUpper() + "..." : search.ToUpper())}" : "")}", Font = "robotocondensed-bold.ttf", Color = HexToRustFormat("#D0C6BD"), FontSize = 24, Align = TextAnchor.UpperLeft }
       }, ReportLayer + ".LT");
 
       container.Add(new CuiLabel()
       {
         RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "0 0", OffsetMax = "0 0" },
-        Text = { Text = search == null || search.Length == 0 ? lang.GetMessage("Header.SubDefault", this, player.UserIDString) : finalList.Count() == 0 ? lang.GetMessage("Header.SubFindEmpty", this, player.UserIDString) : lang.GetMessage("Header.SubFindResults", this, player.UserIDString), Font = "robotocondensed-regular.ttf", FontSize = 14, Align = TextAnchor.LowerLeft, Color = "1 1 1 0.5" }
+        Text = { Text = search == null || search.Length == 0 ? lang.GetMessage("Header.SubDefault", this, player.UserIDString) : finalList.Count() == 0 ? lang.GetMessage("Header.SubFindEmpty", this, player.UserIDString) : lang.GetMessage("Header.SubFindResults", this, player.UserIDString), Font = "robotocondensed-regular.ttf", Color = HexToRustFormat("#D0C6BD4D"), FontSize = 14, Align = TextAnchor.LowerLeft }
       }, ReportLayer + ".LT");
 
 
@@ -2369,7 +2366,7 @@ namespace Oxide.Plugins
             container.Add(new CuiPanel
             {
               RectTransform = { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = $"{x * size + lineMargin * x} -{(y + 1) * size + lineMargin * y}", OffsetMax = $"{(x + 1) * size + lineMargin * x} -{y * size + lineMargin * y}" },
-              Image = { Color = "0.8 0.8 0.8 1" }
+              Image = { Color = HexToRustFormat("#D0C6BD33") }
             }, ReportLayer + ".L", ReportLayer + $".{target.UserIDString}");
 
             container.Add(new CuiElement
@@ -2395,13 +2392,13 @@ namespace Oxide.Plugins
             container.Add(new CuiLabel
             {
               RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "6 16", OffsetMax = "0 0" },
-              Text = { Text = name, Align = TextAnchor.LowerLeft, Font = "robotocondensed-bold.ttf", FontSize = 13, Color = HexToRustFormat("#FFFFFF") }
+              Text = { Text = name, Align = TextAnchor.LowerLeft, Font = "robotocondensed-bold.ttf", FontSize = 13, Color = HexToRustFormat("#D0C6BD") }
             }, ReportLayer + $".{target.UserIDString}");
 
             container.Add(new CuiLabel
             {
               RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "6 5", OffsetMax = "0 0" },
-              Text = { Text = target.UserIDString, Align = TextAnchor.LowerLeft, Font = "robotocondensed-regular.ttf", FontSize = 10, Color = HexToRustFormat("#FFFFFF80") }
+              Text = { Text = target.UserIDString, Align = TextAnchor.LowerLeft, Font = "robotocondensed-regular.ttf", FontSize = 10, Color = HexToRustFormat("#D0C6BD80") }
             }, ReportLayer + $".{target.UserIDString}");
 
             container.Add(new CuiButton()
@@ -2432,7 +2429,7 @@ namespace Oxide.Plugins
             container.Add(new CuiPanel
             {
               RectTransform = { AnchorMin = "0 1", AnchorMax = "0 1", OffsetMin = $"{x * size + lineMargin * x} -{(y + 1) * size + lineMargin * y}", OffsetMax = $"{(x + 1) * size + lineMargin * x} -{y * size + lineMargin * y}" },
-              Image = { Color = "0.8 0.8 0.8 0.25" }
+              Image = { Color = HexToRustFormat("#D0C6BD33") }
             }, ReportLayer + ".L");
           }
         }
@@ -2513,7 +2510,7 @@ namespace Oxide.Plugins
     // References for RB plugins to get RB status
     [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting;
 
-    #endregion 
+    #endregion
 
     #region Initialization
 
@@ -2543,34 +2540,10 @@ namespace Oxide.Plugins
       {
         _Worker = ServerMgr.Instance.gameObject.AddComponent<CourtWorker>();
       });
-
-      RegisterMessages();
     }
 
-    private void RegisterMessages()
+    protected override void LoadDefaultMessages()
     {
-      lang.RegisterMessages(new Dictionary<string, string>
-      {
-        ["Header.Find"] = "FIND PLAYER",
-        ["Header.SubDefault"] = "Who do you want to report?",
-        ["Header.SubFindResults"] = "Here are players, which we found",
-        ["Header.SubFindEmpty"] = "No players was found",
-        ["Header.Search"] = "Search",
-        ["Header.Search.Placeholder"] = "Enter nickname/steamid",
-        ["Subject.Head"] = "Select the reason for the report",
-        ["Subject.SubHead"] = "For player %PLAYER%",
-        ["Cooldown"] = "Wait %TIME% sec.",
-        ["Sent"] = "Report succesful sent",
-        ["Contact.Error"] = "You did not sent your Discord",
-        ["Contact.Sent"] = "You sent:",
-        ["Contact.SentWait"] = "If you sent the correct discord - wait for a friend request.",
-        ["Check.Text"] = "<color=#c6bdb4><size=32><b>YOU ARE SUMMONED FOR A CHECK-UP</b></size></color>\n<color=#958D85>You have <color=#c6bdb4><b>3 minutes</b></color> to send discord and accept the friend request.\nUse the <b><color=#c6bdb4>/contact</color></b> command to send discord.\n\nTo contact a moderator - use chat, not a command.</color>",
-        ["Chat.Direct.Toast"] = "Received a message from admin, look at the chat!",
-        ["UI.CheckMark"] = "Checked",
-        ["Paid.Announce.Clean"] = "Your complaint about \"%SUSPECT_NAME%\" has been checked!\n<size=12><color=#81C5F480>As a result of the check, no violations were found</color ></size>",
-        ["Paid.Announce.Ban"] = "Your complaint about \"%SUSPECT_NAME%\" has been verified!\n<color=#F7D4D080><size=12>Player banned, reason: %REASON%</ size></color>",
-      }, this, "en");
-
       lang.RegisterMessages(new Dictionary<string, string>
       {
         ["Header.Find"] = "НАЙТИ ИГРОКА",
@@ -2591,7 +2564,51 @@ namespace Oxide.Plugins
         ["UI.CheckMark"] = "Проверен",
         ["Paid.Announce.Clean"] = "Ваша жалоба на \"%SUSPECT_NAME%\" была проверена!\n<size=12><color=#81C5F480>В результате проверки, нарушений не обнаружено</color></size>",
         ["Paid.Announce.Ban"] = "Ваша жалоба на \"%SUSPECT_NAME%\" была проверена!\n<color=#F7D4D080><size=12>Игрок заблокирован, причина: %REASON%</size></color>",
+
+        ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
+        ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
+
+        ["System.Ban.Broadcast"] = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
+        ["System.Ban.Temp.Kick"] = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%",
+        ["System.Ban.Perm.Kick"] = "Вы навсегда забанены на этом сервере, причина: %REASON%",
+        ["System.Ban.Ip.Kick"] = "Вам ограничен вход на сервер!",
+
+        ["System.BanSync.Temp.Kick"] = "Обнаружена блокировка на другом проекте до %TIME% МСК, причина: %REASON%",
+        ["System.BanSync.Perm.Kick"] = "Обнаружена блокировка на другом проекте, причина: %REASON%",
       }, this, "ru");
+
+      lang.RegisterMessages(new Dictionary<string, string>
+      {
+        ["Header.Find"] = "FIND PLAYER",
+        ["Header.SubDefault"] = "Who do you want to report?",
+        ["Header.SubFindResults"] = "Here are players, which we found",
+        ["Header.SubFindEmpty"] = "No players was found",
+        ["Header.Search"] = "Search",
+        ["Header.Search.Placeholder"] = "Enter nickname/steamid",
+        ["Subject.Head"] = "Select the reason for the report",
+        ["Subject.SubHead"] = "For player %PLAYER%",
+        ["Cooldown"] = "Wait %TIME% sec.",
+        ["Sent"] = "Report succesful sent",
+        ["Contact.Error"] = "You did not sent your Discord",
+        ["Contact.Sent"] = "You sent:",
+        ["Contact.SentWait"] = "If you sent the correct discord - wait for a friend request.",
+        ["Check.Text"] = "<color=#c6bdb4><size=32><b>YOU ARE SUMMONED FOR A CHECK-UP</b></size></color>\n<color=#958D85>You have <color=#c6bdb4><b>3 minutes</b></color> to send discord and accept the friend request.\nUse the <b><color=#c6bdb4>/contact</color></b> command to send discord.\n\nTo contact a moderator - use chat, not a command.</color>",
+        ["Chat.Direct.Toast"] = "Received a message from admin, look at the chat!",
+        ["UI.CheckMark"] = "Checked",
+        ["Paid.Announce.Clean"] = "Your complaint about \"%SUSPECT_NAME%\" has been checked!\n<size=12><color=#81C5F480>As a result of the check, no violations were found</color ></size>",
+        ["Paid.Announce.Ban"] = "Your complaint about \"%SUSPECT_NAME%\" has been verified!\n<color=#F7D4D080><size=12>Player banned, reason: %REASON%</ size></color>",
+
+        ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>DM from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
+        ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Message from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
+
+        ["System.Ban.Broadcast"] = "Player <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>was banned.\n<size=12>- reason: <color=#d3d3d3>%REASON%</color></size>",
+        ["System.Ban.Temp.Kick"] = "You are banned until %TIME% МСК, reason: %REASON%",
+        ["System.Ban.Perm.Kick"] = "You have perm ban, reason: %REASON%",
+        ["System.Ban.Ip.Kick"] = "You are restricted from entering the server!",
+
+        ["System.BanSync.Temp.Kick"] = "Detected ban on another project until %TIME% МСК, reason: %REASON%",
+        ["System.BanSync.Perm.Kick"] = "Detected ban on another project, reason: %REASON%",
+      }, this, "en");
     }
 
 
@@ -2624,6 +2641,11 @@ namespace Oxide.Plugins
 
     private void RA_ReportSend(string initiator_steam_id, string target_steam_id, string reason, string message = "")
     {
+      if (initiator_steam_id == target_steam_id)
+      {
+        return;
+      }
+
       _Worker?.Update.SaveReport(new PluginReportEntry
       {
         initiator_steam_id = initiator_steam_id,
@@ -2634,10 +2656,9 @@ namespace Oxide.Plugins
       });
     }
 
-
-    private void RA_CustomAlert(string message, object data = null, List<string> custom_links = null, string custom_icon = null)
+    private void RA_CreateAlert(Plugin plugin, string message, object data = null, object meta = null)
     {
-      _Worker?.Action.SendCustomAlert(message, data, custom_links, custom_icon);
+      _Worker?.Action.SendCustomAlert(plugin, message, data, meta);
     }
 
     #endregion
@@ -2739,7 +2760,6 @@ namespace Oxide.Plugins
 
     private void OnPlayerChat(BasePlayer player, string message, ConVar.Chat.ChatChannel channel)
     {
-      // Сохраняем только глобальный и командный чат
       if (channel != ConVar.Chat.ChatChannel.Team && channel != ConVar.Chat.ChatChannel.Global)
       {
         return;
@@ -2757,9 +2777,19 @@ namespace Oxide.Plugins
 
     private void OnEntityKill(BaseNetworkable entity)
     {
+      if (entity == null || entity.ShortPrefabName == null)
+      {
+        return;
+      }
+
       var whiteList = new List<string> { "photoframe", "spinner.wheel" };
 
       if (!entity.ShortPrefabName.StartsWith("sign.") || whiteList.Any(v => entity.ShortPrefabName.Contains(v)))
+      {
+        return;
+      }
+
+      if (_Worker?.Update == null || !_Worker.Update.IsReady())
       {
         return;
       }
@@ -2769,12 +2799,12 @@ namespace Oxide.Plugins
 
     private void OnNewSave(string saveName)
     {
-      timer.Once(10, () =>
+      // Remove in 5 minutes
+      timer.Once(300, () =>
       {
         _Worker.Action.SendWipe((a) => { });
       });
     }
-
 
     #endregion
 
@@ -2855,7 +2885,7 @@ namespace Oxide.Plugins
             container.Add(new CuiButton()
             {
               RectTransform = { AnchorMin = $"{(leftAlign ? -1 : 2)} 0", AnchorMax = $"{(leftAlign ? -2 : 3)} 1", OffsetMin = $"-500 -500", OffsetMax = $"500 500" },
-              Button = { Close = $"{ReportLayer}.T", Color = HexToRustFormat("#282828"), Sprite = "assets/content/ui/ui.circlegradient.png" }
+              Button = { Close = $"{ReportLayer}.T", Color = HexToRustFormat("#343434"), Sprite = "assets/content/ui/ui.circlegradient.png" }
             }, ReportLayer + $".T");
 
             container.Add(new CuiButton()
@@ -2868,23 +2898,23 @@ namespace Oxide.Plugins
             container.Add(new CuiLabel
             {
               RectTransform = { AnchorMin = $"{(leftAlign ? "0" : "1")} 0", AnchorMax = $"{(leftAlign ? "0" : "1")} 1", OffsetMin = $"{(leftAlign ? "-350" : "20")} 0", OffsetMax = $"{(leftAlign ? "-20" : "350")} -5" },
-              Text = { FadeIn = 0.4f, Text = lang.GetMessage("Subject.Head", this, player.UserIDString), Font = "robotocondensed-bold.ttf", FontSize = 24, Align = leftAlign ? TextAnchor.UpperRight : TextAnchor.UpperLeft }
+              Text = { FadeIn = 0.4f, Text = lang.GetMessage("Subject.Head", this, player.UserIDString), Font = "robotocondensed-bold.ttf", Color = HexToRustFormat("#D0C6BD"), FontSize = 24, Align = leftAlign ? TextAnchor.UpperRight : TextAnchor.UpperLeft }
             }, ReportLayer + ".T");
 
             container.Add(new CuiLabel
             {
               RectTransform = { AnchorMin = $"{(leftAlign ? "0" : "1")} 0", AnchorMax = $"{(leftAlign ? "0" : "1")} 1", OffsetMin = $"{(leftAlign ? "-250" : "20")} 0", OffsetMax = $"{(leftAlign ? "-20" : "250")} -35" },
-              Text = { FadeIn = 0.4f, Text = $"{lang.GetMessage("Subject.SubHead", this, player.UserIDString).Replace("%PLAYER%", $"<b>{target.displayName}</b>")}", Font = "robotocondensed-regular.ttf", FontSize = 14, Color = "1 1 1 0.7", Align = leftAlign ? TextAnchor.UpperRight : TextAnchor.UpperLeft }
+              Text = { FadeIn = 0.4f, Text = $"{lang.GetMessage("Subject.SubHead", this, player.UserIDString).Replace("%PLAYER%", $"<b>{target.displayName}</b>")}", Font = "robotocondensed-regular.ttf", Color = HexToRustFormat("#D0C6BD80"), FontSize = 14, Align = leftAlign ? TextAnchor.UpperRight : TextAnchor.UpperLeft }
             }, ReportLayer + ".T");
 
             container.Add(new CuiElement
             {
               Parent = ReportLayer + $".T",
               Components =
-                      {
-                          new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
-                          new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
-                      }
+              {
+                  new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
+                  new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
+              }
             });
 
             var was_checked = _Checks.LastChecks.ContainsKey(target.UserIDString) && CurrentTime() - _Checks.LastChecks[target.UserIDString] < _Settings.report_ui_show_check_in * 24 * 60 * 60;
@@ -2911,8 +2941,8 @@ namespace Oxide.Plugins
               container.Add(new CuiButton()
               {
                 RectTransform = { AnchorMin = $"{(leftAlign ? 0 : 1)} 0", AnchorMax = $"{(leftAlign ? 0 : 1)} 0", OffsetMin = $"{(leftAlign ? -offXMax : offXMin)} 15", OffsetMax = $"{(leftAlign ? -offXMin : offXMax)} 45" },
-                Button = { FadeIn = 0.4f + i * 0.2f, Color = HexToRustFormat("#FFFFFF4D"), Command = $"UI_RP_ReportPanel report {target.UserIDString} {_Settings.report_ui_reasons[i].Replace(" ", "0")}" },
-                Text = { FadeIn = 0.4f, Text = $"{_Settings.report_ui_reasons[i]}", Align = TextAnchor.MiddleCenter, Color = "1 1 1 1", Font = "robotocondensed-regular.ttf", FontSize = 16 }
+                Button = { FadeIn = 0.4f + i * 0.2f, Color = HexToRustFormat("#D0C6BD4D"), Command = $"UI_RP_ReportPanel report {target.UserIDString} {_Settings.report_ui_reasons[i].Replace(" ", "0")}" },
+                Text = { FadeIn = 0.4f + i * 0.2f, Text = $"{_Settings.report_ui_reasons[i]}", Align = TextAnchor.MiddleCenter, Color = HexToRustFormat("#D0C6BD"), Font = "robotocondensed-bold.ttf", FontSize = 16 }
               }, ReportLayer + $".T");
             }
 
@@ -3050,64 +3080,6 @@ namespace Oxide.Plugins
         return ipaddress.Substring(0, num);
       }
       return ipaddress;
-    }
-
-    [ConsoleCommand("ra.ban_server")]
-    private void CmdConsoleBanServerDeprecated(ConsoleSystem.Arg args)
-    {
-      if (args.Player() != null && !args.Player().IsAdmin)
-      {
-        return;
-      }
-
-      Log(
-        "Команда 'ra.ban_server' устарела и скоро будет удалена",
-        "Command 'ra.ban_server' deprecated and will be deleted soon"
-      );
-
-      if (!args.HasArgs(2))
-      {
-        Log(
-          "ra.ban_server <steam_id> <reason> <duration?>\n<duration> - необязателен, заполняется в формате 2d5h",
-          "ra.ban_server <steam_id> <причина> <время?>\n<duration> - optional, use as 2d10h"
-        );
-        return;
-      }
-
-      var steam_id = args.Args[0];
-      var reason = args.Args[1];
-      var duration = args.HasArgs(3) ? args.Args[2] : "";
-
-      _Worker.Action.SendBan(steam_id, reason, duration, false, true);
-    }
-
-    [ConsoleCommand("ra.ban_global")]
-    private void CmdConsoleBanGlobalDeprecated(ConsoleSystem.Arg args)
-    {
-      if (args.Player() != null && !args.Player().IsAdmin)
-      {
-        return;
-      }
-
-      Log(
-        "Команда 'ra.ban_global' устарела и скоро будет удалена",
-        "Command 'ra.ban_global' deprecated and will be deleted soon"
-      );
-
-      if (!args.HasArgs(2))
-      {
-        Log(
-          "ra.ban_global <steam_id> <reason> <duration?>\n<duration> - необязателен, заполняется в формате 2d5h",
-          "ra.ban_global <steam_id> <причина> <время?>\n<duration> - optional, use as 2d10h"
-        );
-        return;
-      }
-
-      var steam_id = args.Args[0];
-      var reason = args.Args[1];
-      var duration = args.HasArgs(3) ? args.Args[2] : "";
-
-      _Worker.Action.SendBan(steam_id, reason, duration, true, true);
     }
 
     [ConsoleCommand("ra.ban")]
