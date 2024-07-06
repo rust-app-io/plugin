@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.6")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.7")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -390,7 +390,7 @@ namespace Oxide.Plugins
                 }
               case "RaidZone":
                 {
-                  return (bool)correct.Call("HasBlock", player.userID);
+                  return (bool)correct.Call("HasBlock", player.userID.Get());
                 }
               case "RaidBlock":
                 {
