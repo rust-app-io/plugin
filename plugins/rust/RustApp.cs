@@ -371,6 +371,20 @@ namespace Oxide.Plugins
           return false;
         }
 
+
+        if (_Settings.utils_use_own_raidblock)
+        {
+          var res = Interface.Oxide.CallHook("RustApp_IsInRaid", player.userID.Get());
+          if (res is bool)
+          {
+            return (bool)res;
+          }
+          else
+          {
+            return false;
+          }
+        }
+
         var plugins = new List<Plugin> {
           _RustApp.NoEscape,
           _RustApp.RaidZone,
@@ -414,12 +428,6 @@ namespace Oxide.Plugins
             );
             */
           }
-        }
-
-        var res = Interface.Oxide.CallHook("RustApp_IsInRaid", player.userID.Get());
-        if (res is bool)
-        {
-          return (bool)res;
         }
 
         return false;
@@ -2200,6 +2208,9 @@ namespace Oxide.Plugins
       [JsonProperty("[Ban] Enable broadcast server bans")]
       public bool ban_enable_broadcast = true;
 
+      [JsonProperty("[Utils] Use own raidblock hooks")]
+      public bool utils_use_own_raidblock = false;
+
       [JsonProperty("[Custom Actions] Allow custom actions")]
       public bool custom_actions_allow = true;
 
@@ -2215,7 +2226,8 @@ namespace Oxide.Plugins
 
           chat_default_avatar_steamid = "76561198134964268",
           ban_enable_broadcast = true,
-          custom_actions_allow = true
+          custom_actions_allow = true,
+          utils_use_own_raidblock = false
         };
       }
     }
