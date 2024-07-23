@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.8")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.9")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -414,6 +414,12 @@ namespace Oxide.Plugins
             );
             */
           }
+        }
+
+        var res = Interface.Oxide.CallHook("RustApp_IsInRaid", player.userID.Get());
+        if (res is bool)
+        {
+          return (bool)res;
         }
 
         return false;
