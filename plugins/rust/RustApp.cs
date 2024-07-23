@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.7")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.8")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -875,7 +875,7 @@ namespace Oxide.Plugins
           );
       }
 
-      public void @SendBan(string steam_id, string reason, string duration, bool global, bool ban_ip)
+      public void @SendBan(string steam_id, string reason, string duration, bool global, bool ban_ip, string comment = "Ban via console")
       {
         if (!IsReady())
         {
@@ -889,6 +889,7 @@ namespace Oxide.Plugins
           global = global,
           ban_ip = ban_ip,
           duration = duration.Length > 0 ? duration : null,
+          comment
         })
         .Execute(
           (data, raw) =>
@@ -2626,6 +2627,11 @@ namespace Oxide.Plugins
     #endregion
 
     #region API
+
+    private void RA_BanPlayer(string steam_id, string reason, string duration, bool global, bool ban_ip, string comment = "")
+    {
+      _Worker.Action.SendBan(steam_id, reason, duration, global, ban_ip, comment);
+    }
 
     private void RA_DirectMessageHandler(string from, string to, string message)
     {
