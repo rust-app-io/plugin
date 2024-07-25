@@ -13,9 +13,9 @@ using Facepunch.Extend;
 
 namespace Oxide.Plugins
 {
-	[Info("ExtRaidBlock", "rustapp.io (by Bizlich)", "1.0.0")]
-	public class ExtRaidBlock : RustPlugin
-	{
+    [Info("ExtRaidBlock", "RustApp.Io (by Bizlich)", "1.0.0")]
+    public class ExtRaidBlock : RustPlugin
+    {
         public int RaidBlockDistance = 150; // Зона рейдблока
         public int RaidBlockDuration = 15; // Время рейдблока
         public bool RaidBlockOnEnterRaidZone = true; // Вешать рб при заходе в зону
@@ -38,7 +38,7 @@ namespace Oxide.Plugins
         }
         private Dictionary<uint, string> _prefabID2Item = new();
         private readonly Dictionary<BasePlayer, Timer> _playerTimer = new Dictionary<BasePlayer, Timer>();
-        private List<RaidableZone> _raidZoneComponents = new(); 
+        private List<RaidableZone> _raidZoneComponents = new();
         public List<DamageType> _damageTypes = new();
         public static ExtRaidBlock Instance;
         private Dictionary<string, string> _prefabNameItem = new()
@@ -52,10 +52,10 @@ namespace Oxide.Plugins
             ["rocket_hv"] = "ammo.rocket.hv",
             ["rocket_fire"] = "ammo.rocket.fire",
             ["survey_charge.deployed"] = "surveycharge"
-        }; 		  						  	   		  	 	 		  	   		  	 				  	 	 
+        };
         private void CreateOrRefreshRaidblock(Vector3 position, BasePlayer player)
         {
-            if (permission.UserHasPermission(player.UserIDString, Name)) 
+            if (permission.UserHasPermission(player.UserIDString, Name))
                 return;
             if (Interface.Call("CanRaidBlock", player, position) != null)
                 return;
@@ -69,7 +69,7 @@ namespace Oxide.Plugins
                 raidableZone.CreateRaidZone(position, player);
             }
             Interface.CallHook("OnRaidBlock", position);
-        } 		 		  						  	   		  	 	 		  	   		  	 				  	 	 
+        }
         private void OnPlayerDeath(BasePlayer player, HitInfo hitInfo)
         {
             if (player == null || hitInfo == null || !player.userID.IsSteamId())
@@ -79,7 +79,7 @@ namespace Oxide.Plugins
             {
                 UnityEngine.Object.DestroyImmediate(raidPlayer);
             }
-        }   
+        }
         private void CheckUnsubscribeOrSubscribeHooks()
         {
             if (_raidZoneComponents.Count == 0)
@@ -94,11 +94,11 @@ namespace Oxide.Plugins
             if (majorityDamageType == DamageType.Decay)
                 return;
             BasePlayer raider = info?.InitiatorPlayer ? info.InitiatorPlayer : entity.lastAttacker as BasePlayer;
-            if(raider == null) return;
+            if (raider == null) return;
             if (IsBlockedClass(entity))
-            {  						  	   		  	 	 		  	   		  	 				  	 	 
+            {
                 if (CheckEntity(entity, info, raider))
-                {		  						  	   		  	 	 		  	   		  	 				  	 	 
+                {
                     CreateOrRefreshRaidblock(entity.transform.position, raider);
                 }
             }
@@ -157,7 +157,7 @@ namespace Oxide.Plugins
         }
         private static RaidableZone GetRbZone(Vector3 position)
         {
-            List<SphereCollider> sphereColliders = new ();
+            List<SphereCollider> sphereColliders = new();
             Vis.Colliders(position, 0.1f, sphereColliders);
             if (sphereColliders.Count <= 0) return null;
             foreach (SphereCollider sCollider in sphereColliders)
@@ -169,10 +169,10 @@ namespace Oxide.Plugins
         }
         private void Unload()
         {
-            foreach (RaidableZone obj in _raidZoneComponents) 
+            foreach (RaidableZone obj in _raidZoneComponents)
                 UnityEngine.Object.DestroyImmediate(obj);
             foreach (RaidPlayer rPlayer in raidPlayersList)
-                if(rPlayer != null)
+                if (rPlayer != null)
                     rPlayer.Kill(true);
             Instance = null;
         }
@@ -199,7 +199,7 @@ namespace Oxide.Plugins
         {
             if (main)
             {
-                Subscribe(nameof(OnEntityDeath));		 		  						  	   		  	 	 		  	   		  	 				  	 	
+                Subscribe(nameof(OnEntityDeath));
             }
 
             if (raidActions)
@@ -209,12 +209,12 @@ namespace Oxide.Plugins
                     Subscribe(nameof(OnPlayerDeath));
                 }
             }
-        }      
+        }
         private bool IsBlocked(BasePlayer player)
         {
             RaidPlayer obj = player.GetComponent<RaidPlayer>();
             return obj != null && obj.UnblockTimeLeft > 0;
-        }				  	   		  	 	 		  	   		  	 				  	 	 
+        }
         void OnPlayerSleepEnded(BasePlayer player)
         {
             if (player == null || player.IsDead() || !player.IsConnected) return;
@@ -230,7 +230,7 @@ namespace Oxide.Plugins
             return true;
         }
         private class RaidableZone : MonoBehaviour
-        {            
+        {
             private Dictionary<BasePlayer, RaidPlayer> _playersAndComponentZone = new();
             private SphereCollider triggerZone;
             private BasePlayer initiatorRaid;
@@ -242,11 +242,11 @@ namespace Oxide.Plugins
             {
                 triggerZone = gameObject.AddComponent<SphereCollider>();
                 triggerZone.radius = raidBlockDistance;
-                triggerZone.gameObject.layer = (int) Layer.Reserved1;
+                triggerZone.gameObject.layer = (int)Layer.Reserved1;
                 triggerZone.transform.SetParent(transform, true);
                 triggerZone.isTrigger = true;
             }
-		   		 		  						  	   		  	 	 		  	   		  	 				  	 	 
+
             public void CreateRaidZone(Vector3 raidPos, BasePlayer initiator)
             {
                 Instance.CheckUnsubscribeOrSubscribeHooks();
@@ -254,7 +254,7 @@ namespace Oxide.Plugins
                 initiatorRaid = initiator;
                 InitializeTriggerZone();
                 AddPlayer(initiatorRaid, true);
-                if (Instance.RaidBlockAddedAllPlayersInZoneRaid) 
+                if (Instance.RaidBlockAddedAllPlayersInZoneRaid)
                     AddAllPlayerInZoneDistance();
                 Interface.CallHook("OnCreatedRaidZone", raidPos, initiator);
             }
@@ -285,20 +285,20 @@ namespace Oxide.Plugins
                     }
                 }
             }
-            private void EndRaid() 
+            private void EndRaid()
             {
                 Interface.CallHook("OnRaidBlockStopped", transform.position);
                 Instance._raidZoneComponents.Remove(this);
                 Instance.CheckUnsubscribeOrSubscribeHooks();
                 Destroy(this);
             }
-            private void AddAllPlayerInZoneDistance() 
+            private void AddAllPlayerInZoneDistance()
             {
                 List<BasePlayer> players = Pool.GetList<BasePlayer>();
                 Vis.Entities(transform.position, raidBlockDistance, players);
                 foreach (BasePlayer player in players)
                 {
-                    if(_playersAndComponentZone.ContainsKey(player))
+                    if (_playersAndComponentZone.ContainsKey(player))
                         continue;
                     AddPlayer(player, true);
                 }
@@ -321,7 +321,7 @@ namespace Oxide.Plugins
             }
             public void RemovePlayer(BasePlayer player)
             {
-                if(!_playersAndComponentZone.ContainsKey(player)) return;
+                if (!_playersAndComponentZone.ContainsKey(player)) return;
                 RaidPlayer raidPlayer = _playersAndComponentZone[player];
                 if (raidPlayer == null) return;
                 if (Instance.RaidBlockOnExitRaidZone)
@@ -347,13 +347,13 @@ namespace Oxide.Plugins
                 RefreshTimer(transform.position);
             }
             private void OnDestroy()
-            { 
+            {
                 Destroy(triggerZone);
             }
             private void OnTriggerEnter(Collider collider)
             {
                 BasePlayer player = collider.GetComponentInParent<BasePlayer>();
-                if (player != null && player.net?.connection!=null)
+                if (player != null && player.net?.connection != null)
                 {
                     AddPlayer(player);
                 }
@@ -361,7 +361,7 @@ namespace Oxide.Plugins
             private void OnTriggerExit(Collider collider)
             {
                 BasePlayer player = collider.GetComponentInParent<BasePlayer>();
-                if (player != null && player.net?.connection!=null)
+                if (player != null && player.net?.connection != null)
                 {
                     RemovePlayer(player);
                 }
@@ -375,7 +375,7 @@ namespace Oxide.Plugins
             private void Awake()
             {
                 player = GetComponent<BasePlayer>();
-                if(!Instance.raidPlayersList.Contains(this))
+                if (!Instance.raidPlayersList.Contains(this))
                     Instance.raidPlayersList.Add(this);
                 Interface.CallHook("OnRaidBlockStarted", player);
             }
@@ -391,7 +391,7 @@ namespace Oxide.Plugins
             private void OnDestroy()
             {
                 Interface.CallHook("OnRaidBlockStopped", player);
-            }       
+            }
             public void UpdateTime(Single time, Boolean customTime = false)
             {
                 if (customTime)
@@ -404,21 +404,20 @@ namespace Oxide.Plugins
             }
             public void ActivateBlock(Single time)
             {
-                if(time > blockEnds)
+                if (time > blockEnds)
                     blockEnds = time;
                 InvokeRepeating(CheckTimeLeft, 0, 1);
             }
             private void CheckTimeLeft()
             {
-                if (UnblockTimeLeft > 0){}
+                if (UnblockTimeLeft > 0) { }
                 else
-                {   
+                {
                     CancelInvoke(nameof(CheckTimeLeft));
                     Kill();
                 }
-            }        
-        } 
-	}
+            }
+        }
+    }
 }
 
-        
