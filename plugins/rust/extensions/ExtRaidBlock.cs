@@ -79,13 +79,7 @@ namespace Oxide.Plugins
             {
                 UnityEngine.Object.DestroyImmediate(raidPlayer);
             }
-        }
-        [ChatCommand("rbtest")]
-        void rbtest(BasePlayer player)
-        {
-            if(!player.IsAdmin) return;
-            CreateOrRefreshRaidblock(player.transform.position, player);
-        }     
+        }   
         private void CheckUnsubscribeOrSubscribeHooks()
         {
             if (_raidZoneComponents.Count == 0)
@@ -424,11 +418,6 @@ namespace Oxide.Plugins
                 }
             }        
         } 
-        object RustApp_IsInRaid(ulong userId) 
-        {
-            bool IsRaid = IsRaidBlocked(userId);
-            return IsRaid;
-        }
 	}
 }
 
