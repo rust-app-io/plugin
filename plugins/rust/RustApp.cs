@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.9")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.10")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -388,7 +388,8 @@ namespace Oxide.Plugins
         var plugins = new List<Plugin> {
           _RustApp.NoEscape,
           _RustApp.RaidZone,
-          _RustApp.RaidBlock
+          _RustApp.RaidBlock,
+          _RustApp.ExtRaidBlock
         };
 
         var correct = plugins.Find(v => v != null);
@@ -405,6 +406,10 @@ namespace Oxide.Plugins
               case "RaidZone":
                 {
                   return (bool)correct.Call("HasBlock", player.userID.Get());
+                }
+              case "ExtRaidBlock":
+                {
+                  return (bool)correct.Call("IsRaidBlock", player.userID.Get());
                 }
               case "RaidBlock":
                 {
@@ -2527,7 +2532,7 @@ namespace Oxide.Plugins
 
 
     // References for RB plugins to get RB status
-    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting;
+    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting, ExtRaidBlock;
 
     #endregion
 
