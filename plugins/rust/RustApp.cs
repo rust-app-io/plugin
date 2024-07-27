@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.10")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.11")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -2674,6 +2674,8 @@ namespace Oxide.Plugins
       {
         return;
       }
+
+      Interface.Oxide.CallHook("RustApp_OnPlayerReported", initiator_steam_id, target_steam_id, reason, message);
 
       _Worker?.Update.SaveReport(new PluginReportEntry
       {
