@@ -49,7 +49,7 @@ using Graphics = System.Drawing.Graphics;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts & King.(ADAPTATION)", "1.8.0")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts & King.(ADAPTATION)", "1.9.1")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -2689,6 +2689,8 @@ namespace Oxide.Plugins
       _Worker.Update.IsDead = true;
       _Worker.Update.SendUpdate();
 
+      UnityEngine.Object.Destroy(_Worker); 
+
       foreach (var player in BasePlayer.activePlayerList)
       {
         CuiHelper.DestroyUi(player, CheckLayer);
@@ -2868,7 +2870,7 @@ namespace Oxide.Plugins
 
     private void OnEntityKill(BaseNetworkable entity)
     {
-      if (entity?.net?.ID == null || entity?.net?.ID == null || entity?.ShortPrefabName == null)
+      if (entity?.net?.ID == null || entity?.net.ID == null || entity?.ShortPrefabName == null)
       {
         return;
       }
@@ -3543,9 +3545,9 @@ namespace Oxide.Plugins
         Facepunch.Pool.FreeMemoryStream(ref stream);
         return bytes;
       }
-    }*/
+    }
 
-    /*public class PaintedItemUpdate : BaseImageUpdate
+    public class PaintedItemUpdate : BaseImageUpdate
     {
       private readonly byte[] _image;
 
@@ -3612,9 +3614,9 @@ namespace Oxide.Plugins
       PaintedItemUpdate update = new PaintedItemUpdate(player, entity, item, image);
 
       _Worker.Action.SendSignage(new PaintedItemUpdate(player, entity, item, image));
-    }
+    }*/
 
-    private void OnFireworkDesignChanged(PatternFirework firework, ProtoBuf.PatternFirework.Design design, BasePlayer player)
+    /*private void OnFireworkDesignChanged(PatternFirework firework, ProtoBuf.PatternFirework.Design design, BasePlayer player)
     {
       if (design?.stars == null || design.stars.Count == 0)
       {
