@@ -43,13 +43,13 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Text;
 using UnityEngine;
-using Color = System.Drawing.Color;
+using Color = System.Drawing.Color; 
 using Graphics = System.Drawing.Graphics;
 using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.7.11")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.8.0")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -1012,31 +1012,38 @@ namespace Oxide.Plugins
           return;
         }
 
-        var obj = new
+        try
         {
-          steam_id = upload.PlayerId.ToString(),
-          net_id = upload.Entity.net.ID.Value,
+          var obj = new
+          {
+            steam_id = upload.PlayerId.ToString(),
+            net_id = upload.Entity.net.ID.Value,
+ 
+            base64_image = Convert.ToBase64String(upload.GetImage()),
 
-          base64_image = Convert.ToBase64String(upload.GetImage()),
+            type = upload.Entity.ShortPrefabName,
+            position = upload.Entity.transform.position.ToString(),
+            square = GridReference(upload.Entity.transform.position)
+          };
 
-          type = upload.Entity.ShortPrefabName,
-          position = upload.Entity.transform.position.ToString(),
-          square = GridReference(upload.Entity.transform.position)
-        };
-
-        Request<string>(CourtUrls.SendSignage, RequestMethod.POST, obj)
-          .Execute(
-            (data, raw) =>
-            {
-            },
-            (err) =>
-            {
-              _RustApp.Error(
-                $"Не удалось отправить табличку ({err})",
-                $"Failed to send signage ({err})"
-              );
-            }
-          );
+          Request<string>(CourtUrls.SendSignage, RequestMethod.POST, obj)
+            .Execute(
+              (data, raw) =>
+              {
+              },
+              (err) =>
+              {
+                _RustApp.Error(
+                  $"Не удалось отправить табличку ({err})",
+                  $"Failed to send signage ({err})"
+                );
+              }
+            );
+        }
+        catch
+        {
+          return;
+        }
       }
     }
 
@@ -1277,6 +1284,8 @@ namespace Oxide.Plugins
 
     public class UpdateWorker : BaseWorker
     {
+      public bool IsDead = false;
+
       private List<PluginPlayerAlertEntry> PlayerAlertCollection = new List<PluginPlayerAlertEntry>();
       private List<PluginReportEntry> ReportCollection = new List<PluginReportEntry>();
       private List<PluginChatMessageEntry> ChatCollection = new List<PluginChatMessageEntry>();
@@ -1314,14 +1323,14 @@ namespace Oxide.Plugins
         DestroyedSignsCollection.Add(net_id);
       }
 
-      public void SaveDisconnect(BasePlayer player, string reason)
+      public void SaveDisconnect(string steamId, string reason)
       {
-        if (!DisconnectHistory.ContainsKey(player.UserIDString))
+        if (!DisconnectHistory.ContainsKey(steamId))
         {
-          DisconnectHistory.Add(player.UserIDString, reason);
+          DisconnectHistory.Add(steamId, reason);
         }
 
-        DisconnectHistory[player.UserIDString] = reason;
+        DisconnectHistory[steamId] = reason;
       }
 
       public void SaveTeamHistory(string initiator_steam_id, string target_steam_id)
@@ -1488,7 +1497,19 @@ namespace Oxide.Plugins
         {
           try
           {
-            players.Add(PluginPlayerPayload.FromPlayer(player));
+            if (IsDead)
+            {
+              if (!DisconnectHistory.ContainsKey(player.UserIDString))
+              {
+                DisconnectHistory.Add(player.UserIDString, "plugin-unload");
+              }
+
+              DisconnectHistory[player.UserIDString] = "plugin-unload";
+            }
+            else
+            {
+              players.Add(PluginPlayerPayload.FromPlayer(player));
+            }
           }
           catch (Exception exc)
           {
@@ -1499,7 +1520,19 @@ namespace Oxide.Plugins
         {
           try
           {
-            players.Add(PluginPlayerPayload.FromConnection(player, "queued"));
+            if (IsDead)
+            {
+              if (!DisconnectHistory.ContainsKey(player.userid.ToString()))
+              {
+                DisconnectHistory.Add(player.userid.ToString(), "plugin-unload");
+              }
+
+              DisconnectHistory[player.userid.ToString()] = "plugin-unload";
+            }
+            else
+            {
+              players.Add(PluginPlayerPayload.FromConnection(player, "queued"));
+            }
           }
           catch (Exception exc)
           {
@@ -1510,7 +1543,19 @@ namespace Oxide.Plugins
         {
           try
           {
-            players.Add(PluginPlayerPayload.FromConnection(player, "joining"));
+            if (IsDead)
+            {
+              if (!DisconnectHistory.ContainsKey(player.userid.ToString()))
+              {
+                DisconnectHistory.Add(player.userid.ToString(), "plugin-unload");
+              }
+
+              DisconnectHistory[player.userid.ToString()] = "plugin-unload";
+            }
+            else
+            {
+              players.Add(PluginPlayerPayload.FromConnection(player, "joining"));
+            }
           }
           catch (Exception exc)
           {
@@ -2638,7 +2683,8 @@ namespace Oxide.Plugins
 
     private void Unload()
     {
-      UnityEngine.Object.Destroy(_Worker);
+      _Worker.Update.IsDead = true;
+      _Worker.Update.SendUpdate();
 
       foreach (var player in BasePlayer.activePlayerList)
       {
@@ -2695,6 +2741,7 @@ namespace Oxide.Plugins
     #endregion
 
     #region Interface
+
 
 
 
@@ -2766,7 +2813,17 @@ namespace Oxide.Plugins
         _Worker.Queue.Notices.Remove(player.UserIDString);
       }
 
-      _Worker?.Update.SaveDisconnect(player, reason);
+      _Worker?.Update.SaveDisconnect(player.UserIDString, reason);
+    }
+
+    private void OnClientDisconnect(Network.Connection connection, string reason)
+    {
+      if (_Worker.Queue.Notices.ContainsKey(connection.userid.ToString()))
+      {
+        _Worker.Queue.Notices.Remove(connection.userid.ToString());
+      }
+
+      _Worker?.Update.SaveDisconnect(connection.userid.ToString(), reason);
     }
 
     private void OnTeamKick(RelationshipManager.PlayerTeam team, BasePlayer player, ulong target)
