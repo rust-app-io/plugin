@@ -43,13 +43,13 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Text;
 using UnityEngine;
-using Color = System.Drawing.Color;
+using Color = System.Drawing.Color; 
 using Graphics = System.Drawing.Graphics;
 using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts & King.(ADAPTATION)", "1.7.6")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts & King.(ADAPTATION)", "1.9.1")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -371,10 +371,25 @@ namespace Oxide.Plugins
           return false;
         }
 
+
+        if (_Settings.utils_use_own_raidblock)
+        {
+          var res = Interface.Oxide.CallHook("RustApp_IsInRaid", player.userID);
+          if (res is bool)
+          {
+            return (bool)res;
+          }
+          else
+          {
+            return false;
+          }
+        }
+
         var plugins = new List<Plugin> {
           _RustApp.NoEscape,
           _RustApp.RaidZone,
-          _RustApp.RaidBlock
+          _RustApp.RaidBlock,
+          _RustApp.ExtRaidBlock
         };
 
         var correct = plugins.Find(v => v != null);
@@ -391,6 +406,10 @@ namespace Oxide.Plugins
               case "RaidZone":
                 {
                   return (bool)correct.Call("HasBlock", player.userID);
+                }
+              case "ExtRaidBlock":
+                {
+                  return (bool)correct.Call("IsRaidBlock", player.userID);
                 }
               case "RaidBlock":
                 {
@@ -875,7 +894,7 @@ namespace Oxide.Plugins
           );
       }
 
-      public void @SendBan(string steam_id, string reason, string duration, bool global, bool ban_ip)
+      public void @SendBan(string steam_id, string reason, string duration, bool global, bool ban_ip, string comment = "Ban via console")
       {
         if (!IsReady())
         {
@@ -889,6 +908,7 @@ namespace Oxide.Plugins
           global = global,
           ban_ip = ban_ip,
           duration = duration.Length > 0 ? duration : null,
+          comment
         })
         .Execute(
           (data, raw) =>
@@ -992,31 +1012,38 @@ namespace Oxide.Plugins
           return;
         }
 
-        var obj = new
+        try
         {
-          steam_id = upload.PlayerId.ToString(),
-          net_id = upload.Entity.net.ID,
+          var obj = new
+          {
+            steam_id = upload.PlayerId.ToString(),
+            net_id = upload.Entity.net.ID,
+ 
+            base64_image = Convert.ToBase64String(upload.GetImage()),
 
-          base64_image = Convert.ToBase64String(upload.GetImage()),
+            type = upload.Entity.ShortPrefabName,
+            position = upload.Entity.transform.position.ToString(),
+            square = GridReference(upload.Entity.transform.position)
+          };
 
-          type = upload.Entity.ShortPrefabName,
-          position = upload.Entity.transform.position.ToString(),
-          square = GridReference(upload.Entity.transform.position)
-        };
-
-        Request<string>(CourtUrls.SendSignage, RequestMethod.POST, obj)
-          .Execute(
-            (data, raw) =>
-            {
-            },
-            (err) =>
-            {
-              _RustApp.Error(
-                $"Не удалось отправить табличку ({err})",
-                $"Failed to send signage ({err})"
-              );
-            }
-          );
+          Request<string>(CourtUrls.SendSignage, RequestMethod.POST, obj)
+            .Execute(
+              (data, raw) =>
+              {
+              },
+              (err) =>
+              {
+                _RustApp.Error(
+                  $"Не удалось отправить табличку ({err})",
+                  $"Failed to send signage ({err})"
+                );
+              }
+            );
+        }
+        catch
+        {
+          return;
+        }
       }
     }
 
@@ -1257,6 +1284,8 @@ namespace Oxide.Plugins
 
     public class UpdateWorker : BaseWorker
     {
+      public bool IsDead = false;
+
       private List<PluginPlayerAlertEntry> PlayerAlertCollection = new List<PluginPlayerAlertEntry>();
       private List<PluginReportEntry> ReportCollection = new List<PluginReportEntry>();
       private List<PluginChatMessageEntry> ChatCollection = new List<PluginChatMessageEntry>();
@@ -1294,14 +1323,14 @@ namespace Oxide.Plugins
         DestroyedSignsCollection.Add(net_id);
       }
 
-      public void SaveDisconnect(BasePlayer player, string reason)
+      public void SaveDisconnect(string steamId, string reason)
       {
-        if (!DisconnectHistory.ContainsKey(player.UserIDString))
+        if (!DisconnectHistory.ContainsKey(steamId))
         {
-          DisconnectHistory.Add(player.UserIDString, reason);
+          DisconnectHistory.Add(steamId, reason);
         }
 
-        DisconnectHistory[player.UserIDString] = reason;
+        DisconnectHistory[steamId] = reason;
       }
 
       public void SaveTeamHistory(string initiator_steam_id, string target_steam_id)
@@ -1468,7 +1497,19 @@ namespace Oxide.Plugins
         {
           try
           {
-            players.Add(PluginPlayerPayload.FromPlayer(player));
+            if (IsDead)
+            {
+              if (!DisconnectHistory.ContainsKey(player.UserIDString))
+              {
+                DisconnectHistory.Add(player.UserIDString, "plugin-unload");
+              }
+
+              DisconnectHistory[player.UserIDString] = "plugin-unload";
+            }
+            else
+            {
+              players.Add(PluginPlayerPayload.FromPlayer(player));
+            }
           }
           catch (Exception exc)
           {
@@ -1479,7 +1520,19 @@ namespace Oxide.Plugins
         {
           try
           {
-            players.Add(PluginPlayerPayload.FromConnection(player, "queued"));
+            if (IsDead)
+            {
+              if (!DisconnectHistory.ContainsKey(player.userid.ToString()))
+              {
+                DisconnectHistory.Add(player.userid.ToString(), "plugin-unload");
+              }
+
+              DisconnectHistory[player.userid.ToString()] = "plugin-unload";
+            }
+            else
+            {
+              players.Add(PluginPlayerPayload.FromConnection(player, "queued"));
+            }
           }
           catch (Exception exc)
           {
@@ -1490,7 +1543,19 @@ namespace Oxide.Plugins
         {
           try
           {
-            players.Add(PluginPlayerPayload.FromConnection(player, "joining"));
+            if (IsDead)
+            {
+              if (!DisconnectHistory.ContainsKey(player.userid.ToString()))
+              {
+                DisconnectHistory.Add(player.userid.ToString(), "plugin-unload");
+              }
+
+              DisconnectHistory[player.userid.ToString()] = "plugin-unload";
+            }
+            else
+            {
+              players.Add(PluginPlayerPayload.FromConnection(player, "joining"));
+            }
           }
           catch (Exception exc)
           {
@@ -2193,6 +2258,9 @@ namespace Oxide.Plugins
       [JsonProperty("[Ban] Enable broadcast server bans")]
       public bool ban_enable_broadcast = true;
 
+      [JsonProperty("[Utils] Use own raidblock hooks")]
+      public bool utils_use_own_raidblock = false;
+
       [JsonProperty("[Custom Actions] Allow custom actions")]
       public bool custom_actions_allow = true;
 
@@ -2208,7 +2276,8 @@ namespace Oxide.Plugins
 
           chat_default_avatar_steamid = "76561198134964268",
           ban_enable_broadcast = true,
-          custom_actions_allow = true
+          custom_actions_allow = true,
+          utils_use_own_raidblock = false
         };
       }
     }
@@ -2278,6 +2347,8 @@ namespace Oxide.Plugins
           Button = { Color = HexToRustFormat("#343434"), Sprite = "assets/content/ui/ui.background.transparent.radial.psd", Close = ReportLayer },
           Text = { Text = "" }
         }, ReportLayer);
+
+        CuiHelper.DestroyUi(player, ReportLayer);
       }
 
       container.Add(new CuiPanel
@@ -2319,7 +2390,7 @@ namespace Oxide.Plugins
         Parent = ReportLayer + ".S",
         Components =
             {
-                new CuiInputFieldComponent { Text = $"{lang.GetMessage("Header.Search.Placeholder", this, player.UserIDString)}", FontSize = 14, Font = "robotocondensed-regular.ttf", Color = HexToRustFormat("#D0C6BD80"), Align = TextAnchor.MiddleLeft, Command = "UI_RP_ReportPanel search 0" },
+                new CuiInputFieldComponent { Text = $"{lang.GetMessage("Header.Search.Placeholder", this, player.UserIDString)}", FontSize = 14, Font = "robotocondensed-regular.ttf", Color = HexToRustFormat("#D0C6BD80"), Align = TextAnchor.MiddleLeft, Command = "UI_RP_ReportPanel search 0"},
                 new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "10 0", OffsetMax = "-85 0"}
             }
       });
@@ -2435,6 +2506,7 @@ namespace Oxide.Plugins
         }
       }
 
+      CuiHelper.DestroyUi(player, ReportLayer + ".C");
       CuiHelper.AddUi(player, container);
     }
 
@@ -2508,7 +2580,7 @@ namespace Oxide.Plugins
 
 
     // References for RB plugins to get RB status
-    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting;
+    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting, ExtRaidBlock;
 
     #endregion
 
@@ -2614,7 +2686,10 @@ namespace Oxide.Plugins
 
     private void Unload()
     {
-      UnityEngine.Object.Destroy(_Worker);
+      _Worker.Update.IsDead = true;
+      _Worker.Update.SendUpdate();
+
+      UnityEngine.Object.Destroy(_Worker); 
 
       foreach (var player in BasePlayer.activePlayerList)
       {
@@ -2626,6 +2701,11 @@ namespace Oxide.Plugins
     #endregion
 
     #region API
+
+    private void RA_BanPlayer(string steam_id, string reason, string duration, bool global, bool ban_ip, string comment = "")
+    {
+      _Worker.Action.SendBan(steam_id, reason, duration, global, ban_ip, comment);
+    }
 
     private void RA_DirectMessageHandler(string from, string to, string message)
     {
@@ -2646,6 +2726,8 @@ namespace Oxide.Plugins
         return;
       }
 
+      Interface.Oxide.CallHook("RustApp_OnPlayerReported", initiator_steam_id, target_steam_id, reason, message);
+
       _Worker?.Update.SaveReport(new PluginReportEntry
       {
         initiator_steam_id = initiator_steam_id,
@@ -2664,6 +2746,7 @@ namespace Oxide.Plugins
     #endregion
 
     #region Interface
+
 
 
 
@@ -2735,7 +2818,17 @@ namespace Oxide.Plugins
         _Worker.Queue.Notices.Remove(player.UserIDString);
       }
 
-      _Worker?.Update.SaveDisconnect(player, reason);
+      _Worker?.Update.SaveDisconnect(player.UserIDString, reason);
+    }
+
+    private void OnClientDisconnect(Network.Connection connection, string reason)
+    {
+      if (_Worker.Queue.Notices.ContainsKey(connection.userid.ToString()))
+      {
+        _Worker.Queue.Notices.Remove(connection.userid.ToString());
+      }
+
+      _Worker?.Update.SaveDisconnect(connection.userid.ToString(), reason);
     }
 
     private void OnTeamKick(RelationshipManager.PlayerTeam team, BasePlayer player, ulong target)
@@ -2777,7 +2870,7 @@ namespace Oxide.Plugins
 
     private void OnEntityKill(BaseNetworkable entity)
     {
-      if (entity == null || entity.ShortPrefabName == null)
+      if (entity?.net?.ID == null || entity?.net.ID == null || entity?.ShortPrefabName == null)
       {
         return;
       }
