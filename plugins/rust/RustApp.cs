@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.8.0")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.9.0")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -1586,9 +1586,11 @@ namespace Oxide.Plugins
           .Execute(
             (data, raw) =>
             {
+              Interface.Oxide.LogWarning("Отправлено");
             },
             (err) =>
             {
+              Interface.Oxide.LogWarning("Ошибка");
               //_RustApp.Error(
               //  $"Не удалось отправить состояние сервера ({err})",
               //  $"Failed to send server status ({err})"
@@ -2685,6 +2687,10 @@ namespace Oxide.Plugins
     {
       _Worker.Update.IsDead = true;
       _Worker.Update.SendUpdate();
+
+      UnityEngine.Object.Destroy(_Worker); 
+
+      Puts("Плагин выгружен");
 
       foreach (var player in BasePlayer.activePlayerList)
       {
