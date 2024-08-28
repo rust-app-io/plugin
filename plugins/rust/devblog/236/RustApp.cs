@@ -1092,6 +1092,8 @@ namespace Oxide.Plugins
         {
           FetchBan(queued.userid.ToString(), _RustApp.IPAddressWithoutPort(queued.ipaddress));
         }
+      }
+    }
 
         foreach (var loading in ServerMgr.Instance.connectionQueue.joining)
         {
@@ -2440,7 +2442,7 @@ namespace Oxide.Plugins
               Image = { Color = HexToRustFormat("#D0C6BD33") }
             }, ReportLayer + ".L", ReportLayer + $".{target.UserIDString}");
 
-            container.Add(new CuiElement
+            container.Add(new CuiLabel
             {
               Parent = ReportLayer + $".{target.UserIDString}",
               Components =
@@ -2748,7 +2750,18 @@ namespace Oxide.Plugins
     #region Interface
 
 
+    private void OnPlayerReported(BasePlayer reporter, string targetName, string targetId, string subject, string message, string type)
+    {
+      if (!_Settings.report_ui_auto_parse)
+      {
+        return;
+      }
 
+      var target = BasePlayer.Find(targetId) ?? BasePlayer.FindSleeping(targetId);
+      if (target == null)
+      {
+        return;
+      }
 
     #endregion
 
