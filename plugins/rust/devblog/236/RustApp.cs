@@ -1092,14 +1092,11 @@ namespace Oxide.Plugins
         {
           FetchBan(queued.userid.ToString(), _RustApp.IPAddressWithoutPort(queued.ipaddress));
         }
-      }
-    }
-
         foreach (var loading in ServerMgr.Instance.connectionQueue.joining)
         {
           FetchBan(loading.userid.ToString(), _RustApp.IPAddressWithoutPort(loading.ipaddress));
         }
-      }
+      } 
 
       protected override void OnReady()
       {
@@ -2442,14 +2439,14 @@ namespace Oxide.Plugins
               Image = { Color = HexToRustFormat("#D0C6BD33") }
             }, ReportLayer + ".L", ReportLayer + $".{target.UserIDString}");
 
-            container.Add(new CuiLabel
+            container.Add(new CuiElement
             {
               Parent = ReportLayer + $".{target.UserIDString}",
               Components =
-                        {
-                            new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
-                            new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
-                        }
+                {
+                    new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
+                }
             });
 
             container.Add(new CuiPanel()
@@ -2748,20 +2745,6 @@ namespace Oxide.Plugins
     #endregion
 
     #region Interface
-
-
-    private void OnPlayerReported(BasePlayer reporter, string targetName, string targetId, string subject, string message, string type)
-    {
-      if (!_Settings.report_ui_auto_parse)
-      {
-        return;
-      }
-
-      var target = BasePlayer.Find(targetId) ?? BasePlayer.FindSleeping(targetId);
-      if (target == null)
-      {
-        return;
-      }
 
     #endregion
 
