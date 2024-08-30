@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.9.1")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.9.2")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -2005,7 +2005,7 @@ namespace Oxide.Plugins
         int received = 0;
         int error = 0;
 
-        Interface.Oxide.CallHook("RustApp_OnPaidAnnounceBan", payload.suspect_id, payload.targets);
+        Interface.Oxide.CallHook("RustApp_OnPaidAnnounceBan", payload.suspect_id, payload.reason, payload.targets);
 
         if (!payload.broadcast)
         {
