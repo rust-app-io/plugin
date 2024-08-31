@@ -2005,7 +2005,7 @@ namespace Oxide.Plugins
         int received = 0;
         int error = 0;
 
-        Interface.Oxide.CallHook("RustApp_OnPaidAnnounceBan", payload.suspect_id, payload.reason, payload.targets);
+        Interface.Oxide.CallHook("RustApp_OnPaidAnnounceBan", payload.suspect_id, payload.targets, payload.reason);
 
         if (!payload.broadcast)
         {
