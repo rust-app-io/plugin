@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.9.2")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.9.3")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -3282,7 +3282,7 @@ namespace Oxide.Plugins
       Effect effect = new Effect("assets/bundled/prefabs/fx/notice/item.select.fx.prefab", player, 0, new Vector3(), new Vector3());
       EffectNetwork.Send(effect, player.Connection);
 
-      player.Command("gametip.showtoast", type, text);
+      player.Command("gametip.showtoast", type, text, 1);
     }
 
     private bool CloseConnection(string steamId, string reason)

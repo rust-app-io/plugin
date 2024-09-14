@@ -13,7 +13,7 @@ using Oxide.Game.Rust.Libraries;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp Lite", "RustApp", "1.0.5")]
+  [Info("RustApp Lite", "RustApp", "1.0.6")]
   [Description("Get reports on players in Discord, using a nicely designed interface or F7")]
   public class RustAppLite : RustPlugin
   {
@@ -732,7 +732,7 @@ namespace Oxide.Plugins
       Effect effect = new Effect("assets/bundled/prefabs/fx/notice/item.select.fx.prefab", player, 0, new Vector3(), new Vector3());
       EffectNetwork.Send(effect, player.Connection);
 
-      player.Command("gametip.showtoast", type, text);
+      player.Command("gametip.showtoast", type, text, 1);
     }
 
     #endregion
