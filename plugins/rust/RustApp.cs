@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.9.3")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.9.4")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -2723,7 +2723,8 @@ namespace Oxide.Plugins
         return;
       }
 
-      Interface.Oxide.CallHook("RustApp_OnPlayerReported", initiator_steam_id, target_steam_id, reason, message);
+      var was_checked = _Checks.LastChecks.ContainsKey(target_steam_id) && CurrentTime() - _Checks.LastChecks[target_steam_id] < _Settings.report_ui_show_check_in * 24 * 60 * 60;
+      Interface.Oxide.CallHook("RustApp_OnPlayerReported", initiator_steam_id, target_steam_id, reason, message, was_checked);
 
       _Worker?.Update.SaveReport(new PluginReportEntry
       {
