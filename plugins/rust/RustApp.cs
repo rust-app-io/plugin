@@ -2629,6 +2629,7 @@ namespace Oxide.Plugins
 
     private CourtWorker _Worker;
     private Dictionary<ulong, double> _Cooldowns = new Dictionary<ulong, double>();
+    private Dictionary<string, HitInfo> _WoundedHits = new Dictionary<string, HitInfo>();
 
     private static RustApp _RustApp;
     private static Configuration _Settings;
@@ -2811,27 +2812,23 @@ namespace Oxide.Plugins
     #endregion
 
     #region Hooks
-
-
-
-    private Dictionary<string, HitInfo> woundedHits = new Dictionary<string, HitInfo>();
-
+    
     private void OnPlayerWound( BasePlayer instance, HitInfo info )
     {
-      woundedHits[instance.UserIDString] = info;
+      _WoundedHits[instance.UserIDString] = info;
     }
     
     private void OnPlayerRespawn( BasePlayer instance )
     {
-      if (woundedHits.ContainsKey(instance.UserIDString)) {
-        woundedHits.Remove(instance.UserIDString);
+      if (_WoundedHits.ContainsKey(instance.UserIDString)) {
+        _WoundedHits.Remove(instance.UserIDString);
       }
     }
 
     void OnPlayerRecovered(BasePlayer player)
     {
-      if (woundedHits.ContainsKey(player.UserIDString)) {
-        woundedHits.Remove(player.UserIDString);
+      if (_WoundedHits.ContainsKey(player.UserIDString)) {
+        _WoundedHits.Remove(player.UserIDString);
       }
     }
 
@@ -2999,8 +2996,8 @@ namespace Oxide.Plugins
     private HitInfo GetRealInfo(BasePlayer player, HitInfo info) {
       var initiatorId = info.InitiatorPlayer?.userID;
       if (initiatorId == player.userID || info.InitiatorPlayer == null) { 
-        if (woundedHits.ContainsKey(player.UserIDString)) {
-          return woundedHits[player.UserIDString];
+        if (_WoundedHits.ContainsKey(player.UserIDString)) {
+          return _WoundedHits[player.UserIDString];
         }
       }
 
