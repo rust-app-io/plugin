@@ -2812,7 +2812,7 @@ namespace Oxide.Plugins
     #endregion
 
     #region Hooks
-    
+
     private void OnPlayerWound( BasePlayer instance, HitInfo info )
     {
       _WoundedHits[instance.UserIDString] = info;
@@ -2837,11 +2837,11 @@ namespace Oxide.Plugins
       if (infos?.InitiatorPlayer == null) {
         return;
       }
-
+  
       var trueInfo = GetRealInfo(player, infos);
 
       var initiatorId = trueInfo.InitiatorPlayer?.userID;
-      if (initiatorId == player.userID || trueInfo.InitiatorPlayer == null || initiatorId == null) { 
+      if (trueInfo == null || initiatorId == player.userID || trueInfo.InitiatorPlayer == null || initiatorId == null) { 
         return;
       }
 
@@ -2904,11 +2904,15 @@ namespace Oxide.Plugins
 
       public CombatLogEventExtended(CombatLog.Event ev) {
         if (ev.attacker == "player") {
-          this.attacker_steam_id = BasePlayer.activePlayerList.First(v => v.net.ID.Value == ev.attacker_id).UserIDString ?? "not-found";
+          var attacker = BasePlayer.activePlayerList.FirstOrDefault(v => v.net.ID.Value == ev.attacker_id) ?? BasePlayer.sleepingPlayerList.FirstOrDefault(v => v.net.ID.Value == ev.attacker_id);
+
+          this.attacker_steam_id = attacker?.UserIDString;
         }
 
         if (ev.target == "player") {
-          this.target_steam_id = BasePlayer.activePlayerList.First(v => v.net.ID.Value == ev.target_id).UserIDString ?? "not-found";
+          var target = BasePlayer.activePlayerList.FirstOrDefault(v => v.net.ID.Value == ev.target_id) ?? BasePlayer.sleepingPlayerList.FirstOrDefault(v => v.net.ID.Value == ev.target_id);
+
+          this.target_steam_id = target?.UserIDString;
         }
 
         this.time = UnityEngine.Time.realtimeSinceStartup - ev.time - ConVar.Server.combatlogdelay;
