@@ -49,7 +49,7 @@ using Graphics = System.Drawing.Graphics;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts & King.(ADAPTATION)", "1.10.2")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts & King.(ADAPTATION)", "1.10.3")]
   public class RustApp : RustPlugin
   {
     #region Classes 
