@@ -469,21 +469,36 @@ namespace Oxide.Plugins
 
       private static bool NoLicense(Network.Connection connection)
       {
-        if (_RustApp.MultiFighting == null || !_RustApp.MultiFighting.IsLoaded)
-        {
-          return false;
+        var isMultifighting = _RustApp.MultiFighting != null && _RustApp.MultiFighting.IsLoaded;
+        var isTirify = _RustApp.TirifyGamePluginRust != null && _RustApp.TirifyGamePluginRust.IsLoaded;
+
+        if (isMultifighting) {
+          try
+          {
+            var isSteam = (bool)_RustApp.MultiFighting.Call("IsSteam", connection);
+
+            return !isSteam;
+          }
+          catch
+          {
+            return false;
+          }
         }
 
-        try
-        {
-          var isSteam = (bool)_RustApp.MultiFighting.Call("IsSteam", connection);
+        if (isTirify) {
+          try
+          {
+            var isPlayerNoSteam = (bool)_RustApp.TirifyGamePluginRust.Call("IsPlayerNoSteam", connection.userid.ToString());
 
-          return !isSteam;
+            return isPlayerNoSteam;
+          }
+          catch
+          {
+            return false;
+          }
         }
-        catch
-        {
-          return false;
-        }
+
+        return false;
       }
 
       public static PluginPlayerPayload FromPlayer(BasePlayer player)
@@ -2642,7 +2657,7 @@ namespace Oxide.Plugins
 
 
     // References for RB plugins to get RB status
-    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting, ExtRaidBlock;
+    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting, TirifyGamePluginRust, ExtRaidBlock;
 
     #endregion
 
