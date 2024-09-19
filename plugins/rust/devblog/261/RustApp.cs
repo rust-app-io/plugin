@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts & King.(ADAPTATION)", "1.10.0")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts & King.(ADAPTATION)", "1.10.1")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -1635,6 +1635,7 @@ namespace Oxide.Plugins
 
           slots = ConVar.Server.maxplayers,
           version = _RustApp.Version.ToString(),
+          protocol = Protocol.printable.ToString(),
           performance = _RustApp.TotalHookTime.ToString(),
 
           players,
