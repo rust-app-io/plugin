@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.10.1")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.10.2")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -2850,37 +2850,52 @@ namespace Oxide.Plugins
 
     private void OnPlayerDeath( BasePlayer player, HitInfo infos )
     {
-      if (infos?.InitiatorPlayer == null) {
+      if (infos?.InitiatorPlayer == null || player == null) {
         return;
       }
   
       var trueInfo = GetRealInfo(player, infos);
 
+      var targetId = player.UserIDString;
       var initiatorId = trueInfo.InitiatorPlayer?.userID;
       if (trueInfo == null || initiatorId == player.userID || trueInfo.InitiatorPlayer == null || initiatorId == null) { 
         return;
       }
 
       var initiatorIdString = initiatorId.ToString();
+      var distance = trueInfo?.ProjectileDistance ?? 0;
       var time = UnityEngine.Time.realtimeSinceStartup + 1;
 
+      var weapon = "unknown";
+
+      try {
+        weapon = trueInfo?.Weapon?.name ?? trueInfo?.WeaponPrefab?.name ?? "unknown";
+      }
+      catch {
+      }
 
       timer.Once(ConVar.Server.combatlogdelay + 1, () =>
       {
-        var log = GetCorrectCombatlog(player.userID, time);
-      
-        _Worker.Update.SaveKill(new PluginKillEntry {
-          initiator_steam_id = initiatorIdString,
-          target_steam_id = player.UserIDString,
-          distance = trueInfo.ProjectileDistance,
-          game_time = Env.time.ToTimeSpan().ToShortString(),
-          hit_history = log,
-          is_headshot = trueInfo.isHeadshot,
-          weapon = trueInfo.Weapon.name
-        });
+        try {
+          var log = GetCorrectCombatlog(player.userID, time);
+        
+          _Worker.Update.SaveKill(new PluginKillEntry {
+            initiator_steam_id = initiatorIdString,
+            target_steam_id = targetId,
+            distance = distance,
+            game_time = Env.time.ToTimeSpan().ToShortString(),
+            hit_history = log,  
+            is_headshot = trueInfo?.isHeadshot ?? false,
+            weapon = weapon
+          });
+        } 
+        catch (Exception exc) {
+          Error("Обнаружена ошибка в бета-алгоритме, сообщите разработчикам", "Detect error in beta-mechanism");
+          PrintError(exc.ToString());
+        }
       });
     }
-
+ 
     public class CombatLogEventExtended {
         public float time;
 
@@ -2922,13 +2937,13 @@ namespace Oxide.Plugins
         if (ev.attacker == "player") {
           var attacker = BasePlayer.activePlayerList.FirstOrDefault(v => v.net.ID.Value == ev.attacker_id) ?? BasePlayer.sleepingPlayerList.FirstOrDefault(v => v.net.ID.Value == ev.attacker_id);
 
-          this.attacker_steam_id = attacker?.UserIDString;
+          this.attacker_steam_id = attacker?.UserIDString ?? "";
         }
 
         if (ev.target == "player") {
           var target = BasePlayer.activePlayerList.FirstOrDefault(v => v.net.ID.Value == ev.target_id) ?? BasePlayer.sleepingPlayerList.FirstOrDefault(v => v.net.ID.Value == ev.target_id);
 
-          this.target_steam_id = target?.UserIDString;
+          this.target_steam_id = target?.UserIDString ?? "";
         }
 
         this.time = UnityEngine.Time.realtimeSinceStartup - ev.time - ConVar.Server.combatlogdelay;
@@ -2970,7 +2985,7 @@ namespace Oxide.Plugins
 
     private List<CombatLogEventExtended> GetCorrectCombatlog(ulong target, float timeLimit) {
       var allCombatlogs = CombatLog.Get(target);
-      if (allCombatlogs.Count() == 0) {
+      if (allCombatlogs == null || allCombatlogs.Count() == 0) {
         return null;
       } 
 
@@ -2984,7 +2999,10 @@ namespace Oxide.Plugins
 
       var container = new List<CombatLogEventExtended>();
 
-      CombatLog.Event previousEvent = combatlog.ElementAt(0);
+      CombatLog.Event previousEvent = combatlog.ElementAtOrDefault(0);
+      if (previousEvent == null) {
+        return null;
+      }
       
       foreach (var ev in combatlog) {
         var timeLeft = UnityEngine.Time.realtimeSinceStartup - ev.time - (float) ConVar.Server.combatlogdelay;
