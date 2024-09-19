@@ -3000,9 +3000,6 @@ namespace Oxide.Plugins
       var container = new List<CombatLogEventExtended>();
 
       CombatLog.Event previousEvent = combatlog.ElementAtOrDefault(0);
-      if (previousEvent == null) {
-        return null;
-      }
       
       foreach (var ev in combatlog) {
         var timeLeft = UnityEngine.Time.realtimeSinceStartup - ev.time - (float) ConVar.Server.combatlogdelay;
@@ -3944,7 +3941,7 @@ namespace Oxide.Plugins
       var signage = go.ToBaseEntity().GetComponent<Signage>();
 
       NextTick(() =>
-      {
+      { 
         if (signage == null)
         {
           return;
