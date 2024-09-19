@@ -43,13 +43,13 @@ using System.Drawing.Imaging;
 using System.IO;
 using System.Text;
 using UnityEngine;
-using Color = System.Drawing.Color; 
+using Color = System.Drawing.Color;
 using Graphics = System.Drawing.Graphics;
 //using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts & King.(ADAPTATION)", "1.9.1")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts & King.(ADAPTATION)", "1.10.0")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -267,6 +267,7 @@ namespace Oxide.Plugins
       public static string Validate = $"{CourtUrls.Base}/plugin/";
       public static string SendContact = $"{CourtUrls.Base}/plugin/contact";
       public static string SendState = $"{CourtUrls.Base}/plugin/state";
+      public static string SendKills = $"{CourtUrls.Base}/plugin/kills";
       public static string SendChat = $"{CourtUrls.Base}/plugin/chat";
       public static string SendAlerts = $"{CourtUrls.Base}/plugin/alerts";
       public static string SendCustomAlert = $"{CourtUrls.Base}/plugin/custom-alert";
@@ -307,6 +308,23 @@ namespace Oxide.Plugins
       public bool is_team;
 
       public string text;
+    }
+
+    public class PluginKillsPayload {
+      public List<PluginKillEntry> kills = new List<PluginKillEntry>();
+    }
+
+    public class PluginKillEntry
+    {
+      public string initiator_steam_id;
+      public string target_steam_id;
+      public string game_time;
+      public float distance;
+      public string weapon;
+
+      public bool is_headshot;
+
+      public List<CombatLogEventExtended> hit_history = new List<CombatLogEventExtended>();
     }
 
     class PluginReportsPayload
@@ -1018,7 +1036,7 @@ namespace Oxide.Plugins
           {
             steam_id = upload.PlayerId.ToString(),
             net_id = upload.Entity.net.ID,
- 
+
             base64_image = Convert.ToBase64String(upload.GetImage()),
 
             type = upload.Entity.ShortPrefabName,
@@ -1092,11 +1110,12 @@ namespace Oxide.Plugins
         {
           FetchBan(queued.userid.ToString(), _RustApp.IPAddressWithoutPort(queued.ipaddress));
         }
+
         foreach (var loading in ServerMgr.Instance.connectionQueue.joining)
         {
           FetchBan(loading.userid.ToString(), _RustApp.IPAddressWithoutPort(loading.ipaddress));
         }
-      } 
+      }
 
       protected override void OnReady()
       {
@@ -1288,6 +1307,7 @@ namespace Oxide.Plugins
       private List<PluginPlayerAlertEntry> PlayerAlertCollection = new List<PluginPlayerAlertEntry>();
       private List<PluginReportEntry> ReportCollection = new List<PluginReportEntry>();
       private List<PluginChatMessageEntry> ChatCollection = new List<PluginChatMessageEntry>();
+      private List<PluginKillEntry> PlayerKillCollection = new List<PluginKillEntry>();
       private Dictionary<string, string> DisconnectHistory = new Dictionary<string, string>();
       private Dictionary<string, string> TeamChangeHistory = new Dictionary<string, string>();
       private List<string> DestroyedSignsCollection = new List<string>();
@@ -1295,6 +1315,7 @@ namespace Oxide.Plugins
       protected override void OnReady()
       {
         CancelInvoke(nameof(SendChat));
+        CancelInvoke(nameof(SendKills));
         CancelInvoke(nameof(SendUpdate));
         CancelInvoke(nameof(SendReports));
         CancelInvoke(nameof(SendAlerts));
@@ -1302,6 +1323,7 @@ namespace Oxide.Plugins
 
         InvokeRepeating(nameof(SendChat), 0, 1f);
         InvokeRepeating(nameof(SendUpdate), 0, 5f);
+        InvokeRepeating(nameof(SendKills), 0, 5f);
         InvokeRepeating(nameof(SendReports), 0, 1f);
         InvokeRepeating(nameof(SendAlerts), 0, 5f);
         InvokeRepeating(nameof(SendDestroyedSigns), 0, 5f);
@@ -1315,6 +1337,11 @@ namespace Oxide.Plugins
       public void SaveAlert(PluginPlayerAlertEntry playerAlert)
       {
         PlayerAlertCollection.Add(playerAlert);
+      }
+
+      public void SaveKill(PluginKillEntry playerKill)
+      {
+        PlayerKillCollection.Add(playerKill);
       }
 
       public void SaveDestroyedSign(string net_id)
@@ -1451,6 +1478,40 @@ namespace Oxide.Plugins
 
         ChatCollection = new List<PluginChatMessageEntry>();
       }
+
+
+      private void SendKills()
+      {
+        if (!IsReady() || PlayerKillCollection.Count == 0)
+        {
+          return;
+        }
+
+        var kills = PlayerKillCollection.ToList();
+
+        Request<object>(CourtUrls.SendKills, RequestMethod.POST, new { kills })
+          .Execute(
+            null,
+            (err) =>
+            {
+              _RustApp.Error(
+                $"Не удалось отправить историю убийств ({kills.Count} шт)",
+                $"Failed to send kill feed ({kills.Count} pc)"
+              );
+
+              // Возвращаем неудачно отправленные сообщения обратно в массив
+              var resurrectCollection = new List<PluginKillEntry>();
+
+              resurrectCollection.AddRange(kills);
+              resurrectCollection.AddRange(PlayerKillCollection);
+
+              PlayerKillCollection = kills;
+            }
+          );
+
+        PlayerKillCollection = new List<PluginKillEntry>();
+      }
+
       public void SendReports()
       {
         if (!IsReady() || ReportCollection.Count == 0)
@@ -2004,7 +2065,7 @@ namespace Oxide.Plugins
         int received = 0;
         int error = 0;
 
-        Interface.Oxide.CallHook("RustApp_OnPaidAnnounceBan", payload.suspect_id, payload.targets);
+        Interface.Oxide.CallHook("RustApp_OnPaidAnnounceBan", payload.suspect_id, payload.targets, payload.reason);
 
         if (!payload.broadcast)
         {
@@ -2059,7 +2120,7 @@ namespace Oxide.Plugins
         {
           var player = BasePlayer.Find(check);
           if (player == null || !player.IsConnected)
-          {
+          { 
             error++;
             continue;
           }
@@ -2389,7 +2450,7 @@ namespace Oxide.Plugins
         Parent = ReportLayer + ".S",
         Components =
             {
-                new CuiInputFieldComponent { Text = $"{lang.GetMessage("Header.Search.Placeholder", this, player.UserIDString)}", FontSize = 14, Font = "robotocondensed-regular.ttf", Color = HexToRustFormat("#D0C6BD80"), Align = TextAnchor.MiddleLeft, Command = "UI_RP_ReportPanel search 0"},
+                new CuiInputFieldComponent { Text = $"{lang.GetMessage("Header.Search.Placeholder", this, player.UserIDString)}", FontSize = 14, Font = "robotocondensed-regular.ttf", Color = HexToRustFormat("#D0C6BD80"), Align = TextAnchor.MiddleLeft, Command = "UI_RP_ReportPanel search 0" },
                 new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "10 0", OffsetMax = "-85 0"}
             }
       });
@@ -2443,10 +2504,10 @@ namespace Oxide.Plugins
             {
               Parent = ReportLayer + $".{target.UserIDString}",
               Components =
-                {
-                    new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
-                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
-                }
+                        {
+                            new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
+                            new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
+                        }
             });
 
             container.Add(new CuiPanel()
@@ -2571,6 +2632,7 @@ namespace Oxide.Plugins
 
     private CourtWorker _Worker;
     private Dictionary<ulong, double> _Cooldowns = new Dictionary<ulong, double>();
+    private Dictionary<string, HitInfo> _WoundedHits = new Dictionary<string, HitInfo>();
 
     private static RustApp _RustApp;
     private static Configuration _Settings;
@@ -2688,7 +2750,7 @@ namespace Oxide.Plugins
       _Worker.Update.IsDead = true;
       _Worker.Update.SendUpdate();
 
-      UnityEngine.Object.Destroy(_Worker); 
+      UnityEngine.Object.Destroy(_Worker);
 
       foreach (var player in BasePlayer.activePlayerList)
       {
@@ -2725,7 +2787,8 @@ namespace Oxide.Plugins
         return;
       }
 
-      Interface.Oxide.CallHook("RustApp_OnPlayerReported", initiator_steam_id, target_steam_id, reason, message);
+      var was_checked = _Checks.LastChecks.ContainsKey(target_steam_id) && CurrentTime() - _Checks.LastChecks[target_steam_id] < _Settings.report_ui_show_check_in * 24 * 60 * 60;
+      Interface.Oxide.CallHook("RustApp_OnPlayerReported", initiator_steam_id, target_steam_id, reason, message, was_checked);
 
       _Worker?.Update.SaveReport(new PluginReportEntry
       {
@@ -2746,9 +2809,207 @@ namespace Oxide.Plugins
 
     #region Interface
 
+
+
+
     #endregion
 
     #region Hooks
+
+    private void OnPlayerWound( BasePlayer instance, HitInfo info )
+    {
+      _WoundedHits[instance.UserIDString] = info;
+    }
+    
+    private void OnPlayerRespawn( BasePlayer instance )
+    {
+      if (_WoundedHits.ContainsKey(instance.UserIDString)) {
+        _WoundedHits.Remove(instance.UserIDString);
+      }
+    }
+
+    void OnPlayerRecovered(BasePlayer player)
+    {
+      if (_WoundedHits.ContainsKey(player.UserIDString)) {
+        _WoundedHits.Remove(player.UserIDString);
+      }
+    }
+
+    private void OnPlayerDeath( BasePlayer player, HitInfo infos )
+    {
+      if (infos?.InitiatorPlayer == null) {
+        return;
+      }
+  
+      var trueInfo = GetRealInfo(player, infos);
+
+      var initiatorId = trueInfo.InitiatorPlayer?.userID;
+      if (trueInfo == null || initiatorId == player.userID || trueInfo.InitiatorPlayer == null || initiatorId == null) { 
+        return;
+      }
+
+      var initiatorIdString = initiatorId.ToString();
+      var time = UnityEngine.Time.realtimeSinceStartup + 1;
+
+
+      timer.Once(ConVar.Server.combatlogdelay + 1, () =>
+      {
+        var log = GetCorrectCombatlog(player.userID, time);
+      
+        _Worker.Update.SaveKill(new PluginKillEntry {
+          initiator_steam_id = initiatorIdString,
+          target_steam_id = player.UserIDString,
+          distance = trueInfo.ProjectileDistance,
+          game_time = TimeSpan.FromSeconds(Env.time).ToShortString(),
+          hit_history = log,
+          is_headshot = trueInfo.isHeadshot,
+          weapon = trueInfo.Weapon.name
+        });
+      });
+    }
+
+    public class CombatLogEventExtended {
+        public float time;
+
+        public string attacker_steam_id;
+
+        public string target_steam_id;
+
+        public string attacker;
+
+        public string target;
+
+        public string weapon;
+
+        public string ammo;
+
+        public string bone;
+
+        public float distance;
+
+        public float hp_old;
+
+        public float hp_new;
+
+        public string info;
+
+        public int proj_hits;
+
+        public float pi;
+
+        public float proj_travel;
+
+        public float pm;
+
+        public int desync;
+
+        public bool ad;
+
+      public CombatLogEventExtended(CombatLog.Event ev) {
+        if (ev.attacker == "player") {
+          var attacker = BasePlayer.activePlayerList.FirstOrDefault(v => v.net.ID == ev.attacker_id) ?? BasePlayer.sleepingPlayerList.FirstOrDefault(v => v.net.ID == ev.attacker_id);
+
+          this.attacker_steam_id = attacker?.UserIDString;
+        }
+
+        if (ev.target == "player") {
+          var target = BasePlayer.activePlayerList.FirstOrDefault(v => v.net.ID == ev.target_id) ?? BasePlayer.sleepingPlayerList.FirstOrDefault(v => v.net.ID == ev.target_id);
+
+          this.target_steam_id = target?.UserIDString;
+        }
+
+        this.time = UnityEngine.Time.realtimeSinceStartup - ev.time - ConVar.Server.combatlogdelay;
+        this.attacker = ev.attacker;
+        this.target = ev.target;
+        this.weapon = ev.weapon;
+        this.ammo = ev.ammo;
+        this.bone = ev.bone;
+        this.distance = (float) Math.Round(ev.distance, 2);
+        this.hp_old = (float) Math.Round(ev.health_old, 2);
+        this.hp_new = (float) Math.Round(ev.health_new, 2);
+        this.info = ev.info;
+        this.proj_hits = -1;
+        this.proj_travel = -1;
+
+        this.desync = -1;
+
+        this.pi = -1;
+        this.pm = -1;
+        this.ad = false;
+      }
+
+      public string getInitiator() {
+        if (this.attacker != "player") {
+          return this.attacker;
+        }
+
+        return this.attacker_steam_id;
+      }
+
+      public string getTarget() {
+        if (this.target != "player") {
+          return this.target;
+        }
+
+        return this.target_steam_id;
+      }
+    }
+
+    private List<CombatLogEventExtended> GetCorrectCombatlog(ulong target, float timeLimit) {
+      var allCombatlogs = CombatLog.Get(target);
+      if (allCombatlogs.Count() == 0) {
+        return null;
+      } 
+
+      var combatlog = allCombatlogs.Where(v => v.time < timeLimit).Reverse();
+      if (combatlog.Count() == 0) {
+        return null;
+      } 
+
+      var THRESHOLD_STREAK = 20;
+      var THRESHOLD_MAX_LIMIT = 30;
+
+      var container = new List<CombatLogEventExtended>();
+
+      CombatLog.Event previousEvent = combatlog.ElementAt(0);
+      
+      foreach (var ev in combatlog) {
+        var timeLeft = UnityEngine.Time.realtimeSinceStartup - ev.time - (float) ConVar.Server.combatlogdelay;
+
+        if (ev.target != "player" && ev.target != "you") {
+          continue;
+        }
+
+        if (ev.info == "killed" && Math.Abs(ev.time - timeLimit) > 1) {
+          break;
+        }
+
+        var dto = new CombatLogEventExtended(ev);
+
+        if (Math.Abs(ev.time - previousEvent.time) < THRESHOLD_STREAK) {
+          container.Add(dto);
+        } else if (Math.Abs(ev.time - timeLimit) < THRESHOLD_MAX_LIMIT) {
+          container.Add(dto);
+        } else {
+          break;
+        }
+
+        previousEvent = ev;
+      }
+
+      return container;
+    }
+
+    private HitInfo GetRealInfo(BasePlayer player, HitInfo info) {
+      var initiatorId = info.InitiatorPlayer?.userID;
+      if (initiatorId == player.userID || info.InitiatorPlayer == null) { 
+        if (_WoundedHits.ContainsKey(player.UserIDString)) {
+          return _WoundedHits[player.UserIDString];
+        }
+      }
+
+      return info;
+    }
 
     private void OnPlayerReported(BasePlayer reporter, string targetName, string targetId, string subject, string message, string type)
     {
@@ -2866,7 +3127,7 @@ namespace Oxide.Plugins
 
     private void OnEntityKill(BaseNetworkable entity)
     {
-      if (entity?.net?.ID == null || entity?.net.ID == null || entity?.ShortPrefabName == null)
+      if (entity?.net?.ID == null || entity?.net?.ID == null || entity?.ShortPrefabName == null)
       {
         return;
       }
@@ -3291,7 +3552,7 @@ namespace Oxide.Plugins
       Effect effect = new Effect("assets/bundled/prefabs/fx/notice/item.select.fx.prefab", player, 0, new Vector3(), new Vector3());
       EffectNetwork.Send(effect, player.Connection);
 
-      player.Command("gametip.showtoast", type, text);
+      player.Command("gametip.showtoast", type, text, 1);
     }
 
     private bool CloseConnection(string steamId, string reason)
@@ -3610,9 +3871,9 @@ namespace Oxide.Plugins
       PaintedItemUpdate update = new PaintedItemUpdate(player, entity, item, image);
 
       _Worker.Action.SendSignage(new PaintedItemUpdate(player, entity, item, image));
-    }*/
+    }
 
-    /*private void OnFireworkDesignChanged(PatternFirework firework, ProtoBuf.PatternFirework.Design design, BasePlayer player)
+    private void OnFireworkDesignChanged(PatternFirework firework, ProtoBuf.PatternFirework.Design design, BasePlayer player)
     {
       if (design?.stars == null || design.stars.Count == 0)
       {
