@@ -2886,7 +2886,7 @@ namespace Oxide.Plugins
             initiator_steam_id = initiatorIdString,
             target_steam_id = targetId,
             distance = distance,
-            game_time = Env.time.ToTimeSpan().ToShortString(),
+            game_time = TimeSpan.FromSeconds(Env.time).ToShortString(),
             hit_history = log,  
             is_headshot = trueInfo?.isHeadshot ?? false,
             weapon = weapon
