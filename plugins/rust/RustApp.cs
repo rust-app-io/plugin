@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.10.3")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.10.4")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -3100,6 +3100,10 @@ namespace Oxide.Plugins
     {
       if (_Worker.Queue.Notices.ContainsKey(player.UserIDString))
       {
+        if (_Worker.Queue.Notices[player.UserIDString] == true) {
+          Interface.Oxide.CallHook("RustApp_OnCheckNoticeHidden", player);
+        }
+
         _Worker.Queue.Notices.Remove(player.UserIDString);
       }
 
