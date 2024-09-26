@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.10.4")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.10.5")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -1207,7 +1207,7 @@ namespace Oxide.Plugins
                 CreateAlertForIpBan(ban, steamId);
               }
 
-            }
+            } 
           },
           () =>
           {
@@ -3094,7 +3094,12 @@ namespace Oxide.Plugins
     private void CanUserLogin(string name, string id, string ipAddress)
     {
       _Worker?.Ban.FetchBan(id, ipAddress);
-    }
+    } 
+
+    private void OnPlayerConnected(BasePlayer player)
+    { 
+      _Worker?.Ban.FetchBan(player.UserIDString, player.net.connection.IPAddressWithoutPort());
+    } 
 
     private void OnPlayerDisconnected(BasePlayer player, string reason)
     {
@@ -3215,7 +3220,7 @@ namespace Oxide.Plugins
     #endregion
 
     #region Commands
-
+ 
     [ConsoleCommand("UI_RP_ReportPanel")]
     private void CmdConsoleReportPanel(ConsoleSystem.Arg args)
     {
