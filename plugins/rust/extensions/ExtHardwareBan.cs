@@ -1,6 +1,5 @@
 using System.Collections.Generic;
 using Newtonsoft.Json;
-using Oxide.Core.Plugins;
 
 namespace Oxide.Plugins
 {
@@ -38,12 +37,10 @@ namespace Oxide.Plugins
 
         private void RustApp_OnPaidAnnounceBan(string steam_id, List<string> initiators, string reason)
         {
-            if (config.WorB)
-                if (config.Reasons.Contains(reason))
-                    timer.Once(5f, () => plugins.Find("TirifyGamePluginRust")?.Call("SetTirifyBan", steam_id, reason));
-            else
-                if (!config.Reasons.Contains(reason))
-                    timer.Once(5f, () => plugins.Find("TirifyGamePluginRust")?.Call("SetTirifyBan", steam_id, reason));
+            if (config.Reasons.IsNullOrEmpty())
+                timer.Once(5f, () => plugins.Find("TirifyGamePluginRust")?.Call("SetTirifyBan", steam_id, reason));
+            else if (config.WorB? config.Reasons.Contains(reason) : !config.Reasons.Contains(reason))
+                timer.Once(5f, () => plugins.Find("TirifyGamePluginRust")?.Call("SetTirifyBan", steam_id, reason));
         }
     }
 }
