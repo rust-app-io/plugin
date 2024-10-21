@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.10.5")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.10.6")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -2760,11 +2760,15 @@ namespace Oxide.Plugins
 
     private void Unload()
     {
-      _Worker.Update.IsDead = true;
-      _Worker.Update.SendUpdate();
+      if (_Worker?.Update != null) {
+        _Worker.Update.IsDead = true;
+        _Worker.Update.SendUpdate();
+      }
 
-      UnityEngine.Object.Destroy(_Worker);
-
+      if (_Worker != null) {
+        UnityEngine.Object.Destroy(_Worker);
+      }
+      
       foreach (var player in BasePlayer.activePlayerList)
       {
         CuiHelper.DestroyUi(player, CheckLayer);
