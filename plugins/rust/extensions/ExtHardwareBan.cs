@@ -37,12 +37,11 @@ namespace Oxide.Plugins
 
         private void RustApp_OnPaidAnnounceBan(string steam_id, List<string> initiators, string reason)
         {
-            if (config.Reasons.IsNullOrEmpty() || (config.WorB ? config.Reasons.Contains(reason) : !config.Reasons.Contains(reason)))
+            if (config.Reasons.IsNullOrEmpty() || (config.WorB ? config.Reasons.Contains(reason) : !config.Reasons.Contains(reason)) && plugins.Find("TirifyGamePluginRust"))
             {
                 timer.Once(5f, () => 
                 {
                     plugins.Find("TirifyGamePluginRust")?.Call("SetTirifyBan", steam_id, reason);
-                    Puts($"Установлен Tirify бан для {steam_id} по причине: {reason}");
                 });
             }
         }
