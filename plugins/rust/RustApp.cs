@@ -49,7 +49,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.10.6")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.10.7")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -1206,8 +1206,7 @@ namespace Oxide.Plugins
 
                 CreateAlertForIpBan(ban, steamId);
               }
-
-            } 
+            }
           },
           () =>
           {
@@ -2894,8 +2893,8 @@ namespace Oxide.Plugins
           });
         } 
         catch (Exception exc) {
-          Error("Обнаружена ошибка в бета-алгоритме, сообщите разработчикам", "Detect error in beta-mechanism");
-          PrintError(exc.ToString());
+          //Error("Обнаружена ошибка в бета-алгоритме, сообщите разработчикам", "Detect error in beta-mechanism");
+          //PrintError(exc.ToString());
         }
       });
     }
