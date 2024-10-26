@@ -3,7 +3,7 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("ExtHardwareBan", "Bizlich", "1.0.0")]
+    [Info("ExtHardwareBan", "RustApp.Io (by Bizlich)", "1.0.0")]
     [Description("Hardware ban for RustApp (requires Tirify)")]
     public class ExtHardwareBan : RustPlugin
     {
