@@ -1,4 +1,5 @@
 ﻿#define RU
+#define DEBUG
 
 using Newtonsoft.Json;
 using Oxide.Core;
@@ -820,7 +821,6 @@ namespace Oxide.Plugins
 
             if (codeError1 || codeError2 || codeError3) {
               if (IsAuthed != false) {
-                Error("Welcome to the RustApp.Io!");
                 Error("Your server is not paired with our network, follow instructions to pair server:");
                 Error("1) If you already start pairing, enter 'ra.pair %code%' which you get from our site");
                 Error("2) Open servers page, press 'connect server', and enter command which you get on it");
@@ -836,12 +836,9 @@ namespace Oxide.Plugins
             var versionError2 = Api.ErrorContains(err, "This version contains serious bug, please update plugin");
 
             if (versionError1 || versionError2) {
-              if (IsAuthed != false) {
-                Error("Welcome to the RustApp.Io!");
-                Error("Your plugin is outdated, you should download new version!");
-                Error("1) Open servers page, press 'update' near server to download new version, then just replace plugin");
-                Error("2) If you don't have 'update' button, press settings icon and choose 'download plugin' button");
-              }
+              Error("Your plugin is outdated, you should download new version!");
+              Error("1) Open servers page, press 'update' near server to download new version, then just replace plugin");
+              Error("2) If you don't have 'update' button, press settings icon and choose 'download plugin' button");
 
               onError();
               return;
@@ -853,18 +850,13 @@ namespace Oxide.Plugins
             var paymentError2 = Api.ErrorContains(err, "Вы превысили лимиты по");
 
             if (paymentError1 || paymentError2) {
-              if (IsAuthed != false) {
-                Error("Welcome to the RustApp.Io!");
-                Error("Seems there are some problems with your tariff, please open site to get more details");
-                Error("1) You need to top-up balance to continue working with our service");
-                Error("1) You reached players limit, and you neeed to upgrade tariff");
-              }
+              Error("Seems there are some problems with your tariff, please open site to get more details");
 
               onError();
               return;
             }
 
-            Debug($"Unknown exception in auth: {err.Substring(0, 128)}");
+            Debug($"Unknown exception in auth: {err}");
           }
         );
       }
@@ -1579,6 +1571,8 @@ namespace Oxide.Plugins
 
       private void OnServerInitialized() { 
         _RustApp = this;
+        
+        Log("Welcome to the RustApp.Io!");
 
         if (!CheckRequiredPlugins()) {
           Error("Fix pending errors, and use 'o.reload RustApp'");
@@ -2966,7 +2960,7 @@ namespace Oxide.Plugins
           }
           catch (Exception parseException)
           {
-            Interface.Oxide.LogError($"Не удалось разобрать ответ от сервера ({request.method.ToUpper()} {request.url}): {parseException} (Response: {request.downloadHandler?.text})");
+            Interface.Oxide.LogError($"Failed to parse response ({request.method.ToUpper()} {request.url}): {parseException} (Response: {request.downloadHandler?.text})");
           }
         }
       }
@@ -3058,7 +3052,7 @@ namespace Oxide.Plugins
     private static void Debug(string text) {
       #if DEBUG
       
-        _RustApp.Puts(text);
+        _RustApp.Puts($"DEBUG | {text}");
       
       #endif
     }
