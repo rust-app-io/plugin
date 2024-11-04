@@ -50,7 +50,7 @@ using ProtoBuf;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "RustApp.io (Anchor-Team)", "2.0.0")]
+  [Info("RustApp", "RustApp.io", "2.0.0")]
   public class RustApp : RustPlugin
   {
     #region Variables
@@ -817,8 +817,8 @@ namespace Oxide.Plugins
             if (codeError1 || codeError2 || codeError3) {
               if (IsAuthed != false) {
                 Error("Your server is not paired with our network, follow instructions to pair server:");
-                Error("1) If you already start pairing, enter 'ra.pair %code%' which you get from our site");
-                Error("2) Open servers page, press 'connect server', and enter command which you get on it");
+                Error("1. If you already start pairing, enter 'ra.pair %code%' which you get from our site");
+                Error("2. Open servers page, press 'connect server', and enter command which you get on it");
               }
 
               onError();
@@ -832,8 +832,8 @@ namespace Oxide.Plugins
 
             if (versionError1 || versionError2) {
               Error("Your plugin is outdated, you should download new version!");
-              Error("1) Open servers page, press 'update' near server to download new version, then just replace plugin");
-              Error("2) If you don't have 'update' button, press settings icon and choose 'download plugin' button");
+              Error("1. Open servers page, press 'update' near server to download new version, then just replace plugin");
+              Error("2. If you don't have 'update' button, press settings icon and choose 'download plugin' button");
 
               onError();
               return;
@@ -892,7 +892,7 @@ namespace Oxide.Plugins
           .Execute(
             (data, raw) => {
               if (data.token == null || data.token.Length == 0) {
-                Log("Complete pairing on site (press save button)...");
+                Log("Complete pairing on site...");
                 return;
               }
 
@@ -1596,7 +1596,7 @@ namespace Oxide.Plugins
       private void OnServerInitialized() { 
         _RustApp = this;
         
-        Log("Welcome to the RustApp.Io!");
+        Log("Welcome to the RustApp.io!");
 
         if (!CheckRequiredPlugins()) {
           Error("Fix pending errors, and use 'o.reload RustApp'");
@@ -2550,14 +2550,14 @@ namespace Oxide.Plugins
       container.Add(new CuiButton()
       {
         RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = $"-500 -500", OffsetMax = $"500 500" },
-        Button = { Close = $"{ReportLayer}.T", Color = "0 0 0 1", Sprite = "assets/content/ui/ui.circlegradient.png" }
+        Button = { Close = $"{ReportLayer}.T", Color = "0 0 0 1", Sprite = "assets/content/ui/gameui/attackheli/compass/ui.soft.radial.png" }
       }, ReportLayer + $".T");
 
 
       container.Add(new CuiButton()
       {
         RectTransform = { AnchorMin = $"{(leftAlign ? -1 : 2)} 0", AnchorMax = $"{(leftAlign ? -2 : 3)} 1", OffsetMin = $"-500 -500", OffsetMax = $"500 500" },
-        Button = { Close = $"{ReportLayer}.T", Color = HexToRustFormat("#343434"), Sprite = "assets/content/ui/ui.circlegradient.png" }
+        Button = { Close = $"{ReportLayer}.T", Color = HexToRustFormat("#343434"), Sprite = "assets/content/ui/gameui/attackheli/compass/ui.soft.radial.png" }
       }, ReportLayer + $".T");
 
       container.Add(new CuiButton()
@@ -2636,7 +2636,7 @@ namespace Oxide.Plugins
       container.Add(new CuiButton
       {
         RectTransform = { AnchorMin = "0 0.5", AnchorMax = "1 1", OffsetMin = $"-500 -500", OffsetMax = $"500 500" },
-        Button = { Color = HexToRustFormat("#1C1C1C"), Sprite = "assets/content/ui/ui.circlegradient.png" },
+        Button = { Color = HexToRustFormat("#1C1C1C"), Sprite = "assets/content/ui/gameui/attackheli/compass/ui.soft.radial.png" },
         Text = { Text = "", Align = TextAnchor.MiddleCenter }
       }, "Under", CheckLayer);
 
