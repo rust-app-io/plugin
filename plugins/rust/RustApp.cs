@@ -771,7 +771,7 @@ namespace Oxide.Plugins
     }
 
     private class AuthWorker : RustAppWorker {
-      public bool IsAuthed = false;
+      public bool? IsAuthed;
 
       public Action? OnAuthSuccess;
       public Action? OnAuthFailed;
@@ -785,12 +785,10 @@ namespace Oxide.Plugins
           return;
         }
       
-        Action<string> onError = (error) => {
+        Action onError = () => {
           if (IsAuthed == false) {
             return;
           }
-
-          Error(error);
 
           IsAuthed = false;
           OnAuthFailed?.Invoke();
@@ -821,10 +819,14 @@ namespace Oxide.Plugins
             var codeError3 = Api.ErrorContains(err, "Check server configuration, required");
 
             if (codeError1 || codeError2 || codeError3) {
-              onError("Welcome to the RustApp.Io!");
-              onError("Your server is not paired with our network, follow instructions to pair server:");
-              onError("1) If you already start pairing, enter 'ra.pair %code%' which you get from our site");
-              onError("2) Open servers page, press 'connect server', and enter command which you get on it");
+              if (IsAuthed != false) {
+                Error("Welcome to the RustApp.Io!");
+                Error("Your server is not paired with our network, follow instructions to pair server:");
+                Error("1) If you already start pairing, enter 'ra.pair %code%' which you get from our site");
+                Error("2) Open servers page, press 'connect server', and enter command which you get on it");
+              }
+
+              onError();
               return;
             }
 
@@ -834,10 +836,14 @@ namespace Oxide.Plugins
             var versionError2 = Api.ErrorContains(err, "This version contains serious bug, please update plugin");
 
             if (versionError1 || versionError2) {
-              onError("Welcome to the RustApp.Io!");
-              onError("Your plugin is outdated, you should download new version!");
-              onError("1) Open servers page, press 'update' near server to download new version, then just replace plugin");
-              onError("2) If you don't have 'update' button, press settings icon and choose 'download plugin' button");
+              if (IsAuthed != false) {
+                Error("Welcome to the RustApp.Io!");
+                Error("Your plugin is outdated, you should download new version!");
+                Error("1) Open servers page, press 'update' near server to download new version, then just replace plugin");
+                Error("2) If you don't have 'update' button, press settings icon and choose 'download plugin' button");
+              }
+
+              onError();
               return;
             }
             
@@ -847,10 +853,14 @@ namespace Oxide.Plugins
             var paymentError2 = Api.ErrorContains(err, "Вы превысили лимиты по");
 
             if (paymentError1 || paymentError2) {
-              onError("Welcome to the RustApp.Io!");
-              onError("Seems there are some problems with your tariff, please open site to get more details");
-              onError("1) You need to top-up balance to continue working with our service");
-              onError("1) You reached players limit, and you neeed to upgrade tariff");
+              if (IsAuthed != false) {
+                Error("Welcome to the RustApp.Io!");
+                Error("Seems there are some problems with your tariff, please open site to get more details");
+                Error("1) You need to top-up balance to continue working with our service");
+                Error("1) You reached players limit, and you neeed to upgrade tariff");
+              }
+
+              onError();
               return;
             }
 
