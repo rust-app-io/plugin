@@ -849,8 +849,15 @@ namespace Oxide.Plugins
             // If some limits broken
             var paymentError2 = Api.ErrorContains(err, "Вы превысили лимиты по");
 
-            if (paymentError1 || paymentError2) {
-              Error("Seems there are some problems with your tariff, please open site to get more details");
+            if (paymentError1) {
+              Error("Your balance is not enough to continue working with our service, top-up it");
+
+              onError();
+              return;
+            }
+
+            if (paymentError2) {
+              Error("You have reached your limits, please upgrade your plan");
 
               onError();
               return;
