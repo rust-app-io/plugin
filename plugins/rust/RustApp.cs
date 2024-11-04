@@ -1576,7 +1576,7 @@ namespace Oxide.Plugins
         }
 
         timer.Once(1f, () => {
-          MetaInfo.Read();
+          MetaInfo.Read(); 
 
           RustAppEngineCreate();
           RegisterCommands(); 
