@@ -1,5 +1,4 @@
 ﻿#define RU
-#define DEBUG
 
 using Newtonsoft.Json;
 using Oxide.Core;
@@ -781,11 +780,7 @@ namespace Oxide.Plugins
         InvokeRepeating(nameof(CheckAuthStatus), 0f, 5f);
       }
  
-      public void CheckAuthStatus() {
-        if (_RustAppEngine.IsPairingNow()) {
-          return;
-        }
-      
+      public void CheckAuthStatus() {      
         Action onError = () => {
           if (IsAuthed == false) {
             return;
@@ -901,12 +896,23 @@ namespace Oxide.Plugins
                 return;
               }
 
-              _RustApp.timer.Once(1f, () => _RustAppEngine.AuthWorker.CheckAuthStatus());
-              MetaInfo.write(new MetaInfo { Value = data.token });
+              Action saveData = () => {
+                MetaInfo.write(new MetaInfo { Value = data.token });
 
-              Log("Pairing completed, reloading...");
-              
-              Destroy(this);
+                _RustApp.timer.Once(1f, () => _RustAppEngine.AuthWorker?.CheckAuthStatus());
+
+                _MetaInfo = MetaInfo.Read();
+
+                Log("Pairing completed, reloading...");
+                
+                Destroy(this);
+              };
+
+              if (_RustAppEngine.StateWorker != null) {
+                _RustAppEngine.StateWorker?.SendUpdate(true, () => saveData());
+              } else {
+                saveData();
+              }
             },
             (err) => {
               if (Api.ErrorContains(err, "code not exists")) {
@@ -935,7 +941,7 @@ namespace Oxide.Plugins
         SendUpdate(false);
       }
 
-      public void SendUpdate(bool unload = false) {
+      public void SendUpdate(bool unload = false, Action? onFinished = null) {
         var players = unload ? new List<CourtApi.PluginStatePlayerDto>() : this.CollectPlayers();
 
         var disconnected = unload ? CollectFakeDisconnects() : DisconnectReasons.ToDictionary(v => v.Key, v => v.Value);
@@ -952,8 +958,12 @@ namespace Oxide.Plugins
           .Execute(
             (data, raw) => { 
               Trace("State was sent successfull");
+
+              onFinished?.Invoke();
             },
             (err) => {
+              onFinished?.Invoke();
+
               Debug($"State sent error: {err}");
 
               ResurrectDictionary(disconnected, DisconnectReasons);  
@@ -1006,6 +1016,12 @@ namespace Oxide.Plugins
         }
 
         return disconnect;
+      }
+
+      public void OnDestroy() {
+        base.OnDestroy();
+
+        SendUpdate(true);
       }
     }
 
@@ -1067,7 +1083,7 @@ namespace Oxide.Plugins
         InvokeRepeating(nameof(GetQueueTasks), 0f, 1f);
       }
 
-      private void GetQueueTasks() {
+      private void GetQueueTasks() {        
         QueueApi.GetQueueTasks()
           .Execute(
             (data, raw) => CallQueueTasks(data),
@@ -1091,6 +1107,7 @@ namespace Oxide.Plugins
           }
 
           try {
+            Trace($"Calling: {ConvertToRustAppQueueFormat(task.request.name, true)}");
             // To get our official response
             var response = (object) _RustApp.Call(ConvertToRustAppQueueFormat(task.request.name, true), task.request.data);
            
@@ -1595,8 +1612,6 @@ namespace Oxide.Plugins
       }
 
       private void Unload() {
-        _RustAppEngine.StateWorker?.SendUpdate(true);
-
         RustAppEngineDestroy();
         DestroyAllUi();
       }
@@ -1925,6 +1940,8 @@ namespace Oxide.Plugins
         }
 
         private object RustApp_InternalQueue_ChatMessage(JObject raw) {
+          Debug("Queue chat message received");
+
           var data = raw.ToObject<QueueTaskChatMessageDto>();
 
           if (data.target_steam_id is string)
@@ -3051,7 +3068,7 @@ namespace Oxide.Plugins
     private static void Trace(string text) {
       #if TRACE
       
-        _RustApp.Puts(text);
+        _RustApp.Puts($"TRACE | {text}");
       
       #endif
     }
