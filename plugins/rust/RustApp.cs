@@ -786,11 +786,11 @@ namespace Oxide.Plugins
         }
       
         Action<string> onError = (error) => {
-          Error(error);
-
           if (IsAuthed == false) {
             return;
           }
+
+          Error(error);
 
           IsAuthed = false;
           OnAuthFailed?.Invoke();
@@ -1575,10 +1575,12 @@ namespace Oxide.Plugins
           return;
         }
 
-        MetaInfo.Read();
+        timer.Once(1f, () => {
+          MetaInfo.Read();
 
-        RustAppEngineCreate();
-        RegisterCommands(); 
+          RustAppEngineCreate();
+          RegisterCommands(); 
+        });
       }
 
       private void Unload() {
