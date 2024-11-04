@@ -55,15 +55,16 @@ namespace Oxide.Plugins
   {
     #region Variables
 
+    // References to other plugin with API
+    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting, TirifyGamePluginRust, ExtRaidBlock;
+
     private static MetaInfo _MetaInfo = MetaInfo.Read();
     private static CheckInfo _CheckInfo = CheckInfo.Read();
 
-    private static Configuration _Settings;
     private static RustApp _RustApp;
-    private static RustAppEngine _RustAppEngine;
+    private static Configuration _Settings;
 
-    // References to other plugin with API
-    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting, TirifyGamePluginRust, ExtRaidBlock;
+    private static RustAppEngine _RustAppEngine;
 
     #endregion
 
@@ -732,13 +733,13 @@ namespace Oxide.Plugins
         AuthWorker = this.gameObject.AddComponent<AuthWorker>();
 
         AuthWorker.OnAuthSuccess += () => {
-          Debug("Авторизация успешно, запускаем компоненты");
+          Trace("Authed success, components enabled");
 
           CreateSubWorkers();
         };
  
         AuthWorker.OnAuthFailed += () => {
-          Debug("Авторизация зафейлилась, убиваем компоненты");
+          Trace("Auth failed, components disabled");
          
           DestroySubWorkers();
         };
@@ -796,11 +797,11 @@ namespace Oxide.Plugins
         };
 
         Action onSuccess = () => {
-          Debug("Соединение установлено");
-
           if (IsAuthed == true) {
             return;
           }
+
+          Log("Connection to the service established");
 
           IsAuthed = true;
           OnAuthSuccess?.Invoke();
@@ -853,7 +854,7 @@ namespace Oxide.Plugins
               return;
             }
 
-            Debug($"Неизвестная ошибка: {err.Substring(0, 128)}");
+            Debug($"Unknown exception in auth: {err.Substring(0, 128)}");
           }
         );
       }
@@ -872,37 +873,37 @@ namespace Oxide.Plugins
             },
             (err) => {
               if (Api.ErrorContains(err, "code not exists")) {
-                Debug("Такого кода не существует");
+                Error("Pairing failed: requested code not exists");
               } else {
-                Debug($"Произошла неизвестная ошибка, попробуйте позже {err}");
+                Debug($"Pairing failed: unknown exception {err}");
               }
 
               Destroy(this);
             }
           );
       }
-
+ 
       public void WaitPairFinish() {
         CourtApi.SendPairDetails(EnteredCode)
           .Execute(
             (data, raw) => {
               if (data.token == null || data.token.Length == 0) {
-                Debug("Завершите подключение на сайте...");
+                Log("Complete pairing on site (press save button)...");
                 return;
               }
 
-              Debug("Токен сохранён, переподключение...");
-
               _RustApp.timer.Once(1f, () => _RustAppEngine.AuthWorker.CheckAuthStatus());
               MetaInfo.write(new MetaInfo { Value = data.token });
+
+              Log("Pairing completed, reloading...");
               
               Destroy(this);
             },
             (err) => {
               if (Api.ErrorContains(err, "code not exists")) {
-                Debug("Судя по всему вы закрыли окно на сайте не нажав сохранить");
+                Error("Pairing failed: seems you closed modal on site");
               } else {
-                Debug($"Произошла неизвестная ошибка, попробуйте позже {err}");
+                Error($"Pairing failed: unknown exception {err}");
               }
 
               Destroy(this);
@@ -940,9 +941,11 @@ namespace Oxide.Plugins
           team_changes = team_changes 
         })
           .Execute(
-            (data, raw) => Debug("Стейт отправлен успешно"),
+            (data, raw) => { 
+              Trace("State was sent successfull");
+            },
             (err) => {
-              Debug($"Ошибка отправки стейта {err}");
+              Debug($"State sent error: {err}");
 
               ResurrectDictionary(disconnected, DisconnectReasons);  
               ResurrectDictionary(team_changes, TeamChanges);
@@ -1060,14 +1063,13 @@ namespace Oxide.Plugins
           .Execute(
             (data, raw) => CallQueueTasks(data),
             (error) => {
-              Debug($"Ошибка получения очередей {error}");
+              Debug($"Queue retreive failed {error}");
             }
           );
       }
 
       private void CallQueueTasks(List<QueueApi.QueueTaskResponse> queuesTasks) {
         if (queuesTasks.Count == 0) {
-          Debug("Все задачи обработаны");
           return;
         }
 
@@ -1075,7 +1077,7 @@ namespace Oxide.Plugins
 
         foreach (var task in queuesTasks) {
           if (QueueProcessedIds.Contains(task.id)) {
-            Debug("Эта задача уже обрабатывалась");
+            Debug($"This task was already processed: {task.id}");
             return;
           }
 
@@ -1089,7 +1091,7 @@ namespace Oxide.Plugins
             Interface.Oxide.CallHook(ConvertToRustAppQueueFormat(task.request.name, false), task.request.data);
           }
           catch (Exception exc) {
-            Error($"Не удалось обработать {task.id} {task.request.name}");
+            Error($"Failed to process task {task.id} {task.request.name}: {exc.ToString()}");
 
             queueResponses.Add(task.id, null);
           }
@@ -1108,12 +1110,12 @@ namespace Oxide.Plugins
             (data, raw) => { 
               QueueProcessedIds = new List<string>();
 
-              Debug("Ответ по очередям успешно доставлен");
+              Trace("Ответ по очередям успешно доставлен");
             },
             (err) => {
               QueueProcessedIds = new List<string>();
 
-              Error("Не удалось отправить ответ по очередям");
+              Debug($"Failed to process queue: {err}");
             }
           );
       }
@@ -1182,12 +1184,10 @@ namespace Oxide.Plugins
 
       private void CycleBanUpdate() {
         if (BanUpdateQueue.Count == 0) {
-          Debug("Нет банов для проверки");
           return;
         }
 
         CycleBanUpdateWrapper((steamId, ban) => {
-          Debug($"Проверка бана для {steamId}, бан обнаружен: {ban != null}");
           var queuePosition = BanUpdateQueue.Find(v => v.steam_id == steamId);
           if (queuePosition != null) {
             BanUpdateQueue.Remove(queuePosition);
@@ -1223,7 +1223,6 @@ namespace Oxide.Plugins
         BanApi.BanGetBatch(payload)
           .Execute(
             (data, raw) => {
-              Debug(raw);
               payload.players.ForEach(originalPlayer => {
                 var exists = data.entries.Find(banPlayer => banPlayer.steam_id == originalPlayer.steam_id);
 
@@ -1235,7 +1234,7 @@ namespace Oxide.Plugins
             (err) => {
               ResurrectList(payload.players, BanUpdateQueue);
             
-              Error($"Не удалось проверить блокировки: {err}");
+              Error($"Failed to process ban checks ({payload.players.Count}), retrying...");
             }
           );
       }
@@ -1489,9 +1488,8 @@ namespace Oxide.Plugins
     private void CmdChatReportInterface(BasePlayer player) {
       if (plugins.Find("ImageLibrary") == null)
       {
-        Error(
-          "Для открытия интерфейса репортов необходим установленный ImageLibrary"
-        );
+        Error("To use plugin report-UI you need to install ImageLibrary");
+        Error("https://umod.org/plugins/image-library");
         return;
       }
 
@@ -1570,12 +1568,12 @@ namespace Oxide.Plugins
       #region System hooks
 
       private void OnServerInitialized() { 
+        _RustApp = this;
+
         if (!CheckRequiredPlugins()) {
-          Error("Исправьте проблемы и перезагрузите плагин");
+          Error("Fix pending errors, and use 'o.reload RustApp'");
           return;
         }
-
-        _RustApp = this;
 
         MetaInfo.Read();
 
@@ -1809,11 +1807,8 @@ namespace Oxide.Plugins
           var success = _RustApp.CloseConnection(data.steam_id, data.reason);
           if (!success)
           {
-            Error($"Не удалось кикнуть игрока {data.steam_id}, игрок не найден или оффлайн");
             return "Player not found or offline";
           }
-
-          Debug($"Игрок {data.steam_id} кикнут по причине {data.reason}");
 
           // Perhaps one day, we’ll add a switch on the site that will allow users to kick with a message.
           if (data.announce)
@@ -2086,22 +2081,18 @@ namespace Oxide.Plugins
     private object RustApp_InternalQueue_CheckEventFinishedClean(JObject raw) {
       var data = raw.ToObject<QueueTaskPaidAnnounceCleanDto>();
 
-      // TODO: Add support for last checks
-      /**
-      if (!_Checks.LastChecks.ContainsKey(payload.suspect_id))
+      if (!_CheckInfo.LastChecks.ContainsKey(data.suspect_id))
       {
-        _Checks.LastChecks.Add(payload.suspect_id, _RustApp.CurrentTime());
+        _CheckInfo.LastChecks.Add(data.suspect_id, _RustApp.CurrentTime());
       }
       else
       {
-        _Checks.LastChecks[payload.suspect_id] = _RustApp.CurrentTime();
-      }*/
+        _CheckInfo.LastChecks[data.suspect_id] = _RustApp.CurrentTime();
+      }
 
-      // TODO: Deprecated
       Interface.Oxide.CallHook("RustApp_OnPaidAnnounceClean", data.suspect_id, data.targets);
 
-      // TODO: Add support for last checks
-      //CheckInfo.write(_Checks);
+      CheckInfo.write(_CheckInfo);
 
       if (!data.broadcast)
       {
@@ -2369,7 +2360,6 @@ namespace Oxide.Plugins
       }, ReportLayer + ".C", ReportLayer + ".S");
 
       var searchCommand = UICommand((player, args, input) => {
-        Puts($"'{input}'");
         DrawReportInterface(player, 0, input, true);
       }, new {}, "searchForPlayer");
 
@@ -2771,7 +2761,7 @@ namespace Oxide.Plugins
     private void BanCreate(string steamId, CourtApi.PluginBanCreatePayload payload) {
       CourtApi.BanCreate(payload).Execute(
         (data, raw) => {
-          Debug($"Player {steamId} banned for {payload.reason}");
+          Log($"Player {steamId} banned for {payload.reason}");
         },
         (err) => {
           Error($"Failed to ban {steamId}. Reason: {err}");
@@ -2784,7 +2774,7 @@ namespace Oxide.Plugins
         .Execute(
           (data, raw) =>
           {
-            Debug($"Player {steamId} unbanned");
+            Log($"Player {steamId} unbanned");
           },
           (err) => Error(
             $"Failed to unban {steamId}. Reason: {err}"
@@ -2817,7 +2807,7 @@ namespace Oxide.Plugins
       }).Execute(
         (data, raw) => {},
         (error) => {
-          Error($"Failed to send custom alert: {error}");
+          Debug($"Failed to send custom alert: {error}");
         }
       );
     }
@@ -3037,7 +3027,7 @@ namespace Oxide.Plugins
       if (plugins.Find("RustAppLite") != null && plugins.Find("RustAppLite").IsLoaded)
       {
         Error(
-          "Обнаружена 'Lite' версия плагина, для начала удалите RustAppLite.cs"
+          "Detected 'Lite' plugin version, to start you should delete plugin: RustAppLite.cs"
         );
         return false;
       }
@@ -3045,20 +3035,37 @@ namespace Oxide.Plugins
       return true;
     }
 
+    private static void Trace(string text) {
+      #if TRACE
+      
+        _RustApp.Puts(text);
+      
+      #endif
+    }
+
     private static void Debug(string text) {
+      #if DEBUG
+      
+        _RustApp.Puts(text);
+      
+      #endif
+    }
+    
+    private static void Log(string text) {
       _RustApp.Puts(text);
     }
+
     private static void Error(string text) {
       _RustApp.Puts(text);
     }
 
     private class RustAppWorker : MonoBehaviour {
       public void Awake() {
-        Debug($"{this.GetType().Name} worker enabled");
+        Trace($"{this.GetType().Name} worker enabled");
       }
 
       public void OnDestroy() {
-        Debug($"{this.GetType().Name} worker disabled");
+        Trace($"{this.GetType().Name} worker disabled");
       }
     }
     
@@ -3129,91 +3136,91 @@ namespace Oxide.Plugins
     }
 
     private static bool DetectIsRaidBlock(BasePlayer player)
+    {
+      if (_RustApp == null || !_RustApp.IsLoaded)
+      {
+        return false;
+      }
+
+      var plugins = new List<Plugin> {
+        _RustApp.NoEscape,
+        _RustApp.RaidZone,
+        _RustApp.RaidBlock,
+        _RustApp.ExtRaidBlock
+      };
+
+      var correct = plugins.Find(v => v != null);
+      if (correct != null)
+      {
+        try
         {
-          if (_RustApp == null || !_RustApp.IsLoaded)
+          switch (correct.Name)
           {
-            return false;
-          }
-
-          var plugins = new List<Plugin> {
-            _RustApp.NoEscape,
-            _RustApp.RaidZone,
-            _RustApp.RaidBlock,
-            _RustApp.ExtRaidBlock
-          };
-
-          var correct = plugins.Find(v => v != null);
-          if (correct != null)
-          {
-            try
-            {
-              switch (correct.Name)
+            case "NoEscape":
               {
-                case "NoEscape":
-                  {
-                    return (bool)correct.Call("IsRaidBlocked", player);
-                  }
-                case "RaidZone":
-                  {
-                    return (bool)correct.Call("HasBlock", player.userID.Get());
-                  }
-                case "ExtRaidBlock":
-                  {
-                    return (bool)correct.Call("IsRaidBlock", player.userID.Get());
-                  }
-                case "RaidBlock":
-                  {
-                    try
-                    {
-                      return (bool)correct.Call("IsInRaid", player);
-                    }
-                    catch
-                    {
-                      return (bool)correct.Call("IsRaidBlocked", player);
-                    }
-                  }
+                return (bool)correct.Call("IsRaidBlocked", player);
               }
-            }
-            catch
-            {
-              Debug("Не удалось вызвать API у RaidBlock'a");
-            }
+            case "RaidZone":
+              {
+                return (bool)correct.Call("HasBlock", player.userID.Get());
+              }
+            case "ExtRaidBlock":
+              {
+                return (bool)correct.Call("IsRaidBlock", player.userID.Get());
+              }
+            case "RaidBlock":
+              {
+                try
+                {
+                  return (bool)correct.Call("IsInRaid", player);
+                }
+                catch
+                {
+                  return (bool)correct.Call("IsRaidBlocked", player);
+                }
+              }
           }
-
-          return false;
         }
-
-
-        private static bool DetectNoLicense(Network.Connection connection)
+        catch
         {
-          if (_RustApp.MultiFighting != null && _RustApp.MultiFighting.IsLoaded) {
-            try
-            {
-              var isSteam = (bool)_RustApp.MultiFighting.Call("IsSteam", connection);
+          Error("Failed to call RaidBlock API");
+        }
+      }
 
-              return !isSteam;
-            }
-            catch
-            {
-              return false;
-            }
-          }
+      return false;
+    }
 
-          if (_RustApp.TirifyGamePluginRust != null && _RustApp.TirifyGamePluginRust.IsLoaded) {
-            try
-            {
-              var isPlayerNoSteam = (bool)_RustApp.TirifyGamePluginRust.Call("IsPlayerNoSteam", connection.userid.ToString());
 
-              return isPlayerNoSteam;
-            }
-            catch
-            {
-              return false;
-            } 
-          }
+    private static bool DetectNoLicense(Network.Connection connection)
+    {
+      if (_RustApp.MultiFighting != null && _RustApp.MultiFighting.IsLoaded) {
+        try
+        {
+          var isSteam = (bool)_RustApp.MultiFighting.Call("IsSteam", connection);
 
+          return !isSteam;
+        }
+        catch
+        {
           return false;
         }
+      }
+
+      if (_RustApp.TirifyGamePluginRust != null && _RustApp.TirifyGamePluginRust.IsLoaded) {
+        try
+        {
+          var isPlayerNoSteam = (bool)_RustApp.TirifyGamePluginRust.Call("IsPlayerNoSteam", connection.userid.ToString());
+
+          return isPlayerNoSteam;
+        }
+        catch
+        {
+          return false;
+        } 
+      }
+
+      return false;
+    }
 
     private static string GridReference(Vector3 position)
     {
@@ -3258,15 +3265,12 @@ namespace Oxide.Plugins
       return meta;
     }
 
-private bool CloseConnection(string steamId, string reason)
+    private bool CloseConnection(string steamId, string reason)
     {
-      Debug(
-        $"Закрываем соединение с {steamId}: {reason}"
-      );
-
       var player = BasePlayer.Find(steamId);
       if (player != null && player.IsConnected)
       {
+        Log($"Closing connection with {steamId}: {reason} (by player)");
         player.Kick(reason);
         return true;
       }
@@ -3274,6 +3278,7 @@ private bool CloseConnection(string steamId, string reason)
       var connection = ConnectionAuth.m_AuthConnection.Find(v => v.userid.ToString() == steamId);
       if (connection != null)
       {
+        Log($"Closing connection with {steamId}: {reason} (by m_AuthConnection)");
         Network.Net.sv.Kick(connection, reason);
         return true;
       }
@@ -3281,6 +3286,7 @@ private bool CloseConnection(string steamId, string reason)
       var loading = ServerMgr.Instance.connectionQueue.joining.Find(v => v.userid.ToString() == steamId);
       if (loading != null)
       {
+        Log($"Closing connection with {steamId}: {reason} (by joining)");
         Network.Net.sv.Kick(loading, reason);
         return true;
       }
@@ -3288,9 +3294,12 @@ private bool CloseConnection(string steamId, string reason)
       var queued = ServerMgr.Instance.connectionQueue.queue.Find(v => v.userid.ToString() == steamId);
       if (queued != null)
       {
+        Log($"Closing connection with {steamId}: {reason} (by queued)");
         Network.Net.sv.Kick(queued, reason);
         return true;
       }
+
+      Error($"Failed to close connection with {steamId}: {reason}");
 
       return false;
     }
@@ -3364,7 +3373,7 @@ private bool CloseConnection(string steamId, string reason)
           callback(player, restoredArgument, input ?? "");
         }
         catch {
-          PrintError("Не удалось распарсить аргументы команды");
+          Error("Failed to parse UICommand arguments");
         }
 
         return true; 
