@@ -1063,7 +1063,7 @@ namespace Oxide.Plugins
       public void OnDestroy() {
         base.OnDestroy();
 
-        foreach (var check in ShowedNoticyCache) {
+        foreach (var check in ShowedNoticyCache.ToList()) {
           if (check.Value == false) {
             continue;
           }
