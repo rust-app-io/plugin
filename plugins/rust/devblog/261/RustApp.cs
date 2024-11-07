@@ -2973,15 +2973,19 @@ namespace Oxide.Plugins
         {
           try
           {
-            if (typeof(T) == typeof(String))
-            {
-              onComplete?.Invoke((T)(object)request.downloadHandler?.text, request.downloadHandler?.text);
-            }
-            else
-            {
-              var obj = JsonConvert.DeserializeObject<T>(request.downloadHandler?.text);
+            if (request.downloadHandler?.text == null || request.downloadHandler?.text.Length == 0) {
+              onComplete?.Invoke((T)(object) null, request.downloadHandler?.text);
+            } else {
+              if (typeof(T) == typeof(String))
+              {
+                onComplete?.Invoke((T)(object)request.downloadHandler?.text, request.downloadHandler?.text);
+              }
+              else
+              {
+                var obj = JsonConvert.DeserializeObject<T>(request.downloadHandler?.text);
 
-              onComplete?.Invoke(obj, request.downloadHandler?.text);
+                onComplete?.Invoke(obj, request.downloadHandler?.text);
+              }
             }
           }
           catch (Exception parseException)
