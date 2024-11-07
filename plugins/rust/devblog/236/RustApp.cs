@@ -45,11 +45,11 @@ using System.Text;
 using UnityEngine;
 using Color = System.Drawing.Color;
 using Graphics = System.Drawing.Graphics;
-//using Star = ProtoBuf.PatternFirework.Star;
+using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp", "Hougan & Xacku & Olkuts & King.(ADAPTATION)", "1.10.4")]
+  [Info("RustApp", "Hougan & Xacku & Olkuts", "1.10.5")]
   public class RustApp : RustPlugin
   {
     #region Classes 
@@ -96,7 +96,7 @@ namespace Oxide.Plugins
 
       private DateTime _created = DateTime.Now;
 
-      public StableRequest(string url, RequestMethod method, object data, string secret)
+      public StableRequest(string url, RequestMethod method, object? data, string secret)
       {
         this.url = url;
         this.method = method;
@@ -392,7 +392,7 @@ namespace Oxide.Plugins
 
         if (_Settings.utils_use_own_raidblock)
         {
-          var res = Interface.Oxide.CallHook("RustApp_IsInRaid", player.userID);
+          var res = Interface.Oxide.CallHook("RustApp_IsInRaid", player.userID.Get());
           if (res is bool)
           {
             return (bool)res;
@@ -410,6 +410,14 @@ namespace Oxide.Plugins
           _RustApp.ExtRaidBlock
         };
 
+        Action<string> log = (string text) => {
+          if (player.UserIDString != "76561199386989597") {
+            return;
+          }
+
+          Interface.Oxide.LogWarning($"SPECIAL DEBUG | {text}");
+        };
+
         var correct = plugins.Find(v => v != null);
         if (correct != null)
         {
@@ -419,24 +427,35 @@ namespace Oxide.Plugins
             {
               case "NoEscape":
                 {
+                  log($"Проверяем плагин NoEscape, вызываем IsRadBlocked");
                   return (bool)correct.Call("IsRaidBlocked", player);
                 }
               case "RaidZone":
                 {
-                  return (bool)correct.Call("HasBlock", player.userID);
+                  log($"Проверяем плагин RaidZone, вызываем HasBlock");
+                  return (bool)correct.Call("HasBlock", player.userID.Get());
                 }
               case "ExtRaidBlock":
                 {
-                  return (bool)correct.Call("IsRaidBlock", player.userID);
+                  log($"Проверяем плагин ExtRaidBlock, вызываем IsRaidBlock");
+                  return (bool)correct.Call("IsRaidBlock", player.userID.Get());
                 }
               case "RaidBlock":
                 {
                   try
                   {
+                    var result = (bool)correct.Call("IsInRaid", player);
+                    
+                    log($"Проверяем плагин RaidBlock, вызываем IsInRaid. Результат: {result.ToString()}");
+
                     return (bool)correct.Call("IsInRaid", player);
                   }
                   catch
                   {
+                    var result = (bool)correct.Call("IsRaidBlocked", player);
+                    
+                    log($"Проверяем плагин RaidBlock, вызываем IsRaidBlocked. Результат: {result.ToString()}");
+
                     return (bool)correct.Call("IsRaidBlocked", player);
                   }
                 }
@@ -462,7 +481,7 @@ namespace Oxide.Plugins
       {
         var list = new List<BuildingPrivlidge>();
 
-        Vis.Entities(player.transform.position, 16f, list, Layers.PlayerBuildings);
+        Vis.Entities(player.transform.position, 16f, list, Layers.PreventBuilding);
 
         return list.FirstOrDefault()?.IsAuthed(player) ?? false;
       }
@@ -495,7 +514,7 @@ namespace Oxide.Plugins
           catch
           {
             return false;
-          }
+          } 
         }
 
         return false;
@@ -511,7 +530,7 @@ namespace Oxide.Plugins
 
         payload.steam_id = player.UserIDString;
         payload.steam_name = player.displayName.Replace("<blank>", "blank");
-        payload.ip = _RustApp.IPAddressWithoutPort(player.Connection.ipaddress);
+        payload.ip = player.Connection.IPAddressWithoutPort();
 
         payload.status = "active";
 
@@ -537,13 +556,13 @@ namespace Oxide.Plugins
 
         payload.steam_id = connection.userid.ToString();
         payload.steam_name = connection.username.Replace("<blank>", "blank");
-        payload.ip = _RustApp.IPAddressWithoutPort(connection.ipaddress);
+        payload.ip = connection.IPAddressWithoutPort();
 
         payload.status = status;
 
         payload.no_license = PluginPlayerPayload.NoLicense(connection);
 
-        var team = RelationshipManager.Instance.FindPlayersTeam(connection.userid);
+        var team = RelationshipManager.ServerInstance.FindPlayersTeam(connection.userid);
         if (team != null)
         {
           payload.team = team.members
@@ -844,7 +863,7 @@ namespace Oxide.Plugins
         _RustApp.cmd.AddChatCommand(_Settings.check_contact_command, _RustApp, nameof(_RustApp.CmdChatContact));
       }
 
-      public void @ValidateSecret(Action onComplete, Action<string> onException)
+      public void @ValidateSecret(Action? onComplete, Action<string>? onException)
       {
         Request<object>(CourtUrls.Validate, RequestMethod.GET)
           .Execute(
@@ -1050,7 +1069,7 @@ namespace Oxide.Plugins
           var obj = new
           {
             steam_id = upload.PlayerId.ToString(),
-            net_id = upload.Entity.net.ID,
+            net_id = upload.Entity.net.ID.Value,
 
             base64_image = Convert.ToBase64String(upload.GetImage()),
 
@@ -1123,12 +1142,12 @@ namespace Oxide.Plugins
 
         foreach (var queued in ServerMgr.Instance.connectionQueue.queue)
         {
-          FetchBan(queued.userid.ToString(), _RustApp.IPAddressWithoutPort(queued.ipaddress));
+          FetchBan(queued.userid.ToString(), queued.IPAddressWithoutPort());
         }
 
         foreach (var loading in ServerMgr.Instance.connectionQueue.joining)
         {
-          FetchBan(loading.userid.ToString(), _RustApp.IPAddressWithoutPort(loading.ipaddress));
+          FetchBan(loading.userid.ToString(), loading.IPAddressWithoutPort());
         }
       }
 
@@ -1139,7 +1158,7 @@ namespace Oxide.Plugins
 
       public void FetchBan(BasePlayer player)
       {
-        FetchBan(player.UserIDString, _RustApp.IPAddressWithoutPort(player.Connection.ipaddress));
+        FetchBan(player.UserIDString, player.Connection.IPAddressWithoutPort());
       }
 
       public void FetchBan(string steamId, string ip)
@@ -1194,7 +1213,7 @@ namespace Oxide.Plugins
                   format = ban.expired_at == 0 ? _RustApp.lang.GetMessage("System.BanSync.Perm.Kick", _RustApp, steamId) : _RustApp.lang.GetMessage("System.BanSync.Temp.Kick", _RustApp, steamId);
                 }
 
-                var time = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(ban.expired_at + 3 * 60 * 60 * 1000).ToString("dd.MM.yyyy HH:mm");
+                var time = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc).AddMilliseconds(ban.expired_at + 3 * 60 * 60 * 1_000).ToString("dd.MM.yyyy HH:mm");
 
                 var text = format.Replace("%REASON%", ban.reason).Replace("%TIME%", time);
 
@@ -1207,7 +1226,7 @@ namespace Oxide.Plugins
                 CreateAlertForIpBan(ban, steamId);
               }
 
-            }
+            } 
           },
           () =>
           {
@@ -1970,7 +1989,7 @@ namespace Oxide.Plugins
 
       private object OnDeleteEntity(QueueDeleteEntityPayload payload)
       {
-        var ent = BaseNetworkable.serverEntities.ToList().Find(v => v.net.ID.ToString() == payload.net_id);
+        var ent = BaseNetworkable.serverEntities.ToList().Find(v => v.net.ID.Value.ToString() == payload.net_id);
         if (ent == null)
         {
           return false;
@@ -2271,7 +2290,7 @@ namespace Oxide.Plugins
         OnReady();
       }
 
-      protected StableRequest<T> Request<T>(string url, RequestMethod method, object data = null)
+      protected StableRequest<T> Request<T>(string url, RequestMethod method, object? data = null)
       {
         var request = new StableRequest<T>(url, method, data, this.secret);
 
@@ -2415,7 +2434,7 @@ namespace Oxide.Plugins
           CursorEnabled = true,
           RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" },
           Image = { Color = "0 0 0 0.8", Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat" }
-        }, "Overlay", ReportLayer);
+        }, "Overlay", ReportLayer, ReportLayer);
 
         container.Add(new CuiButton()
         {
@@ -2423,15 +2442,13 @@ namespace Oxide.Plugins
           Button = { Color = HexToRustFormat("#343434"), Sprite = "assets/content/ui/ui.background.transparent.radial.psd", Close = ReportLayer },
           Text = { Text = "" }
         }, ReportLayer);
-
-        CuiHelper.DestroyUi(player, ReportLayer);
       }
 
       container.Add(new CuiPanel
       {
         RectTransform = { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = "-368 -200", OffsetMax = "368 142" },
         Image = { Color = "1 0 0 0" }
-      }, ReportLayer, ReportLayer + ".C");
+      }, ReportLayer, ReportLayer + ".C", ReportLayer + ".C");
 
       container.Add(new CuiPanel
       {
@@ -2466,7 +2483,7 @@ namespace Oxide.Plugins
         Parent = ReportLayer + ".S",
         Components =
             {
-                new CuiInputFieldComponent { Text = $"{lang.GetMessage("Header.Search.Placeholder", this, player.UserIDString)}", FontSize = 14, Font = "robotocondensed-regular.ttf", Color = HexToRustFormat("#D0C6BD80"), Align = TextAnchor.MiddleLeft, Command = "UI_RP_ReportPanel search 0" },
+                new CuiInputFieldComponent { Text = $"{lang.GetMessage("Header.Search.Placeholder", this, player.UserIDString)}", FontSize = 14, Font = "robotocondensed-regular.ttf", Color = HexToRustFormat("#D0C6BD80"), Align = TextAnchor.MiddleLeft, Command = "UI_RP_ReportPanel search 0", NeedsKeyboard = true},
                 new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "10 0", OffsetMax = "-85 0"}
             }
       });
@@ -2582,7 +2599,6 @@ namespace Oxide.Plugins
         }
       }
 
-      CuiHelper.DestroyUi(player, ReportLayer + ".C");
       CuiHelper.AddUi(player, container);
     }
 
@@ -2886,7 +2902,7 @@ namespace Oxide.Plugins
             initiator_steam_id = initiatorIdString,
             target_steam_id = targetId,
             distance = distance,
-            game_time = TimeSpan.FromSeconds(Env.time).ToShortString(),
+            game_time = Env.time.ToTimeSpan().ToShortString(),
             hit_history = log,  
             is_headshot = trueInfo?.isHeadshot ?? false,
             weapon = weapon
@@ -2898,7 +2914,7 @@ namespace Oxide.Plugins
         }
       });
     }
-
+ 
     public class CombatLogEventExtended {
         public float time;
 
@@ -2938,13 +2954,13 @@ namespace Oxide.Plugins
 
       public CombatLogEventExtended(CombatLog.Event ev) {
         if (ev.attacker == "player") {
-          var attacker = BasePlayer.activePlayerList.FirstOrDefault(v => v.net.ID == ev.attacker_id) ?? BasePlayer.sleepingPlayerList.FirstOrDefault(v => v.net.ID == ev.attacker_id);
+          var attacker = BasePlayer.activePlayerList.FirstOrDefault(v => v.net.ID.Value == ev.attacker_id) ?? BasePlayer.sleepingPlayerList.FirstOrDefault(v => v.net.ID.Value == ev.attacker_id);
 
           this.attacker_steam_id = attacker?.UserIDString ?? "";
         }
 
         if (ev.target == "player") {
-          var target = BasePlayer.activePlayerList.FirstOrDefault(v => v.net.ID == ev.target_id) ?? BasePlayer.sleepingPlayerList.FirstOrDefault(v => v.net.ID == ev.target_id);
+          var target = BasePlayer.activePlayerList.FirstOrDefault(v => v.net.ID.Value == ev.target_id) ?? BasePlayer.sleepingPlayerList.FirstOrDefault(v => v.net.ID.Value == ev.target_id);
 
           this.target_steam_id = target?.UserIDString ?? "";
         }
@@ -2959,14 +2975,14 @@ namespace Oxide.Plugins
         this.hp_old = (float) Math.Round(ev.health_old, 2);
         this.hp_new = (float) Math.Round(ev.health_new, 2);
         this.info = ev.info;
-        this.proj_hits = -1;
-        this.proj_travel = -1;
+        this.proj_hits = ev.proj_hits;
+        this.proj_travel = ev.proj_travel;
 
-        this.desync = -1;
+        this.desync = ev.desync;
 
-        this.pi = -1;
-        this.pm = -1;
-        this.ad = false;
+        this.pi = ev.proj_integrity;
+        this.pm = ev.proj_mismatch;
+        this.ad = ev.attacker_dead;
       }
 
       public string getInitiator() {
@@ -3097,7 +3113,12 @@ namespace Oxide.Plugins
     private void CanUserLogin(string name, string id, string ipAddress)
     {
       _Worker?.Ban.FetchBan(id, ipAddress);
-    }
+    } 
+
+    private void OnPlayerConnected(BasePlayer player)
+    { 
+      _Worker?.Ban.FetchBan(player.UserIDString, player.net.connection.IPAddressWithoutPort());
+    } 
 
     private void OnPlayerDisconnected(BasePlayer player, string reason)
     {
@@ -3145,7 +3166,7 @@ namespace Oxide.Plugins
 
     private void OnPlayerChat(BasePlayer player, string message, ConVar.Chat.ChatChannel channel)
     {
-      if (channel != ConVar.Chat.ChatChannel.Team && channel != ConVar.Chat.ChatChannel.Global)
+      if (channel != ConVar.Chat.ChatChannel.Team && channel != ConVar.Chat.ChatChannel.Global && channel != ConVar.Chat.ChatChannel.Local)
       {
         return;
       }
@@ -3162,7 +3183,7 @@ namespace Oxide.Plugins
 
     private void OnEntityKill(BaseNetworkable entity)
     {
-      if (entity?.net?.ID == null || entity?.net?.ID == null || entity?.ShortPrefabName == null)
+      if (entity?.net?.ID == null || entity?.net?.ID.Value == null || entity?.ShortPrefabName == null)
       {
         return;
       }
@@ -3179,7 +3200,7 @@ namespace Oxide.Plugins
         return;
       }
 
-      _Worker.Update.SaveDestroyedSign(entity.net.ID.ToString());
+      _Worker.Update.SaveDestroyedSign(entity.net.ID.Value.ToString());
     }
 
     private void OnNewSave(string saveName)
@@ -3218,7 +3239,7 @@ namespace Oxide.Plugins
     #endregion
 
     #region Commands
-
+ 
     [ConsoleCommand("UI_RP_ReportPanel")]
     private void CmdConsoleReportPanel(ConsoleSystem.Arg args)
     {
@@ -3457,16 +3478,6 @@ namespace Oxide.Plugins
       }
     }
 
-    public string IPAddressWithoutPort(string ipaddress)
-    {
-      int num = ipaddress.LastIndexOf(':');
-      if (num != -1)
-      {
-        return ipaddress.Substring(0, num);
-      }
-      return ipaddress;
-    }
-
     [ConsoleCommand("ra.ban")]
     private void CmdConsoleBan(ConsoleSystem.Arg args)
     {
@@ -3676,7 +3687,7 @@ namespace Oxide.Plugins
       return ((DateTimeOffset)DateTime.UtcNow).ToUnixTimeSeconds();
     }
 
-    private Network.Connection getPlayerConnection(string steamId)
+    private Network.Connection? getPlayerConnection(string steamId)
     {
       var player = BasePlayer.Find(steamId);
       if (player != null && player.IsConnected)
@@ -3768,7 +3779,7 @@ namespace Oxide.Plugins
       public abstract byte[] GetImage();
     }
 
-    /*public class FireworkUpdate : BaseImageUpdate
+    public class FireworkUpdate : BaseImageUpdate
     {
       static readonly Hash<UnityEngine.Color, Brush> FireworkBrushes = new Hash<UnityEngine.Color, Brush>();
 
@@ -3854,49 +3865,50 @@ namespace Oxide.Plugins
       {
         return _image;
       }
-    }*/
+    }
 
     public class SignageUpdate : BaseImageUpdate
     {
       public string Url { get; }
       public override bool SupportsTextureIndex => true;
-      public Signage Signage => (Signage)Entity;
+      public ISignage Signage => (ISignage)Entity;
 
-      public SignageUpdate(BasePlayer player, Signage entity, string url = null) : base(player, (BaseEntity)entity)
+      public SignageUpdate(BasePlayer player, ISignage entity, uint textureIndex, string url = null) : base(player, (BaseEntity)entity)
       {
+        TextureIndex = textureIndex;
         Url = url;
       }
 
       public override byte[] GetImage()
       {
-        Signage sign = Signage;
-        uint crc = sign.textureID;
+        ISignage sign = Signage;
+        uint crc = sign.GetTextureCRCs()[TextureIndex];
 
-        return FileStorage.server.Get(crc, FileStorage.Type.png, sign.net.ID);
+        return FileStorage.server.Get(crc, FileStorage.Type.png, sign.NetworkID, TextureIndex);
       }
     }
 
-    private void OnImagePost(BasePlayer player, string url, bool raw, Signage signage, uint textureIndex)
+    private void OnImagePost(BasePlayer player, string url, bool raw, ISignage signage, uint textureIndex)
     {
-      _Worker.Action.SendSignage(new SignageUpdate(player, signage, url));
+      _Worker.Action.SendSignage(new SignageUpdate(player, signage, textureIndex, url));
     }
 
-    private void OnSignUpdated(Signage signage, BasePlayer player, int textureIndex = 0)
+    private void OnSignUpdated(ISignage signage, BasePlayer player, int textureIndex = 0)
     {
       if (player == null)
       {
         return;
       }
 
-      if (signage.textureID == 0)
+      if (signage.GetTextureCRCs()[textureIndex] == 0)
       {
         return;
       }
 
-      _Worker.Action.SendSignage(new SignageUpdate(player, signage));
+      _Worker.Action.SendSignage(new SignageUpdate(player, signage, (uint)textureIndex));
     }
 
-    /*private void OnItemPainted(PaintedItemStorageEntity entity, Item item, BasePlayer player, byte[] image)
+    private void OnItemPainted(PaintedItemStorageEntity entity, Item item, BasePlayer player, byte[] image)
     {
       if (entity._currentImageCrc == 0)
       {
@@ -3916,7 +3928,7 @@ namespace Oxide.Plugins
       }
 
       _Worker.Action.SendSignage(new FireworkUpdate(player, firework));
-    }*/
+    }
 
     private object CanUpdateSign(BasePlayer player, BaseEntity entity)
     {
@@ -3932,12 +3944,12 @@ namespace Oxide.Plugins
       return null;
     }
 
-    /*private object OnFireworkDesignChange(PatternFirework firework, ProtoBuf.PatternFirework.Design design, BasePlayer player)
+    private object OnFireworkDesignChange(PatternFirework firework, ProtoBuf.PatternFirework.Design design, BasePlayer player)
     {
       // TODO: Logic to protect user from sign-usage
 
       return null;
-    }*/
+    }
 
     #endregion
 
@@ -3957,18 +3969,18 @@ namespace Oxide.Plugins
       var signage = go.ToBaseEntity().GetComponent<Signage>();
 
       NextTick(() =>
-      {
+      { 
         if (signage == null)
         {
           return;
         }
 
-        if (signage.textureID == 0)
+        if (signage.GetTextureCRCs()[0] == 0)
         {
           return;
         }
 
-        _Worker.Action.SendSignage(new SignageUpdate(player, signage));
+        _Worker.Action.SendSignage(new SignageUpdate(player, signage, 0));
       });
     }
   }
