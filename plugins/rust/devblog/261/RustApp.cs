@@ -453,13 +453,13 @@ namespace Oxide.Plugins
 
         public CombatLogEventDto(CombatLog.Event ev) {
           if (ev.attacker == "player") {
-            var attacker = BasePlayer.activePlayerList.FirstOrDefault(v => v.net.ID.Value == ev.attacker_id) ?? BasePlayer.sleepingPlayerList.FirstOrDefault(v => v.net.ID.Value == ev.attacker_id);
+            var attacker = BasePlayer.activePlayerList.FirstOrDefault(v => v.net.ID == ev.attacker_id) ?? BasePlayer.sleepingPlayerList.FirstOrDefault(v => v.net.ID == ev.attacker_id);
 
             this.attacker_steam_id = attacker?.UserIDString ?? "";
           }
 
           if (ev.target == "player") {
-            var target = BasePlayer.activePlayerList.FirstOrDefault(v => v.net.ID.Value == ev.target_id) ?? BasePlayer.sleepingPlayerList.FirstOrDefault(v => v.net.ID.Value == ev.target_id);
+            var target = BasePlayer.activePlayerList.FirstOrDefault(v => v.net.ID == ev.target_id) ?? BasePlayer.sleepingPlayerList.FirstOrDefault(v => v.net.ID == ev.target_id);
 
             this.target_steam_id = target?.UserIDString ?? "";
           }
@@ -477,11 +477,11 @@ namespace Oxide.Plugins
           this.proj_hits = ev.proj_hits;
           this.proj_travel = ev.proj_travel;
 
-          this.desync = ev.desync;
+          this.desync = -1;
 
           this.pi = ev.proj_integrity;
           this.pm = ev.proj_mismatch;
-          this.ad = ev.attacker_dead;
+          this.ad = false;
         }
 
         public string getInitiator() {
@@ -708,16 +708,16 @@ namespace Oxide.Plugins
     private class RustAppEngine : RustAppWorker {
       public GameObject ChildObjectToWorkers;
 
-      public AuthWorker? AuthWorker;
-      public BanWorker? BanWorker;
-      public StateWorker? StateWorker;
-      public CheckWorker? CheckWorker;
-      public QueueWorker? QueueWorker;
-      public ChatWorker? ChatWorker;
-      public ReportWorker? ReportWorker;
-      public PlayerAlertsWorker? PlayerAlertsWorker;
-      public SignageWorker? SignageWorker;
-      public KillsWorker? KillsWorker;
+      public AuthWorker AuthWorker;
+      public BanWorker BanWorker;
+      public StateWorker StateWorker;
+      public CheckWorker CheckWorker;
+      public QueueWorker QueueWorker;
+      public ChatWorker ChatWorker;
+      public ReportWorker ReportWorker;
+      public PlayerAlertsWorker PlayerAlertsWorker;
+      public SignageWorker SignageWorker;
+      public KillsWorker KillsWorker;
     
       private void Awake() {
         base.Awake();
@@ -773,8 +773,8 @@ namespace Oxide.Plugins
     private class AuthWorker : RustAppWorker {
       public bool? IsAuthed;
 
-      public Action? OnAuthSuccess;
-      public Action? OnAuthFailed;
+      public Action OnAuthSuccess;
+      public Action OnAuthFailed;
 
       public void CycleAuthUpdate() {
         InvokeRepeating(nameof(CheckAuthStatus), 0f, 5f);
@@ -941,7 +941,7 @@ namespace Oxide.Plugins
         SendUpdate(false);
       }
 
-      public void SendUpdate(bool unload = false, Action? onFinished = null) {
+      public void SendUpdate(bool unload = false, Action onFinished = null) {
         var players = unload ? new List<CourtApi.PluginStatePlayerDto>() : this.CollectPlayers();
 
         var disconnected = unload ? CollectFakeDisconnects() : DisconnectReasons.ToDictionary(v => v.Key, v => v.Value);
@@ -1237,7 +1237,7 @@ namespace Oxide.Plugins
         });
       }
       
-      private void CycleBanUpdateWrapper(Action<string, BanApi.BanDto?> callback) {
+      private void CycleBanUpdateWrapper(Action<string, BanApi.BanDto> callback) {
         if (BanUpdateQueue.Count == 0) {
           return;
         }
@@ -1282,7 +1282,7 @@ namespace Oxide.Plugins
         }
 
         var time = new DateTime(1970, 1, 1, 0, 0, 0, 0, DateTimeKind.Utc)
-          .AddMilliseconds(ban.expired_at + 3 * 60 * 60 * 1_000)
+          .AddMilliseconds(ban.expired_at + 3 * 60 * 60 * 1000)
           .ToString("dd.MM.yyyy HH:mm");
 
         var finalText = format
@@ -1422,7 +1422,7 @@ namespace Oxide.Plugins
         var obj = new CourtApi.PluginSignageCreateDto
         {
           steam_id = update.PlayerId.ToString(),
-          net_id = update.Entity.net.ID.Value,
+          net_id = update.Entity.net.ID,
 
           base64_image = Convert.ToBase64String(update.GetImage()),
 
@@ -1773,7 +1773,7 @@ namespace Oxide.Plugins
 
       private void OnPlayerChat(BasePlayer player, string message, ConVar.Chat.ChatChannel channel)
       {
-        if (channel != ConVar.Chat.ChatChannel.Team && channel != ConVar.Chat.ChatChannel.Global && channel != ConVar.Chat.ChatChannel.Local)
+        if (channel != ConVar.Chat.ChatChannel.Team && channel != ConVar.Chat.ChatChannel.Global)
         {
           return;
         }
@@ -2029,7 +2029,7 @@ namespace Oxide.Plugins
         private object RustApp_InternalQueue_DeleteEntity(JObject raw) {
           var data = raw.ToObject<QueueTaskDeleteEntityDto>();
 
-          var ent = BaseNetworkable.serverEntities.ToList().Find(v => v.net.ID.Value.ToString() == data.net_id);
+          var ent = BaseNetworkable.serverEntities.ToList().Find(v => v.net.ID.ToString() == data.net_id);
           if (ent == null)
           {
             return false;
@@ -2195,7 +2195,7 @@ namespace Oxide.Plugins
 
       private void OnEntityKill(BaseNetworkable entity)
       {
-        if (entity?.net?.ID == null || entity?.net?.ID.Value == null || entity?.ShortPrefabName == null)
+        if (entity?.net?.ID == null || entity?.net?.ID == null || entity?.ShortPrefabName == null)
         {
           return;
         }
@@ -2207,7 +2207,7 @@ namespace Oxide.Plugins
           return;
         }
 
-        _RustAppEngine.SignageWorker?.AddSignageDestroy(entity.net.ID.Value.ToString());
+        _RustAppEngine.SignageWorker?.AddSignageDestroy(entity.net.ID.ToString());
       }
 
       #endregion
@@ -2280,7 +2280,7 @@ namespace Oxide.Plugins
               initiator_steam_id = initiatorIdString,
               target_steam_id = targetId,
               distance = distance,
-              game_time = Env.time.ToTimeSpan().ToShortString(),
+              game_time = TimeSpan.FromSeconds(Env.time).ToShortString(),
               hit_history = log,  
               is_headshot = trueInfo?.isHeadshot ?? false,
               weapon = weapon
@@ -2337,7 +2337,7 @@ namespace Oxide.Plugins
           CursorEnabled = true,
           RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" },
           Image = { Color = "0 0 0 0.8", Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat" }
-        }, "Overlay", ReportLayer, ReportLayer);
+        }, "Overlay", ReportLayer);
 
         container.Add(new CuiButton()
         {
@@ -2345,13 +2345,15 @@ namespace Oxide.Plugins
           Button = { Color = HexToRustFormat("#343434"), Sprite = "assets/content/ui/ui.background.transparent.radial.psd", Close = ReportLayer },
           Text = { Text = "" }
         }, ReportLayer);
+
+        CuiHelper.DestroyUi(player, ReportLayer);
       }
 
       container.Add(new CuiPanel
       {
         RectTransform = { AnchorMin = "0.5 0.5", AnchorMax = "0.5 0.5", OffsetMin = "-368 -200", OffsetMax = "368 142" },
         Image = { Color = "1 0 0 0" }
-      }, ReportLayer, ReportLayer + ".C", ReportLayer + ".C");
+      }, ReportLayer, ReportLayer + ".C");
 
       container.Add(new CuiPanel
       {
@@ -2364,8 +2366,8 @@ namespace Oxide.Plugins
         RectTransform = { AnchorMin = "0 0", AnchorMax = "1 0.5", OffsetMin = "0 0", OffsetMax = "0 -4" },
         Button = { 
           Color = HexToRustFormat($"#{(list.Count > 18 && finalList.Count() == 18 ? "D0C6BD4D" : "D0C6BD33")}"), 
-          Command = UICommand((player, args, input) => {
-            DrawReportInterface(player, args.page, args.search, true);
+          Command = UICommand((Player, args, input) => {
+            DrawReportInterface(Player, args.page, args.search, true);
           }, new { search = search, page = list.Count > 18 && finalList.Count() == 18 ? page + 1 : page }, "nextPageGo")
         },
         Text = { Text = "↓", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-bold.ttf", FontSize = 24, Color = HexToRustFormat($"{(list.Count > 18 && finalList.Count() == 18 ? "D0C6BD" : "D0C6BD4D")}") }
@@ -2376,8 +2378,8 @@ namespace Oxide.Plugins
         RectTransform = { AnchorMin = "0 0.5", AnchorMax = "1 1", OffsetMin = "0 4", OffsetMax = "0 0" },
         Button = { 
           Color = HexToRustFormat($"#{(page == 0 ? "D0C6BD33" : "D0C6BD4D")}"), 
-          Command = UICommand((player, args, input) => {
-            DrawReportInterface(player, args.page, args.search, true);
+          Command = UICommand((Player, args, input) => {
+            DrawReportInterface(Player, args.page, args.search, true);
           }, new { search = search, page = page == 0 ? 0 : page - 1 }, "prevPageGo")
         },
         Text = { Text = "↑", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-bold.ttf", FontSize = 24, Color = HexToRustFormat($"{(page == 0 ? "D0C6BD4D" : "D0C6BD")}") }
@@ -2389,8 +2391,8 @@ namespace Oxide.Plugins
         Image = { Color = HexToRustFormat("#D0C6BD33") }
       }, ReportLayer + ".C", ReportLayer + ".S");
 
-      var searchCommand = UICommand((player, args, input) => {
-        DrawReportInterface(player, 0, input, true);
+      var searchCommand = UICommand((Player, args, input) => {
+        DrawReportInterface(Player, 0, input, true);
       }, new {}, "searchForPlayer");
 
       container.Add(new CuiElement
@@ -2404,8 +2406,7 @@ namespace Oxide.Plugins
                 Font = "robotocondensed-regular.ttf", 
                 Color = HexToRustFormat("#D0C6BD80"), 
                 Align = TextAnchor.MiddleLeft, 
-                Command = searchCommand, 
-                NeedsKeyboard = true
+                Command = searchCommand
               },
               new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "10 0", OffsetMax = "-85 0"}
           }
@@ -2490,8 +2491,8 @@ namespace Oxide.Plugins
             var min = $"{x * size + lineMargin * x} -{(y + 1) * size + lineMargin * y}";
             var max = $"{(x + 1) * size + lineMargin * x} -{y * size + lineMargin * y}";
 
-            var showPlayerCommand = UICommand((player, args, input) => {
-              DrawPlayerReportReasons(player, args.steam_id, args.min, args.max, args.left);
+            var showPlayerCommand = UICommand((Player, args, input) => {
+              DrawPlayerReportReasons(Player, args.steam_id, args.min, args.max, args.left);
             }, new { steam_id = target.UserIDString, min, max, left = x >= 3 }, "showPlayerReportReasons");
 
             container.Add(new CuiButton()
@@ -2528,6 +2529,7 @@ namespace Oxide.Plugins
         }
       }
 
+      CuiHelper.DestroyUi(player, ReportLayer + ".C");
       CuiHelper.AddUi(player, container);
     }
 
@@ -2610,8 +2612,8 @@ namespace Oxide.Plugins
         var offXMin = (20 + (i * 5)) + i * 80;
         var offXMax = 20 + (i * 5) + (i + 1) * 80;
 
-        var sendReportCommand = UICommand((player, args, input) => {
-          SendReport(player, args.target_id, args.reason);
+        var sendReportCommand = UICommand((Player, args, input) => {
+          SendReport(Player, args.target_id, args.reason);
         }, new { target_id = target.UserIDString, reason = _Settings.report_ui_reasons[i] }, "sendReportToPlayer");
 
         container.Add(new CuiButton()
@@ -2785,7 +2787,7 @@ namespace Oxide.Plugins
     }
 
     private void RustAppEngineDestroy() {
-      UnityEngine.Object.Destroy(_RustAppEngine.gameObject);
+      UnityEngine.Object.Destroy(_RustAppEngine?.gameObject);
     }
 
     private void BanCreate(string steamId, CourtApi.PluginBanCreatePayload payload) {
@@ -2811,7 +2813,7 @@ namespace Oxide.Plugins
         ));
     }
 
-    private void CreatePlayerAlertsCustom(Plugin plugin, string message, object data = null, object meta = null) {
+    private void CreatePlayerAlertsCustom(Plugin plugin, string message, object Data = null, object meta = null) {
       CourtApi.PluginPlayerAlertCustomAlertMeta json = new CourtApi.PluginPlayerAlertCustomAlertMeta();
 
       try
@@ -2828,7 +2830,7 @@ namespace Oxide.Plugins
 
       CourtApi.CreatePlayerAlertsCustom(new CourtApi.PluginPlayerAlertCustomDto {
         msg = message,
-        data = data,
+        data = Data,
 
         custom_icon = json.custom_icon,
         hide_in_table = false,
@@ -2867,7 +2869,7 @@ namespace Oxide.Plugins
       public Action<T, string> onComplete;
       public Action<string> onException;
 
-      public StableRequest(string url, RequestMethod method, object? data)
+      public StableRequest(string url, RequestMethod method, object data)
       {
         this.url = url;
         this.method = method;
@@ -3121,7 +3123,7 @@ namespace Oxide.Plugins
     {
       var list = new List<BuildingPrivlidge>();
 
-      Vis.Entities(player.transform.position, 16f, list, Layers.PreventBuilding);
+      Vis.Entities(player.transform.position, 16f, list, Layers.PlayerBuildings);
 
       return list.FirstOrDefault()?.IsAuthed(player) ?? false;
     }
@@ -3196,11 +3198,11 @@ namespace Oxide.Plugins
               }
             case "RaidZone":
               {
-                return (bool)correct.Call("HasBlock", player.userID.Get());
+                return (bool)correct.Call("HasBlock", player.userID);
               }
             case "ExtRaidBlock":
               {
-                return (bool)correct.Call("IsRaidBlock", player.userID.Get());
+                return (bool)correct.Call("IsRaidBlock", player.userID);
               }
             case "RaidBlock":
               {
@@ -3390,16 +3392,18 @@ namespace Oxide.Plugins
         var player = args.Player();
  
         try {
-          var str = "";
-          var input = "";
+          string str = "";
+          string input = "";
 
           args.Args.ToList().ForEach(v => {
             str += $"{v} ";
           });
 
           if (str.Contains("~INPUT_LIMITTER~")) {
-            input = str.Split("~INPUT_LIMITTER~")[1].Trim();
-            str = str.Split("~INPUT_LIMITTER~")[0];
+            string[] parts = str.Split(new string[] { "~INPUT_LIMITTER~" }, StringSplitOptions.None);
+            
+            input = parts[1].Trim();
+            str = parts[0];
           }
 
           var restoredArgument = JsonConvert.DeserializeObject<T>(str);
