@@ -334,7 +334,7 @@ namespace Oxide.Plugins
       }
 
       public static StableRequest<object> CreatePlayerAlerts(List<PluginPlayerAlertDto> alerts) {
-        return new StableRequest<object>($"{BaseUrl}/plugin/custom-alert", RequestMethod.POST, new { alerts });
+        return new StableRequest<object>($"{BaseUrl}/plugin/alerts", RequestMethod.POST, new { alerts });
       }
 
       #endregion
