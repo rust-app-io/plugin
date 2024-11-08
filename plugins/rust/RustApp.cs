@@ -674,14 +674,8 @@ namespace Oxide.Plugins
       [JsonProperty("[Check] Command to send contact")]
       public string check_contact_command = "contact";
 
-      [JsonProperty("[Ban] Enable broadcast server bans")]
-      public bool ban_enable_broadcast = true;
-
       [JsonProperty("[Utils] Use own raidblock hooks")]
       public bool utils_use_own_raidblock = false;
-
-      [JsonProperty("[Custom Actions] Allow custom actions")]
-      public bool custom_actions_allow = true;
 
       public static Configuration Generate()
       {
@@ -694,8 +688,6 @@ namespace Oxide.Plugins
           report_ui_show_check_in = 7,
 
           chat_default_avatar_steamid = "76561198134964268",
-          ban_enable_broadcast = true,
-          custom_actions_allow = true,
           utils_use_own_raidblock = false
         };
       }
