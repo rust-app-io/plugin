@@ -1854,6 +1854,8 @@ namespace Oxide.Plugins
           public string steam_id;
           public string name;
           public string reason;
+          
+          public bool broadcast;
         }
 
         private object RustApp_InternalQueue_Ban(JObject raw) {
@@ -1868,7 +1870,7 @@ namespace Oxide.Plugins
           // IP address is not relevant in this case
           _RustAppEngine.BanWorker?.CheckBans(data.steam_id, "1.1.1.1");
           
-          if (!_Settings.ban_enable_broadcast)
+          if (!data.broadcast)
           {
             return true;
           }
