@@ -1233,7 +1233,7 @@ namespace Oxide.Plugins
             ReactOnDirectBan(steamId, ban);
           } else {
             // Ban was found by IP
-            ReactOnDirectBan(steamId, ban);
+            ReactOnIpBan(steamId, ban);
           }
         });
       }
@@ -1295,7 +1295,7 @@ namespace Oxide.Plugins
 
       public void ReactOnIpBan(string steamId, BanApi.BanDto ban) {
         _RustApp.CloseConnection(steamId, _RustApp.lang.GetMessage("System.Ban.Ip.Kick", _RustApp, steamId));
-
+ 
         _RustAppEngine.PlayerAlertsWorker?.SavePlayerAlert(new CourtApi.PluginPlayerAlertDto
         {
           type = CourtApi.PluginPlayerAlertType.join_with_ip_ban,
