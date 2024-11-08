@@ -1512,20 +1512,13 @@ namespace Oxide.Plugins
     }
 
     private void CmdChatReportInterface(BasePlayer player) {
-      if (plugins.Find("ImageLibrary") == null)
-      {
-        Error("To use plugin report-UI you need to install ImageLibrary");
-        Error("https://umod.org/plugins/image-library");
-        return;
-      }
-
       DrawReportInterface(player);
     }
 
     [ConsoleCommand("ra.pair")]
     private void StartPairing(ConsoleSystem.Arg args) {
       if (args.Player() != null || args.Args.Length == 0) {
-        return;
+        return; 
       }
 
       var code = args.Args[0];
@@ -1652,6 +1645,8 @@ namespace Oxide.Plugins
       {
         lang.RegisterMessages(new Dictionary<string, string>
         {
+          ["Check.Started"] = "Игрок %NAME% был вызван на проверку",
+          ["Check.FinishedClear"] = "Проверка игрока %NAME% завершена, игрок чист",
           ["Header.Find"] = "НАЙТИ ИГРОКА",
           ["Header.SubDefault"] = "На кого вы хотите пожаловаться?",
           ["Header.SubFindResults"] = "Вот игроки, которых мы нашли",
@@ -1665,7 +1660,7 @@ namespace Oxide.Plugins
           ["Contact.Error"] = "Вы не отправили свой Discord",
           ["Contact.Sent"] = "Вы отправили:",
           ["Contact.SentWait"] = "<size=12>Если вы отправили корректный дискорд - ждите заявку в друзья.</size>",
-          ["Check.Text"] = "<color=#c6bdb4><size=32><b>ВЫ ВЫЗВАНЫ НА ПРОВЕРКУ</b></size></color>\n<color=#958D85>У вас есть <color=#c6bdb4><b>3 минуты</b></color> чтобы отправить дискорд и принять заявку в друзья.\nИспользуйте команду <b><color=#c6bdb4>/contact</color></b> чтобы отправить дискорд.\n\nДля связи с модератором - используйте чат, а не команду.</color>",
+          ["Check.Text"] = "<color=#c6bdb4><size=32><b>ВЫ ВЫЗВАНЫ НА ПРОВЕРКУ</b></size></color>\n<color=#958D85>У вас есть <color=#c6bdb4><b>3 минуты</b></color> чтобы отправить дискорд и принять заявку в друзья.\nИспользуйте команду <b><color=#c6bdb4>%COMMAND%</color></b> чтобы отправить дискорд.\n\nДля связи с модератором - используйте чат, а не команду.</color>",
           ["Chat.Direct.Toast"] = "Получено сообщение от админа, посмотрите в чат!",
           ["UI.CheckMark"] = "Проверен",
           ["Paid.Announce.Clean"] = "Ваша жалоба на \"%SUSPECT_NAME%\" была проверена!\n<size=12><color=#81C5F480>В результате проверки, нарушений не обнаружено</color></size>",
@@ -1685,6 +1680,8 @@ namespace Oxide.Plugins
 
         lang.RegisterMessages(new Dictionary<string, string>
         {
+          ["Check.Started"] = "Player %NAME% was called for a inspection",
+          ["Check.FinishedClear"] = "Inspection of %NAME% finished, player is clear",
           ["Header.Find"] = "FIND PLAYER",
           ["Header.SubDefault"] = "Who do you want to report?",
           ["Header.SubFindResults"] = "Here are players, which we found",
@@ -1698,7 +1695,7 @@ namespace Oxide.Plugins
           ["Contact.Error"] = "You did not sent your Discord",
           ["Contact.Sent"] = "You sent:",
           ["Contact.SentWait"] = "If you sent the correct discord - wait for a friend request.",
-          ["Check.Text"] = "<color=#c6bdb4><size=32><b>YOU ARE SUMMONED FOR A CHECK-UP</b></size></color>\n<color=#958D85>You have <color=#c6bdb4><b>3 minutes</b></color> to send discord and accept the friend request.\nUse the <b><color=#c6bdb4>/contact</color></b> command to send discord.\n\nTo contact a moderator - use chat, not a command.</color>",
+          ["Check.Text"] = "<color=#c6bdb4><size=32><b>YOU ARE SUMMONED FOR A CHECK-UP</b></size></color>\n<color=#958D85>You have <color=#c6bdb4><b>3 minutes</b></color> to send discord and accept the friend request.\nUse the <b><color=#c6bdb4>%COMMAND%</color></b> command to send discord.\n\nTo contact a moderator - use chat, not a command.</color>",
           ["Chat.Direct.Toast"] = "Received a message from admin, look at the chat!",
           ["UI.CheckMark"] = "Checked",
           ["Paid.Announce.Clean"] = "Your complaint about \"%SUSPECT_NAME%\" has been checked!\n<size=12><color=#81C5F480>As a result of the check, no violations were found</color ></size>",
@@ -2460,7 +2457,8 @@ namespace Oxide.Plugins
               Parent = ReportLayer + $".{target.UserIDString}",
               Components =
               {
-                new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
+                // Do not change in devblogs
+                new CuiRawImageComponent { SteamId= target.UserIDString, Sprite = "assets/icons/loading.png" },
                 new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
               }
             });
@@ -2584,7 +2582,8 @@ namespace Oxide.Plugins
         Parent = ReportLayer + $".T",
         Components =
         {
-            new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
+            // Do not change in devblogs
+            new CuiRawImageComponent { SteamId = target.UserIDString, Sprite = "assets/icons/loading.png" },
             new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
         }
       });
@@ -2640,7 +2639,7 @@ namespace Oxide.Plugins
         Text = { Text = "", Align = TextAnchor.MiddleCenter }
       }, "Under", CheckLayer);
 
-      string text = lang.GetMessage("Check.Text", this, player.UserIDString);
+      string text = lang.GetMessage("Check.Text", this, player.UserIDString).Replace("%COMMAND%", _Settings.check_contact_command);
 
       container.Add(new CuiLabel
       {
