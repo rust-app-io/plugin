@@ -674,14 +674,8 @@ namespace Oxide.Plugins
       [JsonProperty("[Check] Command to send contact")]
       public string check_contact_command = "contact";
 
-      [JsonProperty("[Ban] Enable broadcast server bans")]
-      public bool ban_enable_broadcast = true;
-
       [JsonProperty("[Utils] Use own raidblock hooks")]
       public bool utils_use_own_raidblock = false;
-
-      [JsonProperty("[Custom Actions] Allow custom actions")]
-      public bool custom_actions_allow = true;
 
       public static Configuration Generate()
       {
@@ -694,8 +688,6 @@ namespace Oxide.Plugins
           report_ui_show_check_in = 7,
 
           chat_default_avatar_steamid = "76561198134964268",
-          ban_enable_broadcast = true,
-          custom_actions_allow = true,
           utils_use_own_raidblock = false
         };
       }
@@ -1111,6 +1103,7 @@ namespace Oxide.Plugins
             // To get our official response
             var response = (object) _RustApp.Call(ConvertToRustAppQueueFormat(task.request.name, true), task.request.data);
            
+            QueueProcessedIds.Add(task.id);
             queueResponses.Add(task.id, response);
 
             // Just to broadcast event RustApp_Queue%name%
@@ -1232,7 +1225,7 @@ namespace Oxide.Plugins
             ReactOnDirectBan(steamId, ban);
           } else {
             // Ban was found by IP
-            ReactOnDirectBan(steamId, ban);
+            ReactOnIpBan(steamId, ban);
           }
         });
       }
@@ -1294,7 +1287,7 @@ namespace Oxide.Plugins
 
       public void ReactOnIpBan(string steamId, BanApi.BanDto ban) {
         _RustApp.CloseConnection(steamId, _RustApp.lang.GetMessage("System.Ban.Ip.Kick", _RustApp, steamId));
-
+ 
         _RustAppEngine.PlayerAlertsWorker?.SavePlayerAlert(new CourtApi.PluginPlayerAlertDto
         {
           type = CourtApi.PluginPlayerAlertType.join_with_ip_ban,
@@ -1512,20 +1505,13 @@ namespace Oxide.Plugins
     }
 
     private void CmdChatReportInterface(BasePlayer player) {
-      if (plugins.Find("ImageLibrary") == null)
-      {
-        Error("To use plugin report-UI you need to install ImageLibrary");
-        Error("https://umod.org/plugins/image-library");
-        return;
-      }
-
       DrawReportInterface(player);
     }
 
     [ConsoleCommand("ra.pair")]
     private void StartPairing(ConsoleSystem.Arg args) {
       if (args.Player() != null || args.Args.Length == 0) {
-        return;
+        return; 
       }
 
       var code = args.Args[0];
@@ -1650,41 +1636,11 @@ namespace Oxide.Plugins
 
       protected override void LoadDefaultMessages()
       {
-        lang.RegisterMessages(new Dictionary<string, string>
-        {
-          ["Header.Find"] = "НАЙТИ ИГРОКА",
-          ["Header.SubDefault"] = "На кого вы хотите пожаловаться?",
-          ["Header.SubFindResults"] = "Вот игроки, которых мы нашли",
-          ["Header.SubFindEmpty"] = "Игроки не найдены",
-          ["Header.Search"] = "Поиск",
-          ["Header.Search.Placeholder"] = "Введите ник/steamid",
-          ["Subject.Head"] = "Выберите причину репорта",
-          ["Subject.SubHead"] = "На игрока %PLAYER%",
-          ["Cooldown"] = "Подожди %TIME% сек.",
-          ["Sent"] = "Жалоба успешно отправлена",
-          ["Contact.Error"] = "Вы не отправили свой Discord",
-          ["Contact.Sent"] = "Вы отправили:",
-          ["Contact.SentWait"] = "<size=12>Если вы отправили корректный дискорд - ждите заявку в друзья.</size>",
-          ["Check.Text"] = "<color=#c6bdb4><size=32><b>ВЫ ВЫЗВАНЫ НА ПРОВЕРКУ</b></size></color>\n<color=#958D85>У вас есть <color=#c6bdb4><b>3 минуты</b></color> чтобы отправить дискорд и принять заявку в друзья.\nИспользуйте команду <b><color=#c6bdb4>/contact</color></b> чтобы отправить дискорд.\n\nДля связи с модератором - используйте чат, а не команду.</color>",
-          ["Chat.Direct.Toast"] = "Получено сообщение от админа, посмотрите в чат!",
-          ["UI.CheckMark"] = "Проверен",
-          ["Paid.Announce.Clean"] = "Ваша жалоба на \"%SUSPECT_NAME%\" была проверена!\n<size=12><color=#81C5F480>В результате проверки, нарушений не обнаружено</color></size>",
-          ["Paid.Announce.Ban"] = "Ваша жалоба на \"%SUSPECT_NAME%\" была проверена!\n<color=#F7D4D080><size=12>Игрок заблокирован, причина: %REASON%</size></color>",
-
-          ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
-          ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
-
-          ["System.Ban.Broadcast"] = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
-          ["System.Ban.Temp.Kick"] = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%",
-          ["System.Ban.Perm.Kick"] = "Вы навсегда забанены на этом сервере, причина: %REASON%",
-          ["System.Ban.Ip.Kick"] = "Вам ограничен вход на сервер!",
-
-          ["System.BanSync.Temp.Kick"] = "Обнаружена блокировка на другом проекте до %TIME% МСК, причина: %REASON%",
-          ["System.BanSync.Perm.Kick"] = "Обнаружена блокировка на другом проекте, причина: %REASON%",
-        }, this, "ru");
 
         lang.RegisterMessages(new Dictionary<string, string>
         {
+          ["Check.Started"] = "Player %NAME% was called for a inspection",
+          ["Check.FinishedClear"] = "Inspection of %NAME% finished, player is clear",
           ["Header.Find"] = "FIND PLAYER",
           ["Header.SubDefault"] = "Who do you want to report?",
           ["Header.SubFindResults"] = "Here are players, which we found",
@@ -1698,7 +1654,7 @@ namespace Oxide.Plugins
           ["Contact.Error"] = "You did not sent your Discord",
           ["Contact.Sent"] = "You sent:",
           ["Contact.SentWait"] = "If you sent the correct discord - wait for a friend request.",
-          ["Check.Text"] = "<color=#c6bdb4><size=32><b>YOU ARE SUMMONED FOR A CHECK-UP</b></size></color>\n<color=#958D85>You have <color=#c6bdb4><b>3 minutes</b></color> to send discord and accept the friend request.\nUse the <b><color=#c6bdb4>/contact</color></b> command to send discord.\n\nTo contact a moderator - use chat, not a command.</color>",
+          ["Check.Text"] = "<color=#c6bdb4><size=32><b>YOU ARE SUMMONED FOR A CHECK-UP</b></size></color>\n<color=#958D85>You have <color=#c6bdb4><b>3 minutes</b></color> to send discord and accept the friend request.\nUse the <b><color=#c6bdb4>%COMMAND%</color></b> command to send discord.\n\nTo contact a moderator - use chat, not a command.</color>",
           ["Chat.Direct.Toast"] = "Received a message from admin, look at the chat!",
           ["UI.CheckMark"] = "Checked",
           ["Paid.Announce.Clean"] = "Your complaint about \"%SUSPECT_NAME%\" has been checked!\n<size=12><color=#81C5F480>As a result of the check, no violations were found</color ></size>",
@@ -1715,6 +1671,41 @@ namespace Oxide.Plugins
           ["System.BanSync.Temp.Kick"] = "Detected ban on another project until %TIME% МСК, reason: %REASON%",
           ["System.BanSync.Perm.Kick"] = "Detected ban on another project, reason: %REASON%",
         }, this, "en"); 
+
+        lang.RegisterMessages(new Dictionary<string, string>
+        {
+          ["Check.Started"] = "Игрок %NAME% был вызван на проверку",
+          ["Check.FinishedClear"] = "Проверка игрока %NAME% завершена, игрок чист",
+          ["Header.Find"] = "НАЙТИ ИГРОКА",
+          ["Header.SubDefault"] = "На кого вы хотите пожаловаться?",
+          ["Header.SubFindResults"] = "Вот игроки, которых мы нашли",
+          ["Header.SubFindEmpty"] = "Игроки не найдены",
+          ["Header.Search"] = "Поиск",
+          ["Header.Search.Placeholder"] = "Введите ник/steamid",
+          ["Subject.Head"] = "Выберите причину репорта",
+          ["Subject.SubHead"] = "На игрока %PLAYER%",
+          ["Cooldown"] = "Подожди %TIME% сек.",
+          ["Sent"] = "Жалоба успешно отправлена",
+          ["Contact.Error"] = "Вы не отправили свой Discord",
+          ["Contact.Sent"] = "Вы отправили:",
+          ["Contact.SentWait"] = "<size=12>Если вы отправили корректный дискорд - ждите заявку в друзья.</size>",
+          ["Check.Text"] = "<color=#c6bdb4><size=32><b>ВЫ ВЫЗВАНЫ НА ПРОВЕРКУ</b></size></color>\n<color=#958D85>У вас есть <color=#c6bdb4><b>3 минуты</b></color> чтобы отправить дискорд и принять заявку в друзья.\nИспользуйте команду <b><color=#c6bdb4>%COMMAND%</color></b> чтобы отправить дискорд.\n\nДля связи с модератором - используйте чат, а не команду.</color>",
+          ["Chat.Direct.Toast"] = "Получено сообщение от админа, посмотрите в чат!",
+          ["UI.CheckMark"] = "Проверен",
+          ["Paid.Announce.Clean"] = "Ваша жалоба на \"%SUSPECT_NAME%\" была проверена!\n<size=12><color=#81C5F480>В результате проверки, нарушений не обнаружено</color></size>",
+          ["Paid.Announce.Ban"] = "Ваша жалоба на \"%SUSPECT_NAME%\" была проверена!\n<color=#F7D4D080><size=12>Игрок заблокирован, причина: %REASON%</size></color>",
+
+          ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
+          ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
+
+          ["System.Ban.Broadcast"] = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
+          ["System.Ban.Temp.Kick"] = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%",
+          ["System.Ban.Perm.Kick"] = "Вы навсегда забанены на этом сервере, причина: %REASON%",
+          ["System.Ban.Ip.Kick"] = "Вам ограничен вход на сервер!",
+
+          ["System.BanSync.Temp.Kick"] = "Обнаружена блокировка на другом проекте до %TIME% МСК, причина: %REASON%",
+          ["System.BanSync.Perm.Kick"] = "Обнаружена блокировка на другом проекте, причина: %REASON%",
+        }, this, "ru");
       }
 
       #endregion
@@ -1855,6 +1846,8 @@ namespace Oxide.Plugins
           public string steam_id;
           public string name;
           public string reason;
+          
+          public bool broadcast;
         }
 
         private object RustApp_InternalQueue_Ban(JObject raw) {
@@ -1869,7 +1862,7 @@ namespace Oxide.Plugins
           // IP address is not relevant in this case
           _RustAppEngine.BanWorker?.CheckBans(data.steam_id, "1.1.1.1");
           
-          if (!_Settings.ban_enable_broadcast)
+          if (!data.broadcast)
           {
             return true;
           }
@@ -2092,62 +2085,113 @@ namespace Oxide.Plugins
 
         #endregion
 
-        #region PaidAnnounceClean (deprecated) -> CheckEventFinishedClean
+        #region PaidAnnounceClean (deprecated) -> AnnounceReportProcessed
 
-    private class QueueTaskPaidAnnounceCleanDto
-    {
-      public bool broadcast = false;
+        private class QueueTaskAnnounceReportProcessedDto
+        {
+          public bool broadcast = false;
 
-      public string suspect_name;
-      public string suspect_id;
-
-      public List<string> targets = new List<string>();
-    }
-
-    private object RustApp_InternalQueue_PaidAnnounceClean(JObject raw) {
-      return this.RustApp_InternalQueue_CheckEventFinishedClean(raw); 
-    }
-
-    private object RustApp_InternalQueue_CheckEventFinishedClean(JObject raw) {
-      var data = raw.ToObject<QueueTaskPaidAnnounceCleanDto>();
-
-      if (!_CheckInfo.LastChecks.ContainsKey(data.suspect_id))
-      {
-        _CheckInfo.LastChecks.Add(data.suspect_id, _RustApp.CurrentTime());
-      }
-      else
-      {
-        _CheckInfo.LastChecks[data.suspect_id] = _RustApp.CurrentTime();
-      }
-
-      Interface.Oxide.CallHook("RustApp_OnPaidAnnounceClean", data.suspect_id, data.targets);
-
-      CheckInfo.write(_CheckInfo);
-
-      if (!data.broadcast)
-      {
-        return true;
-      }
-
-      foreach (var check in data.targets)
-      {
-        var player = BasePlayer.Find(check);
-        if (player == null || !player.IsConnected)
-        { 
-          continue;
+          public string suspect_name;
+          public string suspect_id;
+ 
+          public List<string> targets = new List<string>();
         }
 
-        var msg = _RustApp.lang.GetMessage("Paid.Announce.Clean", _RustApp, player.UserIDString)
-          .Replace("%SUSPECT_NAME%", data.suspect_name)
-          .Replace("%SUSPECT_ID%", data.suspect_id);
+        private object RustApp_InternalQueue_PaidAnnounceClean(JObject raw) {
+          return this.RustApp_InternalQueue_AnnounceReportProcessed(raw); 
+        }
 
-        _RustApp.SoundToast(player, msg, SoundToastType.Info);
-      }
+        private object RustApp_InternalQueue_AnnounceReportProcessed(JObject raw) {
+          var data = raw.ToObject<QueueTaskAnnounceReportProcessedDto>();
 
-      return true;
-    }
+          if (!_CheckInfo.LastChecks.ContainsKey(data.suspect_id))
+          {
+            _CheckInfo.LastChecks.Add(data.suspect_id, _RustApp.CurrentTime());
+          }
+          else
+          {
+            _CheckInfo.LastChecks[data.suspect_id] = _RustApp.CurrentTime();
+          }
 
-    #endregion
+          Interface.Oxide.CallHook("RustApp_OnPaidAnnounceClean", data.suspect_id, data.targets);
+
+          CheckInfo.write(_CheckInfo);
+
+          if (!data.broadcast)
+          {
+            return true;
+          }
+
+          foreach (var check in data.targets)
+          {
+            var player = BasePlayer.Find(check);
+            if (player == null || !player.IsConnected)
+            { 
+              continue;
+            }
+
+            var msg = _RustApp.lang.GetMessage("Paid.Announce.Clean", _RustApp, player.UserIDString)
+              .Replace("%SUSPECT_NAME%", data.suspect_name)
+              .Replace("%SUSPECT_ID%", data.suspect_id);
+
+            _RustApp.SoundToast(player, msg, SoundToastType.Info);
+          }
+
+          return true;
+        }
+
+        #endregion
+
+        #region CheckStarted
+
+        private class QueueTaskCheckStartedDto
+        {
+          public string steam_id;
+          public bool broadcast;
+        }
+
+        private object RustApp_InternalQueue_CheckStarted(JObject raw) {
+          var data = raw.ToObject<QueueTaskCheckStartedDto>();
+          if (!data.broadcast) {
+            return true;
+          }
+
+          foreach (var check in BasePlayer.activePlayerList) {
+            SendMessage(check, lang.GetMessage("Check.Started", this, check.UserIDString).Replace("%NAME%", permission.GetUserData(data.steam_id).LastSeenNickname));
+          }
+
+          return true;
+        }
+ 
+        #endregion
+
+        #region CheckFinished
+
+        private class QueueTaskCheckFinishedDto
+        {
+          public string steam_id;
+
+          public bool is_canceled;
+          public bool is_clear;
+          public bool is_ban;
+
+          public bool broadcast;
+        }
+
+        private object RustApp_InternalQueue_CheckFinished(JObject raw) {
+          var data = raw.ToObject<QueueTaskCheckFinishedDto>();
+          if (!data.broadcast || !data.is_clear) {
+            return true;
+          } 
+
+          foreach (var check in BasePlayer.activePlayerList) {
+            SendMessage(check, lang.GetMessage("Check.FinishedClear", this, check.UserIDString).Replace("%NAME%", permission.GetUserData(data.steam_id).LastSeenNickname));
+          } 
+
+          return true;
+        } 
+
+        #endregion
 
       #endregion
 
@@ -2458,9 +2502,10 @@ namespace Oxide.Plugins
 
             container.Add(new CuiElement
             {
-              Parent = ReportLayer + $".{target.UserIDString}",
+              Parent = ReportLayer + $".{target.UserIDString}", 
               Components =
               {
+                // Do not change in devblogs
                 new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
                 new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
               }
@@ -2586,6 +2631,7 @@ namespace Oxide.Plugins
         Parent = ReportLayer + $".T",
         Components =
         {
+            // Do not change in devblogs
             new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
             new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
         }
@@ -2642,7 +2688,7 @@ namespace Oxide.Plugins
         Text = { Text = "", Align = TextAnchor.MiddleCenter }
       }, "Under", CheckLayer);
 
-      string text = lang.GetMessage("Check.Text", this, player.UserIDString);
+      string text = lang.GetMessage("Check.Text", this, player.UserIDString).Replace("%COMMAND%", "/" + _Settings.check_contact_command);
 
       container.Add(new CuiLabel
       {
@@ -3392,8 +3438,8 @@ namespace Oxide.Plugins
         var player = args.Player();
  
         try {
-          string str = "";
-          string input = "";
+          var str = "";
+          var input = "";
 
           args.Args.ToList().ForEach(v => {
             str += $"{v} ";
