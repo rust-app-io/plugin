@@ -1505,6 +1505,14 @@ namespace Oxide.Plugins
     }
 
     private void CmdChatReportInterface(BasePlayer player) {
+      // Do not remove on devblogs
+      if (plugins.Find("ImageLibrary") == null)
+      {
+        Error("To use plugin report-UI you need to install ImageLibrary");
+        Error("https://umod.org/plugins/image-library");
+        return;
+      }
+      
       DrawReportInterface(player);
     }
 
