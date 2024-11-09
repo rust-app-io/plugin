@@ -10,10 +10,9 @@ using System.Linq;
 using System;
 using Oxide.Game.Rust.Libraries;
 
-
 namespace Oxide.Plugins
 {
-  [Info("RustApp Lite", "RustApp", "1.0.6")]
+  [Info("RustApp Lite", "RustApp", "1.0.7")]
   [Description("Get reports on players in Discord, using a nicely designed interface or F7")]
   public class RustAppLite : RustPlugin
   {
@@ -333,7 +332,7 @@ namespace Oxide.Plugins
               Parent = ReportLayer + $".{target.UserIDString}",
               Components =
                         {
-                            new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
+                            new CuiRawImageComponent { SteamId = target.UserIDString, Sprite = "assets/icons/loading.png" },
                             new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
                         }
             });
@@ -431,15 +430,6 @@ namespace Oxide.Plugins
     {
       _RustAppLite = this;
 
-      if (plugins.Find("ImageLibrary") == null)
-      {
-        Error(
-          "Для работы плагина необходим установленный ImageLibrary",
-          "For plugin correct works need to install ImageLibrary"
-        );
-        return;
-      }
-
       if (_Settings.discord_webhook == null || _Settings.discord_webhook.Length < 5)
       {
         Error(
@@ -455,8 +445,8 @@ namespace Oxide.Plugins
       });
 
       Log(
-        "\nВы пользуетесь упрощённой версией плагина RustApp!\nВ полной версии есть:\n — вызов на проверку\n — проверка на АФК\n — история чата / команд\n — и многое другое на сайте: https://rustapp.io",
-        "\nYou are using a simplified version of the RustApp plugin!\nThe full version contains:\n - call for verification\n - check for AFK\n - chat / command history\n - and much more on the website: https://rustapp.io"
+        "\nВы пользуетесь упрощённой версией плагина RustApp!\nВ полной версии есть:\n — статистика игрока\n — система вызова на проверку\n — бан система\n — история чата/команд\n — и многое другое на сайте: https://rustapp.io",
+        "\nYou are using the simplified version of the RustApp plugin!\nThe full version includes:\n — player statistics\n — inspection system\n — ban system\n — chat/team history\n — and much more on the website: https://rustapp.io"
       );
 
       if (!_Settings.report_ui_auto_parse)
@@ -622,7 +612,7 @@ namespace Oxide.Plugins
               Parent = ReportLayer + $".T",
               Components =
               {
-                  new CuiRawImageComponent { Png = (string) plugins.Find("ImageLibrary").Call("GetImage", target.UserIDString), Sprite = "assets/icons/loading.png" },
+                  new CuiRawImageComponent { SteamId = target.UserIDString, Sprite = "assets/icons/loading.png" },
                   new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
               }
             });
