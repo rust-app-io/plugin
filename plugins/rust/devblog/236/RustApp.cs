@@ -334,7 +334,7 @@ namespace Oxide.Plugins
       }
 
       public static StableRequest<object> CreatePlayerAlerts(List<PluginPlayerAlertDto> alerts) {
-        return new StableRequest<object>($"{BaseUrl}/plugin/custom-alert", RequestMethod.POST, new { alerts });
+        return new StableRequest<object>($"{BaseUrl}/plugin/alerts", RequestMethod.POST, new { alerts });
       }
 
       #endregion
@@ -1647,8 +1647,8 @@ namespace Oxide.Plugins
 
         lang.RegisterMessages(new Dictionary<string, string>
         {
-          ["Check.Started"] = "Player %NAME% was called for a inspection",
-          ["Check.FinishedClear"] = "Inspection of %NAME% finished, player is clear",
+          ["Check.Started"] = "Player <color=#5af>%NAME%</color> was called for a inspection!", 
+          ["Check.FinishedClear"] = "Inspection of <color=#5af>%NAME%</color> finished, player is clear!", 
           ["Header.Find"] = "FIND PLAYER",
           ["Header.SubDefault"] = "Who do you want to report?",
           ["Header.SubFindResults"] = "Here are players, which we found",

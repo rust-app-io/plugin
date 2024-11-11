@@ -870,6 +870,9 @@ namespace Oxide.Plugins
             (err) => {
               if (Api.ErrorContains(err, "code not exists")) {
                 Error("Pairing failed: requested code not exists");
+              }
+              else if (Api.ErrorContains(err, "pairing prevented from abuse")) {
+                Error("Pairing failed: seems this server was already connected to another project, please contact TG: @rustapp_help if you think, that it is wrong");
               } else {
                 Debug($"Pairing failed: unknown exception {err}");
               }
