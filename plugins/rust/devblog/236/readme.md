@@ -2,4 +2,4 @@
 
 - не работает сохранений картинок с феерверков
 
-![image](https://github.com/user-attachments/assets/bad42d37-30bb-4db3-95a5-d35a8f1ffbc7)
+![image](https://github.com/user-attachments/assets/6ec08f69-1e01-49cc-9e2c-682e69da3c5e)
