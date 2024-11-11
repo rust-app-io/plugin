@@ -674,9 +674,6 @@ namespace Oxide.Plugins
       [JsonProperty("[Check] Command to send contact")]
       public string check_contact_command = "contact";
 
-      [JsonProperty("[Utils] Use own raidblock hooks")]
-      public bool utils_use_own_raidblock = false;
-
       public static Configuration Generate()
       {
         return new Configuration
@@ -687,8 +684,7 @@ namespace Oxide.Plugins
           report_ui_auto_parse = true,
           report_ui_show_check_in = 7,
 
-          chat_default_avatar_steamid = "76561198134964268",
-          utils_use_own_raidblock = false
+          chat_default_avatar_steamid = "76561198134964268"
         };
       }
     }
@@ -847,7 +843,7 @@ namespace Oxide.Plugins
               Error("You have reached your limits, please upgrade your plan");
 
               onError();
-              return;
+              return;  
             }
 
             Debug($"Unknown exception in auth: {err}");
