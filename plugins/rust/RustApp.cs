@@ -1642,8 +1642,8 @@ namespace Oxide.Plugins
 
         lang.RegisterMessages(new Dictionary<string, string>
         {
-          ["Check.Started"] = "Player %NAME% was called for a inspection",
-          ["Check.FinishedClear"] = "Inspection of %NAME% finished, player is clear",
+          ["Check.Started"] = "Player <color=#5af>%NAME%</color> was called for a inspection!",
+          ["Check.FinishedClear"] = "Inspection of <color=#5af>%NAME%</color> finished, player is clear!",
           ["Header.Find"] = "FIND PLAYER",
           ["Header.SubDefault"] = "Who do you want to report?",
           ["Header.SubFindResults"] = "Here are players, which we found",
@@ -1666,7 +1666,7 @@ namespace Oxide.Plugins
           ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>DM from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
           ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Message from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
 
-          ["System.Ban.Broadcast"] = "Player <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>was banned.\n<size=12>- reason: <color=#d3d3d3>%REASON%</color></size>",
+          ["System.Ban.Broadcast"] = "Player <color=#5af>%TARGET%</color> <color=#bdbdbd></color>was banned.\n<size=12>- reason: <color=#d3d3d3>%REASON%</color></size>",
           ["System.Ban.Temp.Kick"] = "You are banned until %TIME% МСК, reason: %REASON%",
           ["System.Ban.Perm.Kick"] = "You have perm ban, reason: %REASON%",
           ["System.Ban.Ip.Kick"] = "You are restricted from entering the server!",
@@ -1677,8 +1677,8 @@ namespace Oxide.Plugins
 
         lang.RegisterMessages(new Dictionary<string, string>
         {
-          ["Check.Started"] = "Игрок %NAME% был вызван на проверку",
-          ["Check.FinishedClear"] = "Проверка игрока %NAME% завершена, игрок чист",
+          ["Check.Started"] = "Игрок <color=#5af>%NAME%</color> был вызван на проверку!",
+          ["Check.FinishedClear"] = "Проверка игрока <color=#5af>%NAME%</color> завершена, игрок чист!",
           ["Header.Find"] = "НАЙТИ ИГРОКА",
           ["Header.SubDefault"] = "На кого вы хотите пожаловаться?",
           ["Header.SubFindResults"] = "Вот игроки, которых мы нашли",
@@ -1701,7 +1701,7 @@ namespace Oxide.Plugins
           ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
           ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
 
-          ["System.Ban.Broadcast"] = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
+          ["System.Ban.Broadcast"] = "Игрок <color=#5af>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
           ["System.Ban.Temp.Kick"] = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%",
           ["System.Ban.Perm.Kick"] = "Вы навсегда забанены на этом сервере, причина: %REASON%",
           ["System.Ban.Ip.Kick"] = "Вам ограничен вход на сервер!",
