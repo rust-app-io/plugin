@@ -50,7 +50,7 @@ using ProtoBuf;
 
 namespace Oxide.Plugins
 { 
-  [Info("RustApp", "RustApp.io", "2.0.2")]
+  [Info("RustApp", "RustApp.io", "2.1.0")]
   public class RustApp : RustPlugin
   {
     #region Variables
@@ -3179,7 +3179,7 @@ namespace Oxide.Plugins
       Effect effect = new Effect("assets/bundled/prefabs/fx/notice/item.select.fx.prefab", player, 0, new Vector3(), new Vector3());
       EffectNetwork.Send(effect, player.Connection);
 
-      player.Command("gametip.showtoast", (int) type, text, 1);
+      player.Command("gametip.showtoast", (int) type, text, 1); 
     }
 
     // It is more optimized way to detect building authed instead of default BasePlayer.IsBuildingAuthed()
@@ -3475,8 +3475,18 @@ namespace Oxide.Plugins
               Error(exc4.ToString());
             }
           } 
-
+ 
           try {
+            while (str.Contains("\\r ")) {
+              str = str.Replace("\\r ", ""); 
+            }
+            while (str.Contains("\r ")) { 
+              str = str.Replace("\r ", ""); 
+            }
+            while (str.Contains("\r")) {
+              str = str.Replace("\r", ""); 
+            }
+
             var restoredArgument = JsonConvert.DeserializeObject<T>(str);
             
             try {            
