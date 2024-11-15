@@ -49,8 +49,8 @@ using Star = ProtoBuf.PatternFirework.Star;
 using ProtoBuf;
 
 namespace Oxide.Plugins
-{
-  [Info("RustApp", "RustApp.io", "2.0.0")]
+{ 
+  [Info("RustApp", "RustApp.io", "2.1.0")]
   public class RustApp : RustPlugin
   {
     #region Variables
@@ -147,6 +147,7 @@ namespace Oxide.Plugins
           payload.steam_id = connection.userid.ToString();
           payload.steam_name = connection.username.Replace("<blank>", "blank");
           payload.ip = IPAddressWithoutPort(connection.ipaddress);
+          payload.language = _RustApp.lang.GetLanguage(connection.userid.ToString());
 
           payload.status = status;
 
@@ -183,6 +184,7 @@ namespace Oxide.Plugins
         public string steam_id;
         public string steam_name;
         public string ip;
+        public string language;
 
         [CanBeNull] public string position;
         [CanBeNull] public string rotation;
@@ -843,7 +845,7 @@ namespace Oxide.Plugins
               Error("You have reached your limits, please upgrade your plan");
 
               onError();
-              return;
+              return;  
             }
 
             Debug($"Unknown exception in auth: {err}");
@@ -864,14 +866,14 @@ namespace Oxide.Plugins
               InvokeRepeating(nameof(WaitPairFinish), 0f, 1f);
             },
             (err) => {
-              if (Api.ErrorContains(err, "code not exists")) { 
-                Error("Pairing failed: requested code not exists"); 
-              } 
-              else if (Api.ErrorContains(err, "pairing prevented from abuse")) { 
-                Error("Pairing failed: seems this server was already connected to another project, please contact TG: @rustapp_help if you think, that it is wrong"); 
-              } else { 
-                Debug($"Pairing failed: unknown exception {err}"); 
-              } 
+              if (Api.ErrorContains(err, "code not exists")) {
+                Error("Pairing failed: requested code not exists");
+              }
+              else if (Api.ErrorContains(err, "pairing prevented from abuse")) {
+                Error("Pairing failed: seems this server was already connected to another project, please contact TG: @rustapp_help if you think, that it is wrong");
+              } else {
+                Debug($"Pairing failed: unknown exception {err}");
+              }
 
               Destroy(this);
             }
@@ -890,7 +892,7 @@ namespace Oxide.Plugins
               Action saveData = () => {
                 MetaInfo.write(new MetaInfo { Value = data.token });
 
-                _RustApp.timer.Once(1f, () => _RustAppEngine.AuthWorker?.CheckAuthStatus());
+                _RustApp.timer.Once(1f, () => _RustAppEngine?.AuthWorker?.CheckAuthStatus());
 
                 _MetaInfo = MetaInfo.Read();
 
@@ -899,8 +901,8 @@ namespace Oxide.Plugins
                 Destroy(this);
               };
 
-              if (_RustAppEngine.StateWorker != null) {
-                _RustAppEngine.StateWorker?.SendUpdate(true, () => saveData());
+              if (_RustAppEngine?.StateWorker != null) {
+                _RustAppEngine?.StateWorker?.SendUpdate(true, () => saveData());
               } else {
                 saveData();
               }
@@ -1287,7 +1289,7 @@ namespace Oxide.Plugins
       public void ReactOnIpBan(string steamId, BanApi.BanDto ban) {
         _RustApp.CloseConnection(steamId, _RustApp.lang.GetMessage("System.Ban.Ip.Kick", _RustApp, steamId));
  
-        _RustAppEngine.PlayerAlertsWorker?.SavePlayerAlert(new CourtApi.PluginPlayerAlertDto
+        _RustAppEngine?.PlayerAlertsWorker?.SavePlayerAlert(new CourtApi.PluginPlayerAlertDto
         {
           type = CourtApi.PluginPlayerAlertType.join_with_ip_ban,
           meta = new CourtApi.PluginPlayerAlertJoinWithIpBanMeta
@@ -1504,7 +1506,10 @@ namespace Oxide.Plugins
     }
 
     private void CmdChatReportInterface(BasePlayer player) {
-      // Do not remove on devblogs
+      if (_RustAppEngine?.ReportWorker == null) {
+        return;
+      }
+
       if (plugins.Find("ImageLibrary") == null)
       {
         Error("To use plugin report-UI you need to install ImageLibrary");
@@ -1512,6 +1517,15 @@ namespace Oxide.Plugins
         return;
       }
       
+      if (_RustAppEngine.ReportWorker.ReportCooldowns.ContainsKey(player.userID) && _RustAppEngine.ReportWorker.ReportCooldowns[player.userID] > CurrentTime())
+      {
+        var msg = lang.GetMessage("Cooldown", this, player.UserIDString).Replace("%TIME%",
+            $"{(_RustAppEngine.ReportWorker.ReportCooldowns[player.userID] - CurrentTime()).ToString("0")}");
+
+        SoundToast(player, msg, SoundToastType.Error);
+        return;
+      }
+
       DrawReportInterface(player);
     }
 
@@ -1523,7 +1537,7 @@ namespace Oxide.Plugins
 
       var code = args.Args[0];
 
-      _RustAppEngine.gameObject.AddComponent<PairWorker>().StartPairing(code);
+      _RustAppEngine?.gameObject.AddComponent<PairWorker>().StartPairing(code);
     }
 
     [ConsoleCommand("ra.ban")]
@@ -1646,8 +1660,8 @@ namespace Oxide.Plugins
 
         lang.RegisterMessages(new Dictionary<string, string>
         {
-          ["Check.Started"] = "Player <color=#5af>%NAME%</color> was called for a inspection!", 
-          ["Check.FinishedClear"] = "Inspection of <color=#5af>%NAME%</color> finished, player is clear!", 
+          ["Check.Started"] = "Player <color=#5af>%NAME%</color> was called for a inspection!",
+          ["Check.FinishedClear"] = "Inspection of <color=#5af>%NAME%</color> finished, player is clear!",
           ["Header.Find"] = "FIND PLAYER",
           ["Header.SubDefault"] = "Who do you want to report?",
           ["Header.SubFindResults"] = "Here are players, which we found",
@@ -1670,7 +1684,7 @@ namespace Oxide.Plugins
           ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>DM from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
           ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Message from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
 
-          ["System.Ban.Broadcast"] = "Player <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>was banned.\n<size=12>- reason: <color=#d3d3d3>%REASON%</color></size>",
+          ["System.Ban.Broadcast"] = "Player <color=#5af>%TARGET%</color> <color=#bdbdbd></color>was banned.\n<size=12>- reason: <color=#d3d3d3>%REASON%</color></size>",
           ["System.Ban.Temp.Kick"] = "You are banned until %TIME% МСК, reason: %REASON%",
           ["System.Ban.Perm.Kick"] = "You have perm ban, reason: %REASON%",
           ["System.Ban.Ip.Kick"] = "You are restricted from entering the server!",
@@ -1681,8 +1695,8 @@ namespace Oxide.Plugins
 
         lang.RegisterMessages(new Dictionary<string, string>
         {
-          ["Check.Started"] = "Игрок %NAME% был вызван на проверку",
-          ["Check.FinishedClear"] = "Проверка игрока %NAME% завершена, игрок чист",
+          ["Check.Started"] = "Игрок <color=#5af>%NAME%</color> был вызван на проверку!",
+          ["Check.FinishedClear"] = "Проверка игрока <color=#5af>%NAME%</color> завершена, игрок чист!",
           ["Header.Find"] = "НАЙТИ ИГРОКА",
           ["Header.SubDefault"] = "На кого вы хотите пожаловаться?",
           ["Header.SubFindResults"] = "Вот игроки, которых мы нашли",
@@ -1705,7 +1719,7 @@ namespace Oxide.Plugins
           ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
           ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
 
-          ["System.Ban.Broadcast"] = "Игрок <color=#55AAFF>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
+          ["System.Ban.Broadcast"] = "Игрок <color=#5af>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
           ["System.Ban.Temp.Kick"] = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%",
           ["System.Ban.Perm.Kick"] = "Вы навсегда забанены на этом сервере, причина: %REASON%",
           ["System.Ban.Ip.Kick"] = "Вам ограничен вход на сервер!",
@@ -1776,7 +1790,7 @@ namespace Oxide.Plugins
           return;
         }
 
-        _RustAppEngine.ChatWorker?.SaveChatMessage(new CourtApi.PluginChatMessageDto
+        _RustAppEngine?.ChatWorker?.SaveChatMessage(new CourtApi.PluginChatMessageDto
         {
           steam_id = player.UserIDString,
 
@@ -1867,7 +1881,7 @@ namespace Oxide.Plugins
           }
 
           // IP address is not relevant in this case
-          _RustAppEngine.BanWorker?.CheckBans(data.steam_id, "1.1.1.1");
+          _RustAppEngine?.BanWorker?.CheckBans(data.steam_id, "1.1.1.1");
           
           if (!data.broadcast)
           {
@@ -1895,11 +1909,11 @@ namespace Oxide.Plugins
 
         private object RustApp_InternalQueue_NoticeStateGet(JObject raw) {
           var data = raw.ToObject<QueueTaskNoticeStateGetDto>();
-          if (_RustAppEngine.CheckWorker == null) {
+          if (_RustAppEngine?.CheckWorker == null) {
             return false;
           }
 
-          return _RustAppEngine.CheckWorker.IsNoticeActive(data.steam_id); 
+          return _RustAppEngine?.CheckWorker?.IsNoticeActive(data.steam_id) ?? false; 
         }
 
         #endregion
@@ -1914,11 +1928,11 @@ namespace Oxide.Plugins
 
         private object RustApp_InternalQueue_NoticeStateSet(JObject raw) {
           var data = raw.ToObject<QueueTaskNoticeStateSetDto>();
-          if (_RustAppEngine.CheckWorker == null) {
+          if (_RustAppEngine?.CheckWorker == null) {
             return false;
           }
 
-          _RustAppEngine.CheckWorker.SetNoticeActive(data.steam_id, data.value);
+          _RustAppEngine?.CheckWorker?.SetNoticeActive(data.steam_id, data.value);
 
           return true; 
         }
@@ -2227,7 +2241,7 @@ namespace Oxide.Plugins
           return;
         }
 
-        _RustAppEngine.PlayerAlertsWorker?.SavePlayerAlert(new CourtApi.PluginPlayerAlertDto
+        _RustAppEngine?.PlayerAlertsWorker?.SavePlayerAlert(new CourtApi.PluginPlayerAlertDto
         {
           type = CourtApi.PluginPlayerAlertType.dug_up_stash,
           meta = new CourtApi.PluginPlayerAlertDugUpStashMeta
@@ -2258,7 +2272,7 @@ namespace Oxide.Plugins
           return;
         }
 
-        _RustAppEngine.SignageWorker?.AddSignageDestroy(entity.net.ID.Value.ToString());
+        _RustAppEngine?.SignageWorker?.AddSignageDestroy(entity.net.ID.Value.ToString());
       }
 
       #endregion
@@ -2267,7 +2281,7 @@ namespace Oxide.Plugins
 
       private void OnPlayerWound( BasePlayer instance, HitInfo info )
       {
-        if (_RustAppEngine.KillsWorker == null) {
+        if (_RustAppEngine?.KillsWorker == null) {
           return;
         }
 
@@ -2276,7 +2290,7 @@ namespace Oxide.Plugins
       
       private void OnPlayerRespawn( BasePlayer instance )
       {
-        if (_RustAppEngine.KillsWorker == null) {
+        if (_RustAppEngine?.KillsWorker == null) {
           return;
         }
 
@@ -2287,7 +2301,7 @@ namespace Oxide.Plugins
 
       void OnPlayerRecovered(BasePlayer player)
       {
-        if (_RustAppEngine.KillsWorker == null) {
+        if (_RustAppEngine?.KillsWorker == null) {
           return;
         }
 
@@ -2327,7 +2341,7 @@ namespace Oxide.Plugins
           try {
             var log = GetCorrectCombatlog(player.userID, time);
           
-            _RustAppEngine.KillsWorker?.AddKill(new CourtApi.PluginKillEntryDto {
+            _RustAppEngine?.KillsWorker?.AddKill(new CourtApi.PluginKillEntryDto {
               initiator_steam_id = initiatorIdString,
               target_steam_id = targetId,
               distance = distance,
@@ -2361,7 +2375,7 @@ namespace Oxide.Plugins
 
       var list = BasePlayer.activePlayerList
           .ToList(); 
- 
+
       var finalList = list
           .FindAll(v => v.displayName.ToLower().Contains(search) || v.UserIDString.ToLower().Contains(search) || search == null);
 
@@ -2419,6 +2433,9 @@ namespace Oxide.Plugins
           Color = HexToRustFormat($"#{(list.Count > 18 && finalList.Count() == 18 ? "D0C6BD4D" : "D0C6BD33")}"), 
           Command = UICommand((Player, args, input) => {
             DrawReportInterface(Player, args.page, args.search, true);
+            
+            Effect effect = new Effect("assets/prefabs/tools/detonator/effects/unpress.prefab", player, 0, new Vector3(), new Vector3());
+            EffectNetwork.Send(effect, player.Connection);
           }, new { search = search, page = list.Count > 18 && finalList.Count() == 18 ? page + 1 : page }, "nextPageGo")
         },
         Text = { Text = "↓", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-bold.ttf", FontSize = 24, Color = HexToRustFormat($"{(list.Count > 18 && finalList.Count() == 18 ? "D0C6BD" : "D0C6BD4D")}") }
@@ -2431,6 +2448,9 @@ namespace Oxide.Plugins
           Color = HexToRustFormat($"#{(page == 0 ? "D0C6BD33" : "D0C6BD4D")}"), 
           Command = UICommand((Player, args, input) => {
             DrawReportInterface(Player, args.page, args.search, true);
+
+            Effect effect = new Effect("assets/prefabs/tools/detonator/effects/unpress.prefab", player, 0, new Vector3(), new Vector3());
+            EffectNetwork.Send(effect, player.Connection);
           }, new { search = search, page = page == 0 ? 0 : page - 1 }, "prevPageGo")
         },
         Text = { Text = "↑", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-bold.ttf", FontSize = 24, Color = HexToRustFormat($"{(page == 0 ? "D0C6BD4D" : "D0C6BD")}") }
@@ -2759,7 +2779,7 @@ namespace Oxide.Plugins
     }
 
     private HitInfo GetRealInfo(BasePlayer player, HitInfo info) {
-      if (_RustAppEngine.KillsWorker == null) {
+      if (_RustAppEngine?.KillsWorker == null) {
         return info;
       }
 
@@ -2781,7 +2801,7 @@ namespace Oxide.Plugins
     }
 
     private void SendReport(BasePlayer initiator, string targetId, string reason) {
-      if (_RustAppEngine.ReportWorker == null) {
+      if (_RustAppEngine?.ReportWorker == null) {
         CuiHelper.DestroyUi(initiator, ReportLayer);
         return;
       }
@@ -2816,11 +2836,11 @@ namespace Oxide.Plugins
     }
 
     private void OnPlayerConnectedNormalized(string steamId, string ip) {
-      _RustAppEngine.BanWorker?.CheckBans(steamId, ip);
+      _RustAppEngine?.BanWorker?.CheckBans(steamId, ip);
     }
 
     private void OnPlayerDisconnectedNormalized(string steamId, string reason) {
-      if (_RustAppEngine.StateWorker != null) {
+      if (_RustAppEngine?.StateWorker != null) {
         _RustAppEngine.StateWorker.DisconnectReasons[steamId] = reason;
       }
 
@@ -2828,7 +2848,7 @@ namespace Oxide.Plugins
     }
 
     private void SetTeamChange(string initiatorSteamId, string targetSteamId) {
-      if (_RustAppEngine.StateWorker != null) {
+      if (_RustAppEngine?.StateWorker != null) {
         _RustAppEngine.StateWorker.TeamChanges[initiatorSteamId] = targetSteamId;
       } 
     }
@@ -3055,7 +3075,7 @@ namespace Oxide.Plugins
 
     private void RA_DirectMessageHandler(string from, string to, string message)
     {
-      _RustAppEngine.ChatWorker?.SaveChatMessage(new CourtApi.PluginChatMessageDto
+      _RustAppEngine?.ChatWorker?.SaveChatMessage(new CourtApi.PluginChatMessageDto
       {
         steam_id = from,
         target_steam_id = to,
@@ -3075,7 +3095,7 @@ namespace Oxide.Plugins
       var was_checked = _CheckInfo.LastChecks.ContainsKey(target_steam_id) && CurrentTime() - _CheckInfo.LastChecks[target_steam_id] < _Settings.report_ui_show_check_in * 24 * 60 * 60;
       Interface.Oxide.CallHook("RustApp_OnPlayerReported", initiator_steam_id, target_steam_id, reason, message, was_checked);
 
-      _RustAppEngine.ReportWorker?.SendReport(new CourtApi.PluginReportDto
+      _RustAppEngine?.ReportWorker?.SendReport(new CourtApi.PluginReportDto
       {
         initiator_steam_id = initiator_steam_id,
         target_steam_id = target_steam_id,
@@ -3168,7 +3188,7 @@ namespace Oxide.Plugins
       Effect effect = new Effect("assets/bundled/prefabs/fx/notice/item.select.fx.prefab", player, 0, new Vector3(), new Vector3());
       EffectNetwork.Send(effect, player.Connection);
 
-      player.Command("gametip.showtoast", type, text, type);
+      player.Command("gametip.showtoast", (int) type, text, 1); 
     }
 
     // It is more optimized way to detect building authed instead of default BasePlayer.IsBuildingAuthed()
@@ -3448,23 +3468,52 @@ namespace Oxide.Plugins
           var str = "";
           var input = "";
 
-          args.Args.ToList().ForEach(v => {
+          args?.Args?.ToList()?.ForEach(v => {
             str += $"{v} ";
           });
 
           if (str.Contains("~INPUT_LIMITTER~")) {
-            string[] parts = str.Split(new string[] { "~INPUT_LIMITTER~" }, StringSplitOptions.None);
-            
-            input = parts[1].Trim();
-            str = parts[0];
-          }
+            try {
+              string[] parts = str.Split(new string[] { "~INPUT_LIMITTER~" }, StringSplitOptions.None);
+              
+              input = parts[1].Trim();
+              str = parts[0];
+            }
+            catch (Exception exc4) {
+              Error($"Failed to parse UICommand arguments (input): {args?.FullString} {str} {input}");
+              Error(exc4.ToString());
+            }
+          } 
+ 
+          try {
+            while (str.Contains("\\r ")) {
+              str = str.Replace("\\r ", ""); 
+            }
+            while (str.Contains("\r ")) { 
+              str = str.Replace("\r ", ""); 
+            }
+            while (str.Contains("\r")) {
+              str = str.Replace("\r", ""); 
+            }
 
-          var restoredArgument = JsonConvert.DeserializeObject<T>(str);
-          
-          callback(player, restoredArgument, input ?? "");
+            var restoredArgument = JsonConvert.DeserializeObject<T>(str);
+            
+            try {            
+              callback(player, restoredArgument, input ?? "");
+            }
+            catch (Exception exc3) {
+              Error($"Failed to parse UICommand arguments (callback): {args?.FullString} {str} {input}");
+              Error(exc3.ToString());
+            }
+          }
+          catch (Exception exc2) {
+            Error($"Failed to parse UICommand arguments (deserialize): {args?.FullString} {str} {input}");
+            Error(exc2.ToString());
+          }
         }
-        catch {
-          Error("Failed to parse UICommand arguments");
+        catch (Exception exc) {
+          Error($"Failed to parse UICommand arguments: {args?.FullString}");
+          Error(exc.ToString());
         }
 
         return true; 
@@ -3617,7 +3666,7 @@ namespace Oxide.Plugins
 
     private void OnImagePost(BasePlayer player, string url, bool raw, ISignage signage, uint textureIndex)
     {
-      _RustAppEngine.SignageWorker?.SignageCreate(new SignageUpdate(player, signage, textureIndex, url));
+      _RustAppEngine?.SignageWorker?.SignageCreate(new SignageUpdate(player, signage, textureIndex, url));
     }
 
     private void OnSignUpdated(ISignage signage, BasePlayer player, int textureIndex = 0)
@@ -3632,7 +3681,7 @@ namespace Oxide.Plugins
         return;
       }
 
-      _RustAppEngine.SignageWorker?.SignageCreate(new SignageUpdate(player, signage, (uint)textureIndex));
+      _RustAppEngine?.SignageWorker?.SignageCreate(new SignageUpdate(player, signage, (uint)textureIndex));
     }
 
     private void OnItemPainted(PaintedItemStorageEntity entity, Item item, BasePlayer player, byte[] image)
@@ -3642,9 +3691,7 @@ namespace Oxide.Plugins
         return;
       }
 
-      PaintedItemUpdate update = new PaintedItemUpdate(player, entity, item, image);
-
-      _RustAppEngine.SignageWorker?.SignageCreate(new PaintedItemUpdate(player, entity, item, image));
+      _RustAppEngine?.SignageWorker?.SignageCreate(new PaintedItemUpdate(player, entity, item, image));
     }
 
     private void OnFireworkDesignChanged(PatternFirework firework, ProtoBuf.PatternFirework.Design design, BasePlayer player)
@@ -3654,7 +3701,7 @@ namespace Oxide.Plugins
         return;
       }
 
-      _RustAppEngine.SignageWorker?.SignageCreate(new FireworkUpdate(player, firework));
+      _RustAppEngine?.SignageWorker?.SignageCreate(new FireworkUpdate(player, firework));
     }
 
     private void OnEntityBuilt(Planner plan, GameObject go)
@@ -3684,10 +3731,10 @@ namespace Oxide.Plugins
           return;
         }
 
-        _RustAppEngine.SignageWorker?.SignageCreate(new SignageUpdate(player, signage, 0));
+        _RustAppEngine?.SignageWorker?.SignageCreate(new SignageUpdate(player, signage, 0));
       });
     }
 
-    #endregion
+    #endregion 
   }
 }
