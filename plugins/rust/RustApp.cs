@@ -50,7 +50,7 @@ using ProtoBuf;
 
 namespace Oxide.Plugins
 { 
-  [Info("RustApp", "RustApp.io", "2.0.1")]
+  [Info("RustApp", "RustApp.io", "2.0.2")]
   public class RustApp : RustPlugin
   {
     #region Variables
@@ -1506,6 +1506,19 @@ namespace Oxide.Plugins
     }
 
     private void CmdChatReportInterface(BasePlayer player) {
+      if (_RustAppEngine?.ReportWorker == null) {
+        return;
+      }
+      
+      if (_RustAppEngine.ReportWorker.ReportCooldowns.ContainsKey(player.userID) && _RustAppEngine.ReportWorker.ReportCooldowns[player.userID] > CurrentTime())
+      {
+        var msg = lang.GetMessage("Cooldown", this, player.UserIDString).Replace("%TIME%",
+            $"{(_RustAppEngine.ReportWorker.ReportCooldowns[player.userID] - CurrentTime()).ToString("0")}");
+
+        SoundToast(player, msg, SoundToastType.Error);
+        return;
+      }
+
       DrawReportInterface(player);
     }
 
@@ -2355,7 +2368,7 @@ namespace Oxide.Plugins
 
       var list = BasePlayer.activePlayerList
           .ToList(); 
- 
+
       var finalList = list
           .FindAll(v => v.displayName.ToLower().Contains(search) || v.UserIDString.ToLower().Contains(search) || search == null);
 
@@ -2411,6 +2424,9 @@ namespace Oxide.Plugins
           Color = HexToRustFormat($"#{(list.Count > 18 && finalList.Count() == 18 ? "D0C6BD4D" : "D0C6BD33")}"), 
           Command = UICommand((player, args, input) => {
             DrawReportInterface(player, args.page, args.search, true);
+            
+            Effect effect = new Effect("assets/prefabs/tools/detonator/effects/unpress.prefab", player, 0, new Vector3(), new Vector3());
+            EffectNetwork.Send(effect, player.Connection);
           }, new { search = search, page = list.Count > 18 && finalList.Count() == 18 ? page + 1 : page }, "nextPageGo")
         },
         Text = { Text = "↓", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-bold.ttf", FontSize = 24, Color = HexToRustFormat($"{(list.Count > 18 && finalList.Count() == 18 ? "D0C6BD" : "D0C6BD4D")}") }
@@ -2423,6 +2439,9 @@ namespace Oxide.Plugins
           Color = HexToRustFormat($"#{(page == 0 ? "D0C6BD33" : "D0C6BD4D")}"), 
           Command = UICommand((player, args, input) => {
             DrawReportInterface(player, args.page, args.search, true);
+
+            Effect effect = new Effect("assets/prefabs/tools/detonator/effects/unpress.prefab", player, 0, new Vector3(), new Vector3());
+            EffectNetwork.Send(effect, player.Connection);
           }, new { search = search, page = page == 0 ? 0 : page - 1 }, "prevPageGo")
         },
         Text = { Text = "↑", Align = TextAnchor.MiddleCenter, Font = "robotocondensed-bold.ttf", FontSize = 24, Color = HexToRustFormat($"{(page == 0 ? "D0C6BD4D" : "D0C6BD")}") }
@@ -3160,7 +3179,7 @@ namespace Oxide.Plugins
       Effect effect = new Effect("assets/bundled/prefabs/fx/notice/item.select.fx.prefab", player, 0, new Vector3(), new Vector3());
       EffectNetwork.Send(effect, player.Connection);
 
-      player.Command("gametip.showtoast", type, text, type);
+      player.Command("gametip.showtoast", (int) type, text, 1);
     }
 
     // It is more optimized way to detect building authed instead of default BasePlayer.IsBuildingAuthed()
@@ -3440,21 +3459,42 @@ namespace Oxide.Plugins
           var str = "";
           var input = "";
 
-          args.Args.ToList().ForEach(v => {
+          args?.Args?.ToList()?.ForEach(v => {
             str += $"{v} ";
           });
 
           if (str.Contains("~INPUT_LIMITTER~")) {
-            input = str.Split("~INPUT_LIMITTER~")[1].Trim();
-            str = str.Split("~INPUT_LIMITTER~")[0];
-          }
+            try {
+              string[] parts = str.Split(new string[] { "~INPUT_LIMITTER~" }, StringSplitOptions.None);
+              
+              input = parts[1].Trim();
+              str = parts[0];
+            }
+            catch (Exception exc4) {
+              Error($"Failed to parse UICommand arguments (input): {args?.FullString} {str} {input}");
+              Error(exc4.ToString());
+            }
+          } 
 
-          var restoredArgument = JsonConvert.DeserializeObject<T>(str);
-          
-          callback(player, restoredArgument, input ?? "");
+          try {
+            var restoredArgument = JsonConvert.DeserializeObject<T>(str);
+            
+            try {            
+              callback(player, restoredArgument, input ?? "");
+            }
+            catch (Exception exc3) {
+              Error($"Failed to parse UICommand arguments (callback): {args?.FullString} {str} {input}");
+              Error(exc3.ToString());
+            }
+          }
+          catch (Exception exc2) {
+            Error($"Failed to parse UICommand arguments (deserialize): {args?.FullString} {str} {input}");
+            Error(exc2.ToString());
+          }
         }
-        catch {
-          Error("Failed to parse UICommand arguments");
+        catch (Exception exc) {
+          Error($"Failed to parse UICommand arguments: {args?.FullString}");
+          Error(exc.ToString());
         }
 
         return true; 
