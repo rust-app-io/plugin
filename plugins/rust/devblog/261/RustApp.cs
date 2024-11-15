@@ -1509,6 +1509,13 @@ namespace Oxide.Plugins
       if (_RustAppEngine?.ReportWorker == null) {
         return;
       }
+
+      if (plugins.Find("ImageLibrary") == null)
+      {
+        Error("To use plugin report-UI you need to install ImageLibrary");
+        Error("https://umod.org/plugins/image-library");
+        return;
+      }
       
       if (_RustAppEngine.ReportWorker.ReportCooldowns.ContainsKey(player.userID) && _RustAppEngine.ReportWorker.ReportCooldowns[player.userID] > CurrentTime())
       {
