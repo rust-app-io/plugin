@@ -48,7 +48,7 @@ using Graphics = System.Drawing.Graphics;
 using Star = ProtoBuf.PatternFirework.Star;
 using ProtoBuf;
 
-namespace Oxide.Plugins
+namespace Oxide.Plugins 
 { 
   [Info("RustApp", "RustApp.io", "2.1.1")]
   public class RustApp : RustPlugin
@@ -93,6 +93,7 @@ namespace Oxide.Plugins
 
         public int online = BasePlayer.activePlayerList.Count + ServerMgr.Instance.connectionQueue.queue.Count + ServerMgr.Instance.connectionQueue.joining.Count;
         public int slots = ConVar.Server.maxplayers;
+        public int reserved = ServerMgr.Instance.connectionQueue.ReservedCount;
 
         public string version = _RustApp.Version.ToString();
         public string protocol = Protocol.printable.ToString();
@@ -1417,23 +1418,28 @@ namespace Oxide.Plugins
       }
 
       public void SignageCreate(BaseImageUpdate update) {
-        var obj = new CourtApi.PluginSignageCreateDto
-        {
-          steam_id = update.PlayerId.ToString(),
-          net_id = update.Entity.net.ID.Value,
+        try {
+          var obj = new CourtApi.PluginSignageCreateDto
+          {
+            steam_id = update.PlayerId.ToString(),
+            net_id = update.Entity.net.ID.Value,
 
-          base64_image = Convert.ToBase64String(update.GetImage()),
+            base64_image = Convert.ToBase64String(update.GetImage()),
 
-          type = update.Entity.ShortPrefabName,
-          position = update.Entity.transform.position.ToString(),
-          square = GridReference(update.Entity.transform.position)
-        };
+            type = update.Entity.ShortPrefabName,
+            position = update.Entity.transform.position.ToString(),
+            square = GridReference(update.Entity.transform.position)
+          };
 
-        CourtApi.SendSignage(obj)
-          .Execute(
-            (data, raw) => {},
-            (error) => {}
-          );
+          CourtApi.SendSignage(obj)
+            .Execute(
+              (data, raw) => {},
+              (error) => {}
+            );
+        }
+        catch {
+
+        }
       }
 
       private void CycleSendUpdate() {
@@ -3378,6 +3384,7 @@ namespace Oxide.Plugins
       {
         Log($"Closing connection with {steamId}: {reason} (by player)");
         player.Kick(reason);
+        OnPlayerDisconnectedNormalized(steamId, reason);
         return true;
       }
 
@@ -3386,6 +3393,7 @@ namespace Oxide.Plugins
       {
         Log($"Closing connection with {steamId}: {reason} (by m_AuthConnection)");
         Network.Net.sv.Kick(connection, reason);
+        OnPlayerDisconnectedNormalized(steamId, reason);
         return true;
       }
 
@@ -3394,6 +3402,7 @@ namespace Oxide.Plugins
       {
         Log($"Closing connection with {steamId}: {reason} (by joining)");
         Network.Net.sv.Kick(loading, reason);
+        OnPlayerDisconnectedNormalized(steamId, reason);
         return true;
       }
 
@@ -3402,6 +3411,7 @@ namespace Oxide.Plugins
       {
         Log($"Closing connection with {steamId}: {reason} (by queued)");
         Network.Net.sv.Kick(queued, reason);
+        OnPlayerDisconnectedNormalized(steamId, reason);
         return true;
       }
 
