@@ -50,7 +50,7 @@ using ProtoBuf;
 
 namespace Oxide.Plugins 
 { 
-  [Info("RustApp", "RustApp.io", "2.1.1")]
+  [Info("RustApp", "RustApp.io", "2.1.2")]
   public class RustApp : RustPlugin
   {
     #region Variables
