@@ -50,7 +50,7 @@ using ProtoBuf;
 
 namespace Oxide.Plugins
 { 
-  [Info("RustApp", "RustApp.io", "2.1.0")]
+  [Info("RustApp", "RustApp.io", "2.1.1")]
   public class RustApp : RustPlugin
   {
     #region Variables
@@ -147,6 +147,8 @@ namespace Oxide.Plugins
           payload.steam_id = connection.userid.ToString();
           payload.steam_name = connection.username.Replace("<blank>", "blank");
           payload.ip = IPAddressWithoutPort(connection.ipaddress);
+          payload.ping = Network.Net.sv.GetAveragePing(connection);
+          payload.seconds_connected = (int) connection.GetSecondsConnected();
           payload.language = _RustApp.lang.GetLanguage(connection.userid.ToString());
 
           payload.status = status;
@@ -184,6 +186,8 @@ namespace Oxide.Plugins
         public string steam_id;
         public string steam_name;
         public string ip;
+        public int ping = 0;
+        public int seconds_connected;
         public string language;
 
         [CanBeNull] public string position;
@@ -3057,6 +3061,8 @@ namespace Oxide.Plugins
             Interface.Oxide.LogError($"Failed to parse response ({request.method.ToUpper()} {request.url}): {parseException} (Response: {request.downloadHandler?.text})");
           }
         }
+
+        try { request?.Dispose(); } catch {}
       }
     }
 
