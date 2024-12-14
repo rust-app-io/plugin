@@ -48,9 +48,9 @@ using Graphics = System.Drawing.Graphics;
 using Star = ProtoBuf.PatternFirework.Star;
 using ProtoBuf;
 
-namespace Oxide.Plugins
+namespace Oxide.Plugins 
 { 
-  [Info("RustApp", "RustApp.io", "2.1.0")]
+  [Info("RustApp", "RustApp.io", "2.1.2")]
   public class RustApp : RustPlugin
   {
     #region Variables
@@ -93,12 +93,13 @@ namespace Oxide.Plugins
 
         public int online = BasePlayer.activePlayerList.Count + ServerMgr.Instance.connectionQueue.queue.Count + ServerMgr.Instance.connectionQueue.joining.Count;
         public int slots = ConVar.Server.maxplayers;
+        public int reserved = 0;
 
         public string version = _RustApp.Version.ToString();
         public string protocol = Protocol.printable.ToString();
         public string performance = _RustApp.TotalHookTime.ToString();
 
-        public int port = ConVar.Server.port; 
+        public int port = ConVar.Server.port;
 
         public bool connected = _RustAppEngine?.AuthWorker.IsAuthed ?? false;
       }
@@ -147,6 +148,8 @@ namespace Oxide.Plugins
           payload.steam_id = connection.userid.ToString();
           payload.steam_name = connection.username.Replace("<blank>", "blank");
           payload.ip = IPAddressWithoutPort(connection.ipaddress);
+          payload.ping = Network.Net.sv.GetAveragePing(connection);
+          payload.seconds_connected = (int) connection.GetSecondsConnected();
           payload.language = _RustApp.lang.GetLanguage(connection.userid.ToString());
 
           payload.status = status;
@@ -184,6 +187,8 @@ namespace Oxide.Plugins
         public string steam_id;
         public string steam_name;
         public string ip;
+        public int ping = 0;
+        public int seconds_connected;
         public string language;
 
         [CanBeNull] public string position;
@@ -1413,23 +1418,28 @@ namespace Oxide.Plugins
       }
 
       public void SignageCreate(BaseImageUpdate update) {
-        var obj = new CourtApi.PluginSignageCreateDto
-        {
-          steam_id = update.PlayerId.ToString(),
-          net_id = update.Entity.net.ID,
+        try {
+          var obj = new CourtApi.PluginSignageCreateDto
+          {
+            steam_id = update.PlayerId.ToString(),
+            net_id = update.Entity.net.ID,
 
-          base64_image = Convert.ToBase64String(update.GetImage()),
+            base64_image = Convert.ToBase64String(update.GetImage()),
 
-          type = update.Entity.ShortPrefabName,
-          position = update.Entity.transform.position.ToString(),
-          square = GridReference(update.Entity.transform.position)
-        };
+            type = update.Entity.ShortPrefabName,
+            position = update.Entity.transform.position.ToString(),
+            square = GridReference(update.Entity.transform.position)
+          };
 
-        CourtApi.SendSignage(obj)
-          .Execute(
-            (data, raw) => {},
-            (error) => {}
-          );
+          CourtApi.SendSignage(obj)
+            .Execute(
+              (data, raw) => {},
+              (error) => {}
+            );
+        }
+        catch {
+
+        }
       }
 
       private void CycleSendUpdate() {
@@ -1507,13 +1517,6 @@ namespace Oxide.Plugins
 
     private void CmdChatReportInterface(BasePlayer player) {
       if (_RustAppEngine?.ReportWorker == null) {
-        return;
-      }
-
-      if (plugins.Find("ImageLibrary") == null)
-      {
-        Error("To use plugin report-UI you need to install ImageLibrary");
-        Error("https://umod.org/plugins/image-library");
         return;
       }
       
@@ -2624,14 +2627,14 @@ namespace Oxide.Plugins
       container.Add(new CuiButton()
       {
         RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = $"-500 -500", OffsetMax = $"500 500" },
-        Button = { Close = $"{ReportLayer}.T", Color = "0 0 0 1", Sprite = "assets/content/ui/ui.circlegradient.png" }
+        Button = { Close = $"{ReportLayer}.T", Color = "0 0 0 1", Sprite = "assets/content/ui/gameui/attackheli/compass/ui.soft.radial.png" }
       }, ReportLayer + $".T");
 
 
       container.Add(new CuiButton()
       {
         RectTransform = { AnchorMin = $"{(leftAlign ? -1 : 2)} 0", AnchorMax = $"{(leftAlign ? -2 : 3)} 1", OffsetMin = $"-500 -500", OffsetMax = $"500 500" },
-        Button = { Close = $"{ReportLayer}.T", Color = HexToRustFormat("#343434"), Sprite = "assets/content/ui/ui.circlegradient.png" }
+        Button = { Close = $"{ReportLayer}.T", Color = HexToRustFormat("#343434"), Sprite = "assets/content/ui/gameui/attackheli/compass/ui.soft.radial.png" }
       }, ReportLayer + $".T");
 
       container.Add(new CuiButton()
@@ -2711,7 +2714,7 @@ namespace Oxide.Plugins
       container.Add(new CuiButton
       {
         RectTransform = { AnchorMin = "0 0.5", AnchorMax = "1 1", OffsetMin = $"-500 -500", OffsetMax = $"500 500" },
-        Button = { Color = HexToRustFormat("#1C1C1C"), Sprite = "assets/content/ui/ui.circlegradient.png" },
+        Button = { Color = HexToRustFormat("#1C1C1C"), Sprite = "assets/content/ui/gameui/attackheli/compass/ui.soft.radial.png" },
         Text = { Text = "", Align = TextAnchor.MiddleCenter }
       }, "Under", CheckLayer);
 
@@ -3066,6 +3069,8 @@ namespace Oxide.Plugins
             Interface.Oxide.LogError($"Failed to parse response ({request.method.ToUpper()} {request.url}): {parseException} (Response: {request.downloadHandler?.text})");
           }
         }
+
+        try { request?.Dispose(); } catch {}
       }
     }
 
@@ -3381,6 +3386,7 @@ namespace Oxide.Plugins
       {
         Log($"Closing connection with {steamId}: {reason} (by player)");
         player.Kick(reason);
+        OnPlayerDisconnectedNormalized(steamId, reason);
         return true;
       }
 
@@ -3389,6 +3395,7 @@ namespace Oxide.Plugins
       {
         Log($"Closing connection with {steamId}: {reason} (by m_AuthConnection)");
         Network.Net.sv.Kick(connection, reason);
+        OnPlayerDisconnectedNormalized(steamId, reason);
         return true;
       }
 
@@ -3397,6 +3404,7 @@ namespace Oxide.Plugins
       {
         Log($"Closing connection with {steamId}: {reason} (by joining)");
         Network.Net.sv.Kick(loading, reason);
+        OnPlayerDisconnectedNormalized(steamId, reason);
         return true;
       }
 
@@ -3405,6 +3413,7 @@ namespace Oxide.Plugins
       {
         Log($"Closing connection with {steamId}: {reason} (by queued)");
         Network.Net.sv.Kick(queued, reason);
+        OnPlayerDisconnectedNormalized(steamId, reason);
         return true;
       }
 
