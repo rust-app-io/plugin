@@ -1061,6 +1061,11 @@ namespace Oxide.Plugins
       public void OnDestroy() {
         base.OnDestroy();
 
+        CloseAllNoticies();
+      }
+
+      public void CloseAllNoticies() {
+
         foreach (var check in ShowedNoticyCache.ToList()) {
           if (check.Value == false) {
             continue;
@@ -1530,6 +1535,15 @@ namespace Oxide.Plugins
       }
 
       DrawReportInterface(player);
+    }
+
+    [ConsoleCommand("ra.hide-noticies")]
+    private void CloseAllNoticies(ConsoleSystem.Arg args) {
+      if (args.Player() != null) {
+        return; 
+      }
+
+      _RustAppEngine.CheckWorker?.CloseAllNoticies();
     }
 
     [ConsoleCommand("ra.pair")]
