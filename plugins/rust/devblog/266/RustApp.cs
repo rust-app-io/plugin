@@ -50,13 +50,13 @@ using ProtoBuf;
 
 namespace Oxide.Plugins 
 { 
-  [Info("RustApp", "RustApp.io", "2.1.2")]
+  [Info("RustApp", "RustApp.io", "2.1.3")]
   public class RustApp : RustPlugin
   {
     #region Variables
 
     // References to other plugin with API
-    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting, TirifyGamePluginRust, ExtRaidBlock;
+    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting, TirifyGamePluginPirate, ExtRaidBlock;
 
     private static MetaInfo _MetaInfo = MetaInfo.Read();
     private static CheckInfo _CheckInfo = CheckInfo.Read();
@@ -3327,12 +3327,12 @@ namespace Oxide.Plugins
         }
       }
 
-      if (_RustApp.TirifyGamePluginRust != null && _RustApp.TirifyGamePluginRust.IsLoaded) {
+      if (_RustApp.TirifyGamePluginPirate != null && _RustApp.TirifyGamePluginPirate.IsLoaded) {
         try
         {
-          var isPlayerNoSteam = (bool)_RustApp.TirifyGamePluginRust.Call("IsPlayerNoSteam", connection.userid.ToString());
+          var isSteam = (bool)_RustApp.TirifyGamePluginPirate.Call("isSteam", connection);
 
-          return isPlayerNoSteam;
+          return !isSteam;
         }
         catch
         {
