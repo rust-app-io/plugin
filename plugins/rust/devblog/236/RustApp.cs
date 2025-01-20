@@ -2,61 +2,31 @@
 
 using Newtonsoft.Json;
 using Oxide.Core;
-using Oxide.Plugins;
 using Oxide.Core.Plugins;
 using System;
 using System.Collections;
 using System.Collections.Generic;
-using System.Text;
 using JetBrains.Annotations;
 using Oxide.Core.Libraries;
 using Oxide.Game.Rust.Cui;
 using System.Linq;
 using UnityEngine; 
-using Network;
 using UnityEngine.Networking; 
-using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
-using Oxide.Core;
-using Oxide.Core.Libraries;
-using Oxide.Core.Libraries.Covalence;
-using Oxide.Core.Plugins;
-using System;
-using System.Collections;
-using System.Collections.Generic;
 using System.Globalization;
-using System.Linq;
-using System.Text;
-using UnityEngine;
-using UnityEngine.Networking;
-using System.IO;
 using ConVar;
-using Oxide.Core.Database;
-using Facepunch;
 using Rust;
 using Steamworks;
-using System;
-using System.Collections.Generic;
-using System.ComponentModel;
-using System.Drawing;
-using System.Drawing.Imaging;
-using System.IO;
-using System.Text;
-using UnityEngine;
-using Color = System.Drawing.Color;
-using Graphics = System.Drawing.Graphics;
-//using Star = ProtoBuf.PatternFirework.Star;
-using ProtoBuf;
 
 namespace Oxide.Plugins 
 { 
-  [Info("RustApp", "RustApp.io", "2.1.2")]
+  [Info("RustApp", "RustApp.io", "2.1.3")]
   public class RustApp : RustPlugin
   {
     #region Variables
 
     // References to other plugin with API
-    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting, TirifyGamePluginRust, ExtRaidBlock;
+    [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, ExtRaidBlock;
 
     private static MetaInfo _MetaInfo = MetaInfo.Read();
     private static CheckInfo _CheckInfo = CheckInfo.Read();
@@ -154,7 +124,7 @@ namespace Oxide.Plugins
 
           payload.status = status;
 
-          payload.no_license = DetectNoLicense(connection);
+          payload.no_license = true;
           try { payload.meta = CollectPlayerMeta(payload.steam_id, payload.meta); } catch {}
 
           var team = RelationshipManager.Instance.FindPlayersTeam(connection.userid);
@@ -3306,38 +3276,6 @@ namespace Oxide.Plugins
         {
           Error("Failed to call RaidBlock API");
         }
-      }
-
-      return false;
-    }
-
-
-    private static bool DetectNoLicense(Network.Connection connection)
-    {
-      if (_RustApp.MultiFighting != null && _RustApp.MultiFighting.IsLoaded) {
-        try
-        {
-          var isSteam = (bool)_RustApp.MultiFighting.Call("IsSteam", connection);
-
-          return !isSteam;
-        }
-        catch
-        {
-          return false;
-        }
-      }
-
-      if (_RustApp.TirifyGamePluginRust != null && _RustApp.TirifyGamePluginRust.IsLoaded) {
-        try
-        {
-          var isPlayerNoSteam = (bool)_RustApp.TirifyGamePluginRust.Call("IsPlayerNoSteam", connection.userid.ToString());
-
-          return isPlayerNoSteam;
-        }
-        catch
-        {
-          return false;
-        } 
       }
 
       return false;
