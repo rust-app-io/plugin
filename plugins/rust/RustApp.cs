@@ -26,7 +26,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins 
 { 
-  [Info("RustApp", "RustApp.io", "2.1.3")]
+  [Info("RustApp", "RustApp.io", "2.1.4")]
   public class RustApp : RustPlugin
   {
     #region Variables
@@ -151,7 +151,7 @@ namespace Oxide.Plugins
 
           payload.position = player.transform.position.ToString();
           payload.rotation = player.eyes.rotation.ToString();
-          payload.coords = GridReference(player.transform.position);
+          payload.coords = MapHelper.PositionToString(player.transform.position);
 
           payload.can_build = DetectBuildingAuth(player);
           payload.is_raiding = DetectIsRaidBlock(player);
@@ -1404,7 +1404,7 @@ namespace Oxide.Plugins
 
             type = update.Entity.ShortPrefabName,
             position = update.Entity.transform.position.ToString(),
-            square = GridReference(update.Entity.transform.position)
+            square = MapHelper.PositionToString(update.Entity.transform.position)
           };
 
           CourtApi.SendSignage(obj)
@@ -2227,7 +2227,7 @@ namespace Oxide.Plugins
           {
             owner_steam_id = owner.ToString(),
             position = player.transform.position.ToString(),
-            square = GridReference(player.transform.position),
+            square = MapHelper.PositionToString(player.transform.position),
             steam_id = player.UserIDString
           }
         });
@@ -3308,28 +3308,6 @@ namespace Oxide.Plugins
       }
 
       return false;
-    }
-
-    private static string GridReference(Vector3 position)
-    {
-      var chars = new string[] { "A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "AA", "AB", "AC", "AD", "AE", "AF", "AG", "AH", "AI", "AJ", "AK", "AL", "AM", "AN", "AO", "AP", "AQ", "AR", "AS", "AT", "AU", "AV", "AW", "AX", "AY", "AZ" };
-
-      const float block = 146;
-
-      float size = ConVar.Server.worldsize;
-      float offset = size / 2;
-
-      float xpos = position.x + offset;
-      float zpos = position.z + offset;
-
-      int maxgrid = (int)(size / block);
-
-      float xcoord = Mathf.Clamp(xpos / block, 0, maxgrid - 1);
-      float zcoord = Mathf.Clamp(maxgrid - (zpos / block), 0, maxgrid - 1);
-
-      string pos = string.Concat(chars[(int)xcoord], (int)zcoord);
-
-      return (pos);
     }
 
     private static void ResurrectDictionary<T, V>(Dictionary<T, V> oldDict, Dictionary<T, V> newDict) {
