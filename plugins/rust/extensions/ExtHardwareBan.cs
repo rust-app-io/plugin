@@ -3,8 +3,8 @@ using Newtonsoft.Json;
 
 namespace Oxide.Plugins
 {
-    [Info("ExtHardwareBan", "RustApp.Io (by Bizlich)", "1.0.0")]
-    [Description("Hardware ban for RustApp (requires Tirify)")]
+    [Info("ExtHardwareBan", "RustApp.Io (by Bizlich)", "1.0.1")]
+    [Description("Hardware ban for RustApp (requires TirifyGamePluginPirate)")]
     public class ExtHardwareBan : RustPlugin
     {
         private static Configuration config = new();
@@ -37,11 +37,11 @@ namespace Oxide.Plugins
 
         private void RustApp_OnPaidAnnounceBan(string steam_id, List<string> initiators, string reason)
         {
-            if (config.Reasons.IsNullOrEmpty() || (config.WorB ? config.Reasons.Contains(reason) : !config.Reasons.Contains(reason)) && plugins.Find("TirifyGamePluginRust"))
+            if (config.Reasons.IsNullOrEmpty() || (config.WorB ? config.Reasons.Contains(reason) : !config.Reasons.Contains(reason)) && plugins.Find("TirifyGamePluginPirate"))
             {
                 timer.Once(5f, () => 
                 {
-                    plugins.Find("TirifyGamePluginRust")?.Call("SetTirifyBan", steam_id, reason);
+                    plugins.Find("TirifyGamePluginPirate")?.Call("SetTirifyBan", steam_id, reason);
                 });
             }
         }
