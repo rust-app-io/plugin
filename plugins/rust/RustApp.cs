@@ -3457,11 +3457,24 @@ namespace Oxide.Plugins
         // It is more optimized way to detect building authed instead of default BasePlayer.IsBuildingAuthed()
         private static bool DetectBuildingAuth(BasePlayer player)
         {
-            var list = new List<BuildingPrivlidge>();
+            const int SearchRadius = 16;
 
-            Vis.Entities(player.transform.position, 16f, list, Layers.PreventBuilding);
+            var pos = player.transform.position;
+            var results = Facepunch.Pool.Get<List<BuildingPrivlidge>>();
+            BaseEntity.Query.Server.GetInSphere(pos, SearchRadius, results, BaseEntity.Query.DistanceCheckType.None);
 
-            return list.FirstOrDefault()?.IsAuthed(player) ?? false;
+            var isAuthed = false;
+            foreach (var privledge in results)
+            {
+                if ((privledge.transform.position - pos).sqrMagnitude <= SearchRadius * SearchRadius)
+                {
+                    isAuthed = privledge.IsAuthed(player);
+                    break;
+                }
+            }
+
+            Facepunch.Pool.FreeUnmanaged(ref results);
+            return isAuthed;
         }
 
         private static string HexToRustFormat(string hex)
