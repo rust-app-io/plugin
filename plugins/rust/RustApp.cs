@@ -2460,14 +2460,7 @@ namespace Oxide.Plugins
 
         private void OnEntityKill(BaseNetworkable entity)
         {
-            if (entity?.net?.ID == null || entity?.net?.ID.Value == null || entity?.ShortPrefabName == null)
-            {
-                return;
-            }
-
-            var whiteList = new List<string> { "photoframe", "spinner.wheel" };
-
-            if (!entity.ShortPrefabName.StartsWith("sign.") || whiteList.Any(v => entity.ShortPrefabName.Contains(v)))
+            if (entity is not PhotoFrame and not SpinnerWheel and not Signage || entity.net is null)
             {
                 return;
             }
