@@ -20,6 +20,7 @@ using System.Drawing;
 using System.Drawing.Imaging;
 using Color = System.Drawing.Color;
 using Graphics = System.Drawing.Graphics;
+using Pool = Facepunch.Pool;
 using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
@@ -459,23 +460,21 @@ namespace Oxide.Plugins
 
                 public bool ad;
 
-                public CombatLogEventDto(CombatLog.Event ev)
+                public CombatLogEventDto(float time, CombatLog.Event ev)
                 {
                     if (ev.attacker == "player")
                     {
-                        var attacker = BasePlayer.activePlayerList.FirstOrDefault(v => v.net.ID.Value == ev.attacker_id) ?? BasePlayer.sleepingPlayerList.FirstOrDefault(v => v.net.ID.Value == ev.attacker_id);
-
+                        var attacker = BaseNetworkable.serverEntities.Find(new NetworkableId(ev.attacker_id)) as BasePlayer; ;
                         this.attacker_steam_id = attacker?.UserIDString ?? "";
                     }
 
                     if (ev.target == "player")
                     {
-                        var target = BasePlayer.activePlayerList.FirstOrDefault(v => v.net.ID.Value == ev.target_id) ?? BasePlayer.sleepingPlayerList.FirstOrDefault(v => v.net.ID.Value == ev.target_id);
-
+                        var target = BaseNetworkable.serverEntities.Find(new NetworkableId(ev.target_id)) as BasePlayer;
                         this.target_steam_id = target?.UserIDString ?? "";
                     }
 
-                    this.time = UnityEngine.Time.realtimeSinceStartup - ev.time - ConVar.Server.combatlogdelay;
+                    this.time = time - ev.time;
                     this.attacker = ev.attacker;
                     this.target = ev.target;
                     this.weapon = ev.weapon;
@@ -1622,7 +1621,7 @@ namespace Oxide.Plugins
 
         private class KillsWorker : RustAppWorker
         {
-            public Dictionary<string, HitInfo> WoundedHits = new Dictionary<string, HitInfo>();
+            public Dictionary<string, HitRecord> WoundedHits = new Dictionary<string, HitRecord>();
             public List<CourtApi.PluginKillEntryDto> KillsQueue = new List<CourtApi.PluginKillEntryDto>();
 
             private void Awake()
@@ -2472,94 +2471,76 @@ namespace Oxide.Plugins
 
         #region Kills
 
-        private void OnPlayerWound(BasePlayer instance, HitInfo info)
+        private readonly struct HitRecord
         {
-            if (_RustAppEngine?.KillsWorker == null)
+            public readonly BasePlayer InitiatorPlayer;
+            public readonly string Weapon;
+            public readonly float Distance;
+            public readonly bool IsHeadshot;
+            public HitRecord(HitInfo info)
             {
-                return;
-            }
+                if (info is null)
+                {
+                    return;
+                }
 
-            _RustAppEngine.KillsWorker.WoundedHits[instance.UserIDString] = info;
+                InitiatorPlayer = info.InitiatorPlayer;
+                Weapon = info.Weapon?.name ?? info.WeaponPrefab?.name ?? "unknown";
+                Distance = info.ProjectileDistance;
+                IsHeadshot = info.isHeadshot;
+            }
         }
 
-        private void OnPlayerRespawn(BasePlayer instance)
+        private void OnPlayerWound(BasePlayer instance, HitInfo info)
         {
-            if (_RustAppEngine?.KillsWorker == null)
+            if (_RustAppEngine?.KillsWorker == null || info?.InitiatorPlayer is null || info.InitiatorPlayer == instance)
             {
                 return;
             }
 
-            if (_RustAppEngine.KillsWorker.WoundedHits.ContainsKey(instance.UserIDString))
-            {
-                _RustAppEngine.KillsWorker.WoundedHits.Remove(instance.UserIDString);
-            }
+            // Bombardir: We can't save HitInfo there as it's pooled and will be invalid after this function completes.
+            _RustAppEngine.KillsWorker.WoundedHits[instance.UserIDString] = new HitRecord(info);
+        }
+
+        private void OnPlayerRespawn(BasePlayer player)
+        {
+            _RustAppEngine?.KillsWorker?.WoundedHits.Remove(player.UserIDString);
         }
 
         void OnPlayerRecovered(BasePlayer player)
         {
-            if (_RustAppEngine?.KillsWorker == null)
-            {
-                return;
-            }
-
-            if (_RustAppEngine.KillsWorker.WoundedHits.ContainsKey(player.UserIDString))
-            {
-                _RustAppEngine.KillsWorker.WoundedHits.Remove(player.UserIDString);
-            }
+            _RustAppEngine?.KillsWorker?.WoundedHits.Remove(player.UserIDString);
         }
 
-        private void OnPlayerDeath(BasePlayer player, HitInfo infos)
+        private void OnPlayerDeath(BasePlayer player, HitInfo info)
         {
-            if (infos?.InitiatorPlayer == null || player == null)
+            if (player is null)
             {
                 return;
             }
 
-            var trueInfo = GetRealInfo(player, infos);
+            var hitRecord = GetRealInfo(player, info);
+            if (hitRecord.InitiatorPlayer is null || player == hitRecord.InitiatorPlayer)
+            {
+                return;
+            }
 
+            var playerUserId = player.userID.Get();
             var targetId = player.UserIDString;
-            var initiatorId = trueInfo.InitiatorPlayer?.userID;
-            if (trueInfo == null || initiatorId == player.userID || trueInfo.InitiatorPlayer == null || initiatorId == null)
-            {
-                return;
-            }
 
-            var initiatorIdString = initiatorId.ToString();
-            var distance = trueInfo?.ProjectileDistance ?? 0;
-            var time = UnityEngine.Time.realtimeSinceStartup + 1;
-
-            var weapon = "unknown";
-
-            try
+            Interface.Oxide.NextFrame(() =>
             {
-                weapon = trueInfo?.Weapon?.name ?? trueInfo?.WeaponPrefab?.name ?? "unknown";
-            }
-            catch
-            {
-            }
-
-            timer.Once(ConVar.Server.combatlogdelay + 1, () =>
-            {
-                try
+                var log = GetCorrectCombatlog(playerUserId);
+                _RustAppEngine?.KillsWorker?.AddKill(new CourtApi.PluginKillEntryDto
                 {
-                    var log = GetCorrectCombatlog(player.userID, time);
-
-                    _RustAppEngine?.KillsWorker?.AddKill(new CourtApi.PluginKillEntryDto
-                    {
-                        initiator_steam_id = initiatorIdString,
-                        target_steam_id = targetId,
-                        distance = distance,
-                        game_time = Env.time.ToTimeSpan().ToShortString(),
-                        hit_history = log,
-                        is_headshot = trueInfo?.isHeadshot ?? false,
-                        weapon = weapon
-                    });
-                }
-                catch (Exception exc)
-                {
-                    //Error("Обнаружена ошибка в бета-алгоритме, сообщите разработчикам", "Detect error in beta-mechanism");
-                    //PrintError(exc.ToString());
-                }
+                    initiator_steam_id = hitRecord.InitiatorPlayer.UserIDString,
+                    target_steam_id = targetId,
+                    distance = hitRecord.Distance,
+                    game_time = Env.time.ToTimeSpan().ToShortString(),
+                    hit_history = log,
+                    is_headshot = hitRecord.IsHeadshot,
+                    weapon = hitRecord.Weapon
+                });
             });
         }
 
@@ -2940,79 +2921,73 @@ namespace Oxide.Plugins
 
         #region Methods
 
-        private List<CourtApi.CombatLogEventDto> GetCorrectCombatlog(ulong target, float timeLimit)
+        private static List<CourtApi.CombatLogEventDto> GetCorrectCombatlog(ulong target)
         {
+            const int THRESHOLD_STREAK = 20;
+            const int THRESHOLD_MAX_LIMIT = 30;
+
             var allCombatlogs = CombatLog.Get(target);
-            if (allCombatlogs == null || allCombatlogs.Count() == 0)
+
+            if (allCombatlogs == null || allCombatlogs.Count == 0)
             {
                 return null;
             }
 
-            var combatlog = allCombatlogs.Where(v => v.time < timeLimit).Reverse();
-            if (combatlog.Count() == 0)
+            var logsList = Pool.Get<List<CombatLog.Event>>();
+
+            logsList.AddRange(allCombatlogs);
+
+            var logsLastIndex = logsList.Count - 1;
+            var killLog = logsList[logsLastIndex];
+
+            var container = new List<CourtApi.CombatLogEventDto>(8)
             {
-                return null;
-            }
+                new(killLog.time, killLog)
+            };
 
-            var THRESHOLD_STREAK = 20;
-            var THRESHOLD_MAX_LIMIT = 30;
-
-            var container = new List<CourtApi.CombatLogEventDto>();
-
-            CombatLog.Event previousEvent = combatlog.ElementAtOrDefault(0);
-
-            foreach (var ev in combatlog)
+            for (var i = logsLastIndex - 1; i >= 0; i--)
             {
-                var timeLeft = UnityEngine.Time.realtimeSinceStartup - ev.time - (float)ConVar.Server.combatlogdelay;
+                var ev = logsList[i];
 
                 if (ev.target != "player" && ev.target != "you")
                 {
                     continue;
                 }
 
-                if (ev.info == "killed" && Math.Abs(ev.time - timeLimit) > 1)
-                {
+                if (ev.info == "killed")
                     break;
-                }
 
-                var dto = new CourtApi.CombatLogEventDto(ev);
-
-                if (Math.Abs(ev.time - previousEvent.time) < THRESHOLD_STREAK)
-                {
-                    container.Add(dto);
-                }
-                else if (Math.Abs(ev.time - timeLimit) < THRESHOLD_MAX_LIMIT)
-                {
-                    container.Add(dto);
-                }
-                else
-                {
+                var timeSincePreviousEvent = ev.time - logsList[i + 1].time;
+                if (timeSincePreviousEvent > THRESHOLD_STREAK)
                     break;
-                }
 
-                previousEvent = ev;
+                var timeSinceEvent = killLog.time - ev.time;
+                if (timeSinceEvent > THRESHOLD_MAX_LIMIT)
+                    break;
+
+                container.Add(new CourtApi.CombatLogEventDto(killLog.time, ev));
             }
 
+            Pool.FreeUnmanaged(ref logsList);
             return container;
         }
 
-        private HitInfo GetRealInfo(BasePlayer player, HitInfo info)
+        private HitRecord GetRealInfo(BasePlayer player, HitInfo info)
         {
             if (_RustAppEngine?.KillsWorker == null)
             {
-                return info;
+                return new HitRecord(info);
             }
 
-            var initiatorId = info.InitiatorPlayer?.userID;
-            if (initiatorId == player.userID || info.InitiatorPlayer == null)
+            if (info?.InitiatorPlayer is null || info.InitiatorPlayer == player)
             {
-                if (_RustAppEngine.KillsWorker.WoundedHits.ContainsKey(player.UserIDString))
+                if (_RustAppEngine.KillsWorker.WoundedHits.TryGetValue(player.UserIDString, out var realInfo))
                 {
-                    return _RustAppEngine.KillsWorker.WoundedHits[player.UserIDString];
+                    return realInfo;
                 }
             }
 
-            return info;
+            return new HitRecord(info);
         }
 
         private void DestroyAllUi()
