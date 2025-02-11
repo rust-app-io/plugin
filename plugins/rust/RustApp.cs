@@ -2,6 +2,7 @@
 using Oxide.Core;
 using Oxide.Core.Plugins;
 using System;
+using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
 using JetBrains.Annotations;
@@ -18,6 +19,10 @@ using Rust;
 using Steamworks;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Text;
+using System.Threading.Tasks;
+using Oxide.Core.Libraries;
+using Unity.Collections;
 using Color = System.Drawing.Color;
 using Graphics = System.Drawing.Graphics;
 using Pool = Facepunch.Pool;
@@ -25,7 +30,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.1.5")]
+    [Info("RustApp", "RustApp.io", "2.2.1")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -40,6 +45,10 @@ namespace Oxide.Plugins
         private static Configuration _Settings;
 
         private static RustAppEngine _RustAppEngine;
+
+        private static JsonSerializer _jsonSerializer = JsonSerializer.CreateDefault(null);
+
+        private static (string name, string value)[] _apiHeaders = Array.Empty<(string, string)>();
 
         #endregion
 
@@ -542,7 +551,7 @@ namespace Oxide.Plugins
 
             #endregion
 
-            private static readonly string BaseUrl = "https://queue.rustapp.io";
+            private const string BaseUrl = "https://queue.rustapp.io";
 
             #region GetQueueTasks
 
@@ -748,6 +757,14 @@ namespace Oxide.Plugins
 
             private void SetupAuthWorker()
             {
+                _apiHeaders = new []
+                {
+                    ("x-plugin-auth", _MetaInfo?.Value ?? ""),
+                    ("x-plugin-version", _RustApp.Version.ToString()),
+                    ("x-plugin-port", ConVar.Server.port.ToString()),
+                    ("Content-Type", "application/json")
+                };
+
                 AuthWorker = this.gameObject.AddComponent<AuthWorker>();
 
                 AuthWorker.OnAuthSuccess += () =>
@@ -832,7 +849,7 @@ namespace Oxide.Plugins
                 };
 
                 CourtApi.GetServerInfo().Execute(
-                  (_, raw) =>
+                  (_) =>
                   {
                       onSuccess();
                       return;
@@ -911,7 +928,7 @@ namespace Oxide.Plugins
 
                 CourtApi.SendPairDetails(EnteredCode)
                   .Execute(
-                    (data, raw) =>
+                    (_) =>
                     {
                         InvokeRepeating(nameof(WaitPairFinish), 0f, 1f);
                     },
@@ -939,7 +956,7 @@ namespace Oxide.Plugins
             {
                 CourtApi.SendPairDetails(EnteredCode)
                   .Execute(
-                    (data, raw) =>
+                    (data) =>
                     {
                         if (data.token == null || data.token.Length == 0)
                         {
@@ -1020,7 +1037,7 @@ namespace Oxide.Plugins
                     team_changes = team_changes
                 })
                   .Execute(
-                    (data, raw) =>
+                    (_) =>
                     {
                         Trace("State was sent successfull");
 
@@ -1180,7 +1197,7 @@ namespace Oxide.Plugins
             {
                 QueueApi.GetQueueTasks()
                   .Execute(
-                    (data, raw) => CallQueueTasks(data),
+                    CallQueueTasks,
                     (error) =>
                     {
                         Debug($"Queue retreive failed {error}");
@@ -1237,7 +1254,7 @@ namespace Oxide.Plugins
 
                 QueueApi.ProcessQueueTasks(new QueueApi.QueueTaskResponsePayload { data = queueResponses })
                   .Execute(
-                    (data, raw) =>
+                    (_) =>
                     {
                         QueueProcessedIds = new List<string>();
 
@@ -1371,7 +1388,7 @@ namespace Oxide.Plugins
 
                 BanApi.BanGetBatch(payload)
                   .Execute(
-                    (data, raw) =>
+                    (data) =>
                     {
                         payload.players.ForEach(originalPlayer =>
                         {
@@ -1467,7 +1484,6 @@ namespace Oxide.Plugins
 
                 CourtApi.SendChatMessages(payload)
                   .Execute(
-                    (data, raw) => { },
                     (error) =>
                     {
                         ResurrectList(payload.messages, QueueMessages);
@@ -1506,7 +1522,6 @@ namespace Oxide.Plugins
 
                 CourtApi.SendReports(payload)
                   .Execute(
-                    (data, raw) => { },
                     (error) =>
                     {
                         ResurrectList(payload.reports, QueueReportSend);
@@ -1544,7 +1559,6 @@ namespace Oxide.Plugins
 
                 CourtApi.CreatePlayerAlerts(alerts)
                   .Execute(
-                    (data, raw) => { },
                     (error) =>
                     {
                         ResurrectList(alerts, PlayerAlertQueue);
@@ -1586,10 +1600,7 @@ namespace Oxide.Plugins
                     };
 
                     CourtApi.SendSignage(obj)
-                      .Execute(
-                        (data, raw) => { },
-                        (error) => { }
-                      );
+                      .Execute();
                 }
                 catch
                 {
@@ -1610,7 +1621,6 @@ namespace Oxide.Plugins
 
                 CourtApi.SendSignageDestroyed(payload)
                   .Execute(
-                    (data, raw) => { },
                     (error) =>
                     {
                         ResurrectList(payload.net_ids, DestroyedSignagesQueue);
@@ -1649,7 +1659,6 @@ namespace Oxide.Plugins
 
                 CourtApi.SendKills(payload)
                   .Execute(
-                    (data, raw) => { },
                     (error) =>
                     {
                         ResurrectList(payload.kills, KillsQueue);
@@ -1672,12 +1681,12 @@ namespace Oxide.Plugins
 
             CourtApi.SendContact(player.UserIDString, String.Join(" ", args))
               .Execute(
-                (data, raw) =>
+                (_) =>
                 {
                     SendMessage(player, lang.GetMessage("Contact.Sent", this, player.UserIDString) + $"<color=#8393cd> {String.Join(" ", args)}</color>");
                     SendMessage(player, lang.GetMessage("Contact.SentWait", this, player.UserIDString));
                 },
-                (error) => { }
+                (_) => { }
               );
         }
 
@@ -1805,12 +1814,9 @@ namespace Oxide.Plugins
         private void OnNewSave(string saveName)
         {
             // Remove in 5 minutes
-            timer.Once(300, () =>
+            timer.Once(300, static () =>
             {
-                CourtApi.SendWipe().Execute(
-            (data, raw) => { },
-            (error) => { }
-          );
+                CourtApi.SendWipe().Execute();
             });
         }
 
@@ -3074,7 +3080,7 @@ namespace Oxide.Plugins
         private void BanCreate(string steamId, CourtApi.PluginBanCreatePayload payload)
         {
             CourtApi.BanCreate(payload).Execute(
-              (data, raw) =>
+              (_) =>
               {
                   Log($"Player {steamId} banned for {payload.reason}");
               },
@@ -3089,7 +3095,7 @@ namespace Oxide.Plugins
         {
             CourtApi.BanDelete(steamId)
               .Execute(
-                (data, raw) =>
+                (_) =>
                 {
                     Log($"Player {steamId} unbanned");
                 },
@@ -3124,7 +3130,6 @@ namespace Oxide.Plugins
                 category = $"{plugin.Name} • {json.name}",
                 custom_links = json.custom_links
             }).Execute(
-              (data, raw) => { },
               (error) =>
               {
                   Debug($"Failed to send custom alert: {error}");
@@ -3136,156 +3141,232 @@ namespace Oxide.Plugins
 
         #region StableRequest
 
-        public class StableRequest<T>
+        [ThreadStatic]
+        private static char[] _reusableCharBuffer;
+        private static readonly UTF8Encoding _encoding = new(false);
+
+        public sealed class PooledTextReaderUtf8 : TextReader
         {
-            private static Dictionary<string, string> DefaultHeaders()
+            private readonly int _length;
+            private int _pos;
+
+            public PooledTextReaderUtf8(ReadOnlySpan<byte> data)
             {
-                return new Dictionary<string, string>
+                var requiredBufferLen = _encoding.GetMaxCharCount(data.Length);
+                if (_reusableCharBuffer == null || _reusableCharBuffer.Length < requiredBufferLen)
                 {
-                    ["x-plugin-auth"] = _MetaInfo?.Value ?? "",
-                    ["x-plugin-version"] = _RustApp.Version.ToString(),
-                    ["x-plugin-port"] = ConVar.Server.port.ToString()
-                };
+                    var length = _reusableCharBuffer?.Length ?? 2048;
+                    _reusableCharBuffer = new char[Math.Max(length * 2, requiredBufferLen)];
+                }
+                _length = _encoding.GetChars(data, _reusableCharBuffer);
+                _pos = 0;
             }
 
+            public override int Read(char[] buffer, int index, int count)
+            {
+                if (buffer == null)
+                    throw new ArgumentNullException(nameof(buffer), "Buffer cannot be null.");
+                if (index < 0)
+                    throw new ArgumentOutOfRangeException(nameof(index), "Non-negative number required.");
+                if (count < 0)
+                    throw new ArgumentOutOfRangeException(nameof(count), "Non-negative number required.");
+                if (buffer.Length - index < count)
+                    throw new ArgumentException("Offset and length were out of bounds for the array or count is greater than the number of elements from index to the end of the source collection.");
+                int readCount = _length - _pos;
+                if (readCount > 0)
+                {
+                    if (readCount > count)
+                        readCount = count;
+                    _reusableCharBuffer.AsSpan(_pos, readCount).CopyTo(buffer.AsSpan(index));
+                    _pos += readCount;
+                }
+                return readCount;
+            }
+        }
+
+        public sealed class PooledTextWriterUtf8 : TextWriter
+        {
+            [ThreadStatic]
+            private static byte[] _reusableByteBuffer;
+
+            private int _pos;
+
+            public PooledTextWriterUtf8() : base(CultureInfo.InvariantCulture)
+            {
+                _reusableCharBuffer ??= new char[4096];
+                _pos = 0;
+            }
+
+            public ArraySegment<byte> AsArraySegment()
+            {
+                var requiredBufferLen = _encoding.GetMaxByteCount(_pos);
+                if (_reusableByteBuffer == null || _reusableByteBuffer.Length < requiredBufferLen)
+                {
+                    var length = _reusableByteBuffer?.Length ?? 2048;
+                    _reusableByteBuffer = new byte[Math.Max(length * 2, requiredBufferLen)];
+                }
+                var len = _encoding.GetBytes(_reusableCharBuffer, 0, _pos, _reusableByteBuffer, 0);
+                return new ArraySegment<byte>(_reusableByteBuffer, 0, len);
+            }
+
+            public override Encoding Encoding => _encoding;
+
+            public override void Write(char value)
+            {
+                Grow(1);
+                _reusableCharBuffer[_pos++] = value;
+            }
+
+            public override void Write(char[] buffer, int index, int count)
+            {
+                Grow(count);
+                buffer.AsSpan(index, count).CopyTo(_reusableCharBuffer.AsSpan(_pos));
+                _pos += count;
+            }
+
+            public override void Write(ReadOnlySpan<char> buffer)
+            {
+                Grow(buffer.Length);
+                buffer.CopyTo(_reusableCharBuffer.AsSpan(_pos));
+                _pos += buffer.Length;
+            }
+
+            public override void Write(string value)
+            {
+                if (value == null)
+                    return;
+                Grow(value.Length);
+                value.CopyTo(0, _reusableCharBuffer, _pos, value.Length);
+                _pos += value.Length;
+            }
+
+            private void Grow(int requestedSize)
+            {
+                var freeSize = _reusableCharBuffer.Length - _pos;
+                if (freeSize < requestedSize)
+                {
+                    var newBuffer = new char[_reusableCharBuffer.Length * 2];
+                    _reusableCharBuffer.AsSpan().CopyTo(newBuffer);
+                    _reusableCharBuffer = newBuffer;
+                }
+            }
+        }
+
+        public class StableRequest<T> where T : class
+        {
             private string url;
-            private RequestMethod method;
-
+            private string method;
             private object data;
-            public Dictionary<string, string> headers = new Dictionary<string, string>();
 
-            public Action<T, string> onComplete;
-            public Action<string> onException;
-
-            public StableRequest(string url, RequestMethod method, object? data)
+            public StableRequest(string url, RequestMethod requestMethod, object? data)
             {
+                method = requestMethod switch
+                {
+                    RequestMethod.GET => UnityWebRequest.kHttpVerbGET,
+                    RequestMethod.PUT => UnityWebRequest.kHttpVerbPUT,
+                    RequestMethod.POST => UnityWebRequest.kHttpVerbPOST,
+                    RequestMethod.DELETE => UnityWebRequest.kHttpVerbDELETE,
+                    _ => throw new ArgumentOutOfRangeException(nameof(requestMethod), requestMethod, null)
+                };
+
                 this.url = url;
-                this.method = method;
-
                 this.data = data;
-                this.headers = DefaultHeaders();
             }
 
-            public void Execute(Action<T, string> onComplete, Action<string> onException)
+            public void Execute()
             {
-                if (onComplete != null)
-                {
-                    this.onComplete += onComplete;
-                }
-                if (onException != null)
-                {
-                    this.onException += onException;
-                }
-
-                UnityWebRequest webRequest = null;
-
-                var body = System.Text.Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(data != null ? data : new { }));
-
-                switch (method)
-                {
-                    case RequestMethod.GET:
-                        {
-                            webRequest = UnityWebRequest.Get(url);
-                            break;
-                        }
-                    case RequestMethod.PUT:
-                        {
-                            webRequest = UnityWebRequest.Put(url, "{}");
-
-                            webRequest.uploadHandler = (UploadHandler)new UploadHandlerRaw(body);
-                            webRequest.uploadHandler.contentType = "application/json";
-                            break;
-                        }
-                    case RequestMethod.POST:
-                        {
-                            webRequest = UnityWebRequest.Post(url, "{}");
-
-                            webRequest.uploadHandler = (UploadHandler)new UploadHandlerRaw(body);
-                            webRequest.uploadHandler.contentType = "application/json";
-                            break;
-                        }
-                    case RequestMethod.DELETE:
-                        {
-                            webRequest = UnityWebRequest.Delete(url);
-
-                            webRequest.uploadHandler = (UploadHandler)new UploadHandlerRaw(body);
-                            webRequest.uploadHandler.contentType = "application/json";
-                            break;
-                        }
-                }
-
-                if (webRequest == null)
-                {
-                    throw new Exception("bad.request.type");
-                }
-
-                if (headers != null)
-                {
-                    foreach (var chunk in headers)
-                    {
-                        webRequest.SetRequestHeader(chunk.Key, chunk.Value);
-                    }
-                }
-
-                webRequest.SetRequestHeader("Content-Type", "application/json");
-
-                webRequest.timeout = 10;
-
-                Rust.Global.Runner.StartCoroutine(this.WaitForRequest(webRequest));
+                Rust.Global.Runner.StartCoroutine(SendWebRequest(onComplete: null, onException: null));
             }
 
-            private IEnumerator WaitForRequest(UnityWebRequest request)
+            public void Execute(Action<string> onException)
             {
-                yield return request.Send();
+                Rust.Global.Runner.StartCoroutine(SendWebRequest(onComplete: null, onException));
+            }
 
-                bool isError = request.isHttpError || request.isNetworkError || request.error != null;
-                var body = (request.downloadHandler?.text ?? "possible network errors, contact @rustapp_help if you see > 5 minutes").ToLower();
+            public void Execute(Action<T> onComplete, Action<string> onException)
+            {
+                Rust.Global.Runner.StartCoroutine(SendWebRequest(onComplete, onException));
+            }
 
-                if (body.Length == 0)
+            private IEnumerator SendWebRequest(Action<T> onComplete, Action<string> onException)
+            {
+                using var request = new UnityWebRequest(url, method);
+
+                request.downloadHandler = new DownloadHandlerBuffer();
+                request.timeout = 10;
+
+                foreach (var header in _apiHeaders)
                 {
-                    body = "possible network errors, contact @rustapp_help if you see > 5 minutes";
+                    request.SetRequestHeader(header.name, header.value);
                 }
 
-                if (isError)
-                {
-                    if (body.Contains("502 bad gateway") || body.Contains("cloudflare"))
-                    {
-                        onException?.Invoke("rustapp is restarting, wait please");
-                    }
-                    else
-                    {
-                        onException?.Invoke(body);
-                    }
-                }
-                else
-                {
-                    try
-                    {
-                        if (request.downloadHandler?.text == null || request.downloadHandler?.text.Length == 0)
-                        {
-                            onComplete?.Invoke((T)(object)null, request.downloadHandler?.text);
-                        }
-                        else
-                        {
-                            if (typeof(T) == typeof(String))
-                            {
-                                onComplete?.Invoke((T)(object)request.downloadHandler?.text, request.downloadHandler?.text);
-                            }
-                            else
-                            {
-                                var obj = JsonConvert.DeserializeObject<T>(request.downloadHandler?.text);
+                SetWebRequestPayload(request, data);
 
-                                onComplete?.Invoke(obj, request.downloadHandler?.text);
-                            }
-                        }
-                    }
-                    catch (Exception parseException)
-                    {
-                        Interface.Oxide.LogError($"Failed to parse response ({request.method.ToUpper()} {request.url}): {parseException} (Response: {request.downloadHandler?.text})");
-                    }
+                yield return request.SendWebRequest();
+
+                if (TryGetError(request, out var error))
+                {
+                    Error("Web request error: " + error);
+                    onException?.Invoke(error);
+                    yield break;
                 }
 
-                try { request?.Dispose(); } catch { }
+                if (onComplete == null)
+                {
+                    yield break;
+                }
+
+                try
+                {
+                    var obj = DeserializeWebResponse(request);
+                    onComplete?.Invoke(obj);
+                }
+                catch (Exception parseException)
+                {
+                    Error($"Failed to parse response ({request.method.ToUpper()} {request.url}): {parseException} (Response: {request.downloadHandler?.text})");
+                }
+            }
+
+            private static void SetWebRequestPayload(UnityWebRequest webRequest, object data)
+            {
+                if (data == null)
+                    return;
+
+                using var stringWriter = new PooledTextWriterUtf8();
+                _jsonSerializer.Serialize(stringWriter, data);
+                var dataArray = stringWriter.AsArraySegment();
+                var dataNativeArray = new NativeArray<byte>(dataArray.Count, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+                NativeArray<byte>.Copy(dataArray.Array, dataNativeArray, dataArray.Count);
+
+                webRequest.uploadHandler = new UploadHandlerRaw(dataNativeArray, transferOwnership: true);
+                webRequest.uploadHandler.contentType = "application/json";
+            }
+
+            private static bool TryGetError(UnityWebRequest request, out string error)
+            {
+                if (request.result == UnityWebRequest.Result.Success)
+                {
+                    error = null;
+                    return false;
+                }
+
+                error = $"Error: {request.result}. Message: {request.downloadHandler?.text.ToLower() ?? "possible network errors, contact @rustapp_help if you see > 5 minutes"}";
+                if (error.Contains("502 bad gateway") || error.Contains("cloudflare"))
+                {
+                    error = "rustapp is restarting, wait please";
+                }
+                return true;
+            }
+
+            private static T DeserializeWebResponse(UnityWebRequest request)
+            {
+                var data = request.downloadHandler.nativeData;
+                if (data.Length == 0)
+                    return default;
+
+                using var textReader = new PooledTextReaderUtf8(data.AsReadOnlySpan());
+                using var reader = new JsonTextReader(textReader);
+                return _jsonSerializer.Deserialize<T>(reader);
             }
         }
 
@@ -3655,11 +3736,6 @@ namespace Oxide.Plugins
             }
 
             player.SendConsoleCommand("chat.add", 0, initiator_steam_id, message);
-        }
-
-        private T Reserialize<T>(JObject obj)
-        {
-            return JsonConvert.DeserializeObject<T>(JsonConvert.SerializeObject(obj));
         }
 
         public static string IPAddressWithoutPort(string ipWithPort)
