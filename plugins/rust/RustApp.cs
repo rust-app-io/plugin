@@ -6,7 +6,6 @@ using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
 using JetBrains.Annotations;
-using Oxide.Core.Libraries;
 using Oxide.Game.Rust.Cui;
 using System.Linq;
 using UnityEngine;
@@ -30,7 +29,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.2.1")]
+    [Info("RustApp", "RustApp.io", "2.2.2")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -136,12 +135,12 @@ namespace Oxide.Plugins
                 {
                     var payload = new PluginStatePlayerDto();
 
-                    payload.steam_id = connection.userid.ToString();
+                    payload.steam_id = connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : connection.userid.ToString();
                     payload.steam_name = connection.username.Replace("<blank>", "blank");
                     payload.ip = IPAddressWithoutPort(connection.ipaddress);
                     payload.ping = Network.Net.sv.GetAveragePing(connection);
                     payload.seconds_connected = (int)connection.GetSecondsConnected();
-                    payload.language = _RustApp.lang.GetLanguage(connection.userid.ToString());
+                    payload.language = _RustApp.lang.GetLanguage(payload.steam_id);
 
                     payload.status = status;
 
@@ -152,9 +151,13 @@ namespace Oxide.Plugins
                     if (team != null)
                     {
                         payload.team = team.members
+                          .Where(v => v != connection.userid)
                           .Select(v => v.ToString())
-                          .Where(v => v != connection.userid.ToString())
                           .ToList();
+                    }
+                    else
+                    {
+                        payload.team = new List<string>();
                     }
 
                     return payload;
@@ -162,7 +165,7 @@ namespace Oxide.Plugins
 
                 public static PluginStatePlayerDto FromPlayer(BasePlayer player)
                 {
-                    var payload = PluginStatePlayerDto.FromConnection(player.Connection, "active");
+                    var payload = FromConnection(player.Connection, "active");
 
                     payload.position = player.transform.position.ToString();
                     payload.rotation = player.eyes.rotation.ToString();
@@ -194,16 +197,16 @@ namespace Oxide.Plugins
                 public string status;
 
                 public PluginStatePlayerMetaDto meta = new PluginStatePlayerMetaDto();
-                public List<string> team = new List<string>();
+                public List<string> team;
             }
 
             public class PluginStateUpdatePayload : PluginServerDto
             {
                 public PluginServerDto server_info = new PluginServerDto();
 
-                public List<PluginStatePlayerDto> players = new List<PluginStatePlayerDto>();
-                public Dictionary<string, string> disconnected = new Dictionary<string, string>();
-                public Dictionary<string, string> team_changes = new Dictionary<string, string>();
+                public List<PluginStatePlayerDto> players;
+                public Dictionary<string, string> disconnected;
+                public Dictionary<string, string> team_changes;
             }
 
             public static StableRequest<object> SendStateUpdate(PluginStateUpdatePayload data)
@@ -228,7 +231,7 @@ namespace Oxide.Plugins
 
             public class PluginChatMessagePayload
             {
-                public List<PluginChatMessageDto> messages = new List<PluginChatMessageDto>();
+                public List<PluginChatMessageDto> messages;
             }
 
             public static StableRequest<object> SendChatMessages(PluginChatMessagePayload payload)
@@ -256,7 +259,7 @@ namespace Oxide.Plugins
 
             public class PluginReportBatchPayload
             {
-                public List<CourtApi.PluginReportDto> reports = new List<CourtApi.PluginReportDto>();
+                public List<CourtApi.PluginReportDto> reports;
             }
 
             public static StableRequest<object> SendReports(PluginReportBatchPayload payload)
@@ -359,7 +362,7 @@ namespace Oxide.Plugins
                 public string custom_icon;
                 public bool hide_in_table = false;
                 public string category;
-                public List<string> custom_links = new List<string>();
+                public List<string> custom_links;
             }
 
             public class PluginPlayerAlertCustomAlertMeta
@@ -401,7 +404,7 @@ namespace Oxide.Plugins
 
             public class SignageDestroyedDto
             {
-                public List<string> net_ids = new List<string>();
+                public List<string> net_ids;
             }
 
             public static StableRequest<object> SendSignageDestroyed(SignageDestroyedDto payload)
@@ -415,7 +418,7 @@ namespace Oxide.Plugins
 
             public class PluginKillsDto
             {
-                public List<PluginKillEntryDto> kills = new List<PluginKillEntryDto>();
+                public List<PluginKillEntryDto> kills;
             }
 
             public class PluginKillEntryDto
@@ -428,7 +431,7 @@ namespace Oxide.Plugins
 
                 public bool is_headshot;
 
-                public List<CombatLogEventDto> hit_history = new List<CombatLogEventDto>();
+                public List<CombatLogEventDto> hit_history;
             }
 
             public class CombatLogEventDto
@@ -566,7 +569,7 @@ namespace Oxide.Plugins
 
             public class QueueTaskResponsePayload
             {
-                public Dictionary<string, object> data = new Dictionary<string, object>();
+                public Dictionary<string, object> data;
             }
 
             public static StableRequest<object> ProcessQueueTasks(QueueTaskResponsePayload payload)
@@ -591,7 +594,7 @@ namespace Oxide.Plugins
 
             public class BanGetBatchPayload
             {
-                public List<BanGetBatchEntryPayloadDto> players = new List<BanGetBatchEntryPayloadDto>();
+                public List<BanGetBatchEntryPayloadDto> players;
             }
 
             public class BanGetBatchEntryResponseDto
@@ -599,7 +602,7 @@ namespace Oxide.Plugins
                 public string steam_id;
                 public string ip;
 
-                public List<BanDto> bans = new List<BanDto>();
+                public List<BanDto> bans;
             }
 
             public class BanDto
@@ -618,7 +621,7 @@ namespace Oxide.Plugins
 
             public class BanGetBatchResponse
             {
-                public List<BanGetBatchEntryResponseDto> entries = new List<BanGetBatchEntryResponseDto>();
+                public List<BanGetBatchEntryResponseDto> entries;
             }
 
             public static StableRequest<BanGetBatchResponse> BanGetBatch(BanGetBatchPayload payload)
@@ -1022,43 +1025,57 @@ namespace Oxide.Plugins
 
             public void SendUpdate(bool unload = false, Action? onFinished = null)
             {
-                var players = unload ? new List<CourtApi.PluginStatePlayerDto>() : this.CollectPlayers();
+                var players = Pool.Get<List<CourtApi.PluginStatePlayerDto>>();
+                if (!unload)
+                {
+                    CollectPlayers(players);
+                }
 
-                var disconnected = unload ? CollectFakeDisconnects() : DisconnectReasons.ToDictionary(v => v.Key, v => v.Value);
-                var team_changes = TeamChanges.ToDictionary(v => v.Key, v => v.Value);
+                var disconnected = Pool.Get<Dictionary<string, string>>();
+                if (unload)
+                {
+                    CollectFakeDisconnects(disconnected);
+                }
+                else
+                {
+                    ResurrectDictionary(DisconnectReasons, disconnected);
+                }
 
-                DisconnectReasons = new Dictionary<string, string>();
-                TeamChanges = new Dictionary<string, string>();
+                var teamChanges = Pool.Get<Dictionary<string, string>>();
+                ResurrectDictionary(TeamChanges, teamChanges);
+
+                DisconnectReasons.Clear();
+                TeamChanges.Clear();
 
                 CourtApi.SendStateUpdate(new CourtApi.PluginStateUpdatePayload
                 {
                     players = players,
                     disconnected = disconnected,
-                    team_changes = team_changes
-                })
-                  .Execute(
+                    team_changes = teamChanges
+                }).Execute(
                     (_) =>
                     {
+                        Pool.FreeUnmanaged(ref disconnected);
+                        Pool.FreeUnmanaged(ref teamChanges);
                         Trace("State was sent successfull");
-
                         onFinished?.Invoke();
                     },
                     (err) =>
                     {
                         onFinished?.Invoke();
-
                         Debug($"State sent error: {err}");
-
                         ResurrectDictionary(disconnected, DisconnectReasons);
-                        ResurrectDictionary(team_changes, TeamChanges);
+                        Pool.FreeUnmanaged(ref disconnected);
+                        ResurrectDictionary(teamChanges, TeamChanges);
+                        Pool.FreeUnmanaged(ref teamChanges);
                     }
                   );
+
+                Pool.FreeUnmanaged(ref players);
             }
 
-            private List<CourtApi.PluginStatePlayerDto> CollectPlayers()
+            private void CollectPlayers(List<CourtApi.PluginStatePlayerDto> playerStateDtos)
             {
-                List<CourtApi.PluginStatePlayerDto> playerStateDtos = new List<CourtApi.PluginStatePlayerDto>();
-
                 foreach (var player in BasePlayer.activePlayerList)
                 {
                     try { playerStateDtos.Add(CourtApi.PluginStatePlayerDto.FromPlayer(player)); } catch { }
@@ -1069,24 +1086,18 @@ namespace Oxide.Plugins
                     try { playerStateDtos.Add(CourtApi.PluginStatePlayerDto.FromConnection(connection, "joining")); } catch { }
                 }
 
-                for (var i = 0; i < ServerMgr.Instance.connectionQueue.queue.Count; i++)
+                foreach (var connection in ServerMgr.Instance.connectionQueue.queue)
                 {
-                    var connection = ServerMgr.Instance.connectionQueue.queue.ElementAtOrDefault(i);
                     if (connection == null)
                     {
                         continue;
                     }
-
                     try { playerStateDtos.Add(CourtApi.PluginStatePlayerDto.FromConnection(connection, "queued")); } catch { }
                 }
-
-                return playerStateDtos;
             }
 
-            private Dictionary<string, string> CollectFakeDisconnects()
+            private void CollectFakeDisconnects(Dictionary<string, string> disconnect)
             {
-                Dictionary<string, string> disconnect = new Dictionary<string, string>();
-
                 foreach (var player in BasePlayer.activePlayerList)
                 {
                     try { disconnect.Add(player.UserIDString, "plugin-unload"); } catch { }
@@ -1097,9 +1108,8 @@ namespace Oxide.Plugins
                     try { disconnect.Add(connection.userid.ToString(), "plugin-unload"); } catch { }
                 }
 
-                for (var i = 0; i < ServerMgr.Instance.connectionQueue.queue.Count; i++)
+                foreach (var connection in ServerMgr.Instance.connectionQueue.queue)
                 {
-                    var connection = ServerMgr.Instance.connectionQueue.queue.ElementAtOrDefault(i);
                     if (connection == null)
                     {
                         continue;
@@ -1107,8 +1117,6 @@ namespace Oxide.Plugins
 
                     try { disconnect.Add(connection.userid.ToString(), "plugin-unload"); } catch { }
                 }
-
-                return disconnect;
             }
 
             public void OnDestroy()
@@ -1256,13 +1264,13 @@ namespace Oxide.Plugins
                   .Execute(
                     (_) =>
                     {
-                        QueueProcessedIds = new List<string>();
+                        QueueProcessedIds.Clear();
 
                         Trace("Ответ по очередям успешно доставлен");
                     },
                     (err) =>
                     {
-                        QueueProcessedIds = new List<string>();
+                        QueueProcessedIds.Clear();
 
                         Debug($"Failed to process queue: {err}");
                     }
@@ -1382,9 +1390,9 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                var payload = new BanApi.BanGetBatchPayload { players = BanUpdateQueue.ToList() };
-
-                BanUpdateQueue = new List<BanApi.BanGetBatchEntryPayloadDto>();
+                var payload = new BanApi.BanGetBatchPayload { players = Pool.Get<List<BanApi.BanGetBatchEntryPayloadDto>>() };
+                payload.players.AddRange(BanUpdateQueue);
+                BanUpdateQueue.Clear();
 
                 BanApi.BanGetBatch(payload)
                   .Execute(
@@ -1392,18 +1400,19 @@ namespace Oxide.Plugins
                     {
                         payload.players.ForEach(originalPlayer =>
                         {
-                            var exists = data.entries.Find(banPlayer => banPlayer.steam_id == originalPlayer.steam_id);
+                            var exists = data.entries?.Find(banPlayer => banPlayer.steam_id == originalPlayer.steam_id);
 
-                            var ban = exists?.bans.FirstOrDefault(v => v.computed_is_active);
+                            var ban = exists?.bans?.FirstOrDefault(v => v.computed_is_active);
 
                             callback.Invoke(originalPlayer.steam_id, ban);
                         });
+                        Pool.FreeUnmanaged(ref payload.players);
                     },
-                    (err) =>
+                    (_) =>
                     {
-                        ResurrectList(payload.players, BanUpdateQueue);
-
                         Error($"Failed to process ban checks ({payload.players.Count}), retrying...");
+                        BanUpdateQueue.AddRange(payload.players);
+                        Pool.FreeUnmanaged(ref payload.players);
                     }
                   );
             }
@@ -1478,15 +1487,20 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                var payload = new CourtApi.PluginChatMessagePayload { messages = QueueMessages.ToList() };
-
-                QueueMessages = new List<CourtApi.PluginChatMessageDto>();
+                var payload = new CourtApi.PluginChatMessagePayload { messages = Pool.Get<List<CourtApi.PluginChatMessageDto>>() };
+                payload.messages.AddRange(QueueMessages);
+                QueueMessages.Clear();
 
                 CourtApi.SendChatMessages(payload)
                   .Execute(
-                    (error) =>
+                    (_) =>
                     {
-                        ResurrectList(payload.messages, QueueMessages);
+                        Pool.FreeUnmanaged(ref payload.messages);
+                    },
+                    (_) =>
+                    {
+                        QueueMessages.AddRange(payload.messages);
+                        Pool.FreeUnmanaged(ref payload.messages);
                     }
                   );
             }
@@ -1516,15 +1530,20 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                var payload = new CourtApi.PluginReportBatchPayload { reports = QueueReportSend.ToList() };
-
-                QueueReportSend = new List<CourtApi.PluginReportDto>();
+                var payload = new CourtApi.PluginReportBatchPayload { reports = Pool.Get<List<CourtApi.PluginReportDto>>() };
+                payload.reports.AddRange(QueueReportSend);
+                QueueReportSend.Clear();
 
                 CourtApi.SendReports(payload)
                   .Execute(
-                    (error) =>
+                    (_) =>
                     {
-                        ResurrectList(payload.reports, QueueReportSend);
+                        Pool.FreeUnmanaged(ref payload.reports);
+                    },
+                    (_) =>
+                    {
+                        QueueReportSend.AddRange(payload.reports);
+                        Pool.FreeUnmanaged(ref payload.reports);
                     }
                   );
             }
@@ -1553,15 +1572,20 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                var alerts = PlayerAlertQueue.ToList();
-
-                PlayerAlertQueue = new List<CourtApi.PluginPlayerAlertDto>();
+                var alerts = Pool.Get<List<CourtApi.PluginPlayerAlertDto>>();
+                alerts.AddRange(PlayerAlertQueue);
+                PlayerAlertQueue.Clear();
 
                 CourtApi.CreatePlayerAlerts(alerts)
                   .Execute(
-                    (error) =>
+                    (_) =>
                     {
-                        ResurrectList(alerts, PlayerAlertQueue);
+                        Pool.FreeUnmanaged(ref alerts);
+                    },
+                    (_) =>
+                    {
+                        PlayerAlertQueue.AddRange(alerts);
+                        Pool.FreeUnmanaged(ref alerts);
                     }
                   );
             }
@@ -1615,15 +1639,20 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                var payload = new CourtApi.SignageDestroyedDto { net_ids = DestroyedSignagesQueue.ToList() };
-
-                DestroyedSignagesQueue = new List<string>();
+                var payload = new CourtApi.SignageDestroyedDto { net_ids = Pool.Get<List<string>>() };
+                payload.net_ids.AddRange(DestroyedSignagesQueue);
+                DestroyedSignagesQueue.Clear();
 
                 CourtApi.SendSignageDestroyed(payload)
                   .Execute(
-                    (error) =>
+                    (_) =>
                     {
-                        ResurrectList(payload.net_ids, DestroyedSignagesQueue);
+                        Pool.FreeUnmanaged(ref payload.net_ids);
+                    },
+                    (_) =>
+                    {
+                        DestroyedSignagesQueue.AddRange(payload.net_ids);
+                        Pool.FreeUnmanaged(ref payload.net_ids);
                     }
                   );
             }
@@ -1652,16 +1681,20 @@ namespace Oxide.Plugins
                 {
                     return;
                 }
-
-                var payload = new CourtApi.PluginKillsDto { kills = KillsQueue.ToList() };
-
-                KillsQueue = new List<CourtApi.PluginKillEntryDto>();
+                var payload = new CourtApi.PluginKillsDto { kills = Pool.Get<List<CourtApi.PluginKillEntryDto>>() };
+                payload.kills.AddRange(KillsQueue);
+                KillsQueue.Clear();
 
                 CourtApi.SendKills(payload)
                   .Execute(
-                    (error) =>
+                    (_) =>
                     {
-                        ResurrectList(payload.kills, KillsQueue);
+                        Pool.FreeUnmanaged(ref payload.kills);
+                    },
+                    (_) =>
+                    {
+                        KillsQueue.AddRange(payload.kills);
+                        Pool.FreeUnmanaged(ref payload.kills);
                     }
                   );
             }
@@ -1730,7 +1763,7 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var clearArgs = (args.Args ?? new string[0]).Where(v => v != "--ban-ip" && v != "--global").ToList();
+            var clearArgs = (args.Args ?? Array.Empty<string>()).Where(v => v != "--ban-ip" && v != "--global").ToList();
 
             if (clearArgs.Count() < 2)
             {
@@ -1764,7 +1797,7 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var clearArgs = (args.Args ?? new string[0]).ToList();
+            var clearArgs = (args.Args ?? Array.Empty<string>()).ToList();
 
             if (clearArgs.Count() != 1)
             {
@@ -2237,15 +2270,18 @@ namespace Oxide.Plugins
         private object RustApp_InternalQueue_DeleteEntity(JObject raw)
         {
             var data = raw.ToObject<QueueTaskDeleteEntityDto>();
+            if (!ulong.TryParse(data.net_id, out var netIdParsed))
+            {
+                return false;
+            }
 
-            var ent = BaseNetworkable.serverEntities.ToList().Find(v => v.net.ID.Value.ToString() == data.net_id);
+            var ent = BaseNetworkable.serverEntities.Find(new NetworkableId(netIdParsed));
             if (ent == null)
             {
                 return false;
             }
 
             ent.Kill();
-
             return true;
         }
 
@@ -3541,7 +3577,6 @@ namespace Oxide.Plugins
             if (str.Length != 8)
             {
                 throw new Exception(hex);
-                throw new InvalidOperationException("Cannot convert a wrong format.");
             }
 
             var r = byte.Parse(str.Substring(0, 2), NumberStyles.HexNumber);
@@ -3571,59 +3606,47 @@ namespace Oxide.Plugins
 
         private static bool DetectIsRaidBlock(BasePlayer player)
         {
-            if (_RustApp == null || !_RustApp.IsLoaded)
+            if (_RustApp is not { IsLoaded: true } || _RustApp.NoEscape == null && _RustApp.RaidZone == null && _RustApp.ExtRaidBlock == null && _RustApp.RaidBlock == null)
             {
                 return false;
             }
 
-            var plugins = new List<Plugin> {
-        _RustApp.NoEscape,
-        _RustApp.RaidZone,
-        _RustApp.RaidBlock,
-        _RustApp.ExtRaidBlock
-      };
-
-            var correct = plugins.Find(v => v != null);
-            if (correct != null)
+            try
             {
-                try
+                if (_RustApp.NoEscape != null)
                 {
-                    switch (correct.Name)
+                    return (bool)_RustApp.NoEscape.Call("IsRaidBlocked", player);
+                }
+
+                if (_RustApp.RaidZone != null)
+                {
+                    return (bool)_RustApp.RaidZone.Call("HasBlock", player.userID.Get());
+                }
+
+                if (_RustApp.ExtRaidBlock != null)
+                {
+                    return (bool)_RustApp.ExtRaidBlock.Call("IsRaidBlock", player.userID.Get());
+                }
+
+                if (_RustApp.RaidBlock != null)
+                {
+                    try
                     {
-                        case "NoEscape":
-                            {
-                                return (bool)correct.Call("IsRaidBlocked", player);
-                            }
-                        case "RaidZone":
-                            {
-                                return (bool)correct.Call("HasBlock", player.userID.Get());
-                            }
-                        case "ExtRaidBlock":
-                            {
-                                return (bool)correct.Call("IsRaidBlock", player.userID.Get());
-                            }
-                        case "RaidBlock":
-                            {
-                                try
-                                {
-                                    return (bool)correct.Call("IsInRaid", player);
-                                }
-                                catch
-                                {
-                                    return (bool)correct.Call("IsRaidBlocked", player);
-                                }
-                            }
+                        return (bool)_RustApp.RaidBlock.Call("IsInRaid", player);
+                    }
+                    catch
+                    {
+                        return (bool)_RustApp.RaidBlock.Call("IsRaidBlocked", player);
                     }
                 }
-                catch
-                {
-                    Error("Failed to call RaidBlock API");
-                }
+            }
+            catch (Exception e)
+            {
+                Error("Failed to call RaidBlock API");
             }
 
             return false;
         }
-
 
         private static bool DetectNoLicense(Network.Connection connection)
         {
@@ -3662,18 +3685,7 @@ namespace Oxide.Plugins
         {
             foreach (var old in oldDict)
             {
-                if (!newDict.ContainsKey(old.Key))
-                {
-                    newDict.Add(old.Key, old.Value);
-                }
-            }
-        }
-
-        private static void ResurrectList<T>(List<T> oldList, List<T> newList)
-        {
-            foreach (var old in oldList)
-            {
-                newList.Add(old);
+                newDict[old.Key] = old.Value;
             }
         }
 
