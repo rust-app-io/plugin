@@ -2528,7 +2528,7 @@ namespace Oxide.Plugins
             var playerUserId = player.userID.Get();
             var targetId = player.UserIDString;
 
-            Interface.Oxide.NextFrame(() =>
+            NextFrame(() =>
             {
                 var log = GetCorrectCombatlog(playerUserId);
                 _RustAppEngine?.KillsWorker?.AddKill(new CourtApi.PluginKillEntryDto
@@ -3425,7 +3425,7 @@ namespace Oxide.Plugins
         // It is more optimized way to detect building authed instead of default BasePlayer.IsBuildingAuthed()
         private static bool DetectBuildingAuth(BasePlayer player)
         {
-            const int SearchRadius = 16;
+            const int SearchRadius = 16 + 2;
 
             var pos = player.transform.position;
             var results = Facepunch.Pool.Get<List<BuildingPrivlidge>>();
