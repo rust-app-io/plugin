@@ -719,6 +719,9 @@ namespace Oxide.Plugins
             [JsonProperty("[Check] Command to send contact")]
             public string check_contact_command = "contact";
 
+            [JsonProperty("Allow console command execution")]
+            public bool allow_execute_commands = true;
+
             public static Configuration Generate()
             {
                 return new Configuration
@@ -2233,6 +2236,11 @@ namespace Oxide.Plugins
 
         private object RustApp_InternalQueue_ExecuteCommand(JObject raw)
         {
+            if (!_Settings.allow_execute_commands)
+            {
+                return "Console command execution is disabled";
+            }
+
             var data = raw.ToObject<QueueTaskExecuteCommandDto>();
 
             var responses = new List<object>();
