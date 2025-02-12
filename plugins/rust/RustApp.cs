@@ -2,7 +2,6 @@
 using Oxide.Core;
 using Oxide.Core.Plugins;
 using System;
-using System.Buffers;
 using System.Collections;
 using System.Collections.Generic;
 using JetBrains.Annotations;
@@ -19,7 +18,6 @@ using Steamworks;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Text;
-using System.Threading.Tasks;
 using Oxide.Core.Libraries;
 using Unity.Collections;
 using Color = System.Drawing.Color;
@@ -29,7 +27,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.2.2")]
+    [Info("RustApp", "RustApp.io", "2.1.6")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -129,35 +127,44 @@ namespace Oxide.Plugins
                 public Dictionary<string, string> fields = new Dictionary<string, string>();
             }
 
+            public static Dictionary<ulong, PluginStatePlayerDto> players = new Dictionary<ulong, PluginStatePlayerDto>();
+
             public class PluginStatePlayerDto
             {
                 public static PluginStatePlayerDto FromConnection(Network.Connection connection, string status)
                 {
-                    var payload = new PluginStatePlayerDto();
+                    var userid = connection.userid;
+                    if (!players.TryGetValue(userid, out var payload))
+                    {
+                        payload = new PluginStatePlayerDto();
+                        players[userid] = payload;
+                        payload.steam_id = connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : userid.ToString();
+                        payload.steam_name = connection.username.Replace("<blank>", "blank");
+                        payload.ip = IPAddressWithoutPort(connection.ipaddress);
+                        payload.no_license = DetectNoLicense(connection);
+                        payload.team = new List<string>();
+                    }
 
-                    payload.steam_id = connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : connection.userid.ToString();
-                    payload.steam_name = connection.username.Replace("<blank>", "blank");
-                    payload.ip = IPAddressWithoutPort(connection.ipaddress);
                     payload.ping = Network.Net.sv.GetAveragePing(connection);
                     payload.seconds_connected = (int)connection.GetSecondsConnected();
                     payload.language = _RustApp.lang.GetLanguage(payload.steam_id);
-
                     payload.status = status;
-
-                    payload.no_license = DetectNoLicense(connection);
                     try { payload.meta = CollectPlayerMeta(payload.steam_id, payload.meta); } catch { }
 
-                    var team = RelationshipManager.ServerInstance.FindPlayersTeam(connection.userid);
-                    if (team != null)
+                    payload.team.Clear();
+
+                    var newTeam = RelationshipManager.ServerInstance.FindPlayersTeam(userid);
+                    if (newTeam == null)
                     {
-                        payload.team = team.members
-                          .Where(v => v != connection.userid)
-                          .Select(v => v.ToString())
-                          .ToList();
+                        return payload;
                     }
-                    else
+
+                    foreach (var member in newTeam.members)
                     {
-                        payload.team = new List<string>();
+                        if (member != userid)
+                        {
+                            payload.team.Add(member.ToString());
+                        }
                     }
 
                     return payload;
@@ -760,7 +767,7 @@ namespace Oxide.Plugins
 
             private void SetupAuthWorker()
             {
-                _apiHeaders = new []
+                _apiHeaders = new[]
                 {
                     ("x-plugin-auth", _MetaInfo?.Value ?? ""),
                     ("x-plugin-version", _RustApp.Version.ToString()),
@@ -1971,7 +1978,8 @@ namespace Oxide.Plugins
 
         private void OnClientDisconnect(Network.Connection connection, string reason)
         {
-            OnPlayerDisconnectedNormalized(connection.userid.ToString(), reason);
+            CourtApi.players.Remove(connection.userid);
+            OnPlayerDisconnectedNormalized(connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : connection.userid.ToString(), reason);
         }
 
         #endregion
