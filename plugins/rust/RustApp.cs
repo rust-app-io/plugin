@@ -27,7 +27,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.1.6")]
+    [Info("RustApp", "RustApp.io", "2.1.9")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -393,7 +393,7 @@ namespace Oxide.Plugins
                 public string steam_id;
                 public ulong net_id;
 
-                public string base64_image;
+                public byte[] base64_image;
 
                 public string type;
                 public string position;
@@ -1623,10 +1623,10 @@ namespace Oxide.Plugins
                 {
                     var obj = new CourtApi.PluginSignageCreateDto
                     {
-                        steam_id = update.PlayerId.ToString(),
+                        steam_id = update.PlayerId,
                         net_id = update.Entity.net.ID.Value,
 
-                        base64_image = Convert.ToBase64String(update.GetImage()),
+                        base64_image = update.GetImage(),
 
                         type = update.Entity.ShortPrefabName,
                         position = update.Entity.transform.position.ToString(),
@@ -3891,7 +3891,7 @@ namespace Oxide.Plugins
         public abstract class BaseImageUpdate
         {
             public BasePlayer Player { get; }
-            public ulong PlayerId { get; }
+            public string PlayerId { get; }
             public string DisplayName { get; }
             public BaseEntity Entity { get; }
             public int ItemId { get; protected set; }
@@ -3903,7 +3903,7 @@ namespace Oxide.Plugins
             {
                 Player = player;
                 DisplayName = player.displayName;
-                PlayerId = player.userID;
+                PlayerId = player.UserIDString;
                 Entity = entity;
             }
 
@@ -3976,7 +3976,7 @@ namespace Oxide.Plugins
                 MemoryStream stream = Facepunch.Pool.Get<MemoryStream>();
                 image.Save(stream, ImageFormat.Png);
                 byte[] bytes = stream.ToArray();
-                Facepunch.Pool.FreeMemoryStream(ref stream);
+                Facepunch.Pool.FreeUnmanaged(ref stream);
                 return bytes;
             }
         }
@@ -4061,27 +4061,14 @@ namespace Oxide.Plugins
 
         private void OnEntityBuilt(Planner plan, GameObject go)
         {
-            var player = plan.GetOwnerPlayer();
-            var ent = go.ToBaseEntity();
-
-            if (player == null || ent == null) return;
-
-            string shortName = go.ToBaseEntity().ShortPrefabName;
-            if (!shortName.Contains("sign"))
+            if (plan.GetOwnerPlayer() is not BasePlayer player || go.ToBaseEntity() is not Signage signage)
             {
                 return;
             }
 
-            var signage = go.ToBaseEntity().GetComponent<Signage>();
-
             NextTick(() =>
             {
-                if (signage == null)
-                {
-                    return;
-                }
-
-                if (signage.GetTextureCRCs()[0] == 0)
+                if (signage.IsDestroyed || signage.GetTextureCRCs()[0] == 0)
                 {
                     return;
                 }
