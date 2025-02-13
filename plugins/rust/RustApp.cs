@@ -3297,7 +3297,7 @@ namespace Oxide.Plugins
                 var freeSize = _reusableCharBuffer.Length - _pos;
                 if (freeSize < requestedSize)
                 {
-                    var newBuffer = new char[_reusableCharBuffer.Length * 2];
+                    var newBuffer = new char[Math.Max(_reusableCharBuffer.Length * 2, _reusableCharBuffer.Length + requestedSize)];
                     _reusableCharBuffer.AsSpan().CopyTo(newBuffer);
                     _reusableCharBuffer = newBuffer;
                 }
