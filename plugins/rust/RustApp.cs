@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Oxide.Core;
 using Oxide.Core.Plugins;
 using System;
@@ -27,7 +27,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.1.9")]
+    [Info("RustApp", "RustApp.io", "2.2.0")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -2517,7 +2517,7 @@ namespace Oxide.Plugins
 
         private void OnEntityKill(BaseNetworkable entity)
         {
-            if (entity is not PhotoFrame and not SpinnerWheel and not Signage || entity.net is null)
+            if (entity is not ISignage || entity.net is null)
             {
                 return;
             }
@@ -4061,18 +4061,17 @@ namespace Oxide.Plugins
 
         private void OnEntityBuilt(Planner plan, GameObject go)
         {
-            if (plan.GetOwnerPlayer() is not BasePlayer player || go.ToBaseEntity() is not Signage signage)
+            if (plan.GetOwnerPlayer() is not BasePlayer player || go.ToBaseEntity() is not ISignage signage)
             {
                 return;
             }
 
             NextTick(() =>
             {
-                if (signage.IsDestroyed || signage.GetTextureCRCs()[0] == 0)
+                if (signage.IsUnityNull() || signage.GetTextureCRCs()[0] == 0)
                 {
                     return;
                 }
-
                 _RustAppEngine?.SignageWorker?.SignageCreate(new SignageUpdate(player, signage, 0));
             });
         }
