@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Oxide.Core;
 using Oxide.Core.Plugins;
 using System;
@@ -25,7 +25,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.1.5")]
+    [Info("RustApp", "RustApp.io", "2.1.6")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -2457,14 +2457,25 @@ namespace Oxide.Plugins
 
         #region SignageHooks
 
-        private void OnEntityKill(BaseNetworkable entity)
+        private void OnEntityKill(PhotoFrame photoFrame)
         {
-            if (entity is not PhotoFrame and not SpinnerWheel and not Signage || entity.net is null)
-            {
-                return;
-            }
+            if (!photoFrame.IsValid()) return;
 
-            _RustAppEngine?.SignageWorker?.AddSignageDestroy(entity.net.ID.Value.ToString());
+            _RustAppEngine?.SignageWorker?.AddSignageDestroy(photoFrame.net.ID.Value.ToString());
+        }
+
+        private void OnEntityKill(SpinnerWheel spinnerWheel)
+        {
+            if (!spinnerWheel.IsValid()) return;
+
+            _RustAppEngine?.SignageWorker?.AddSignageDestroy(spinnerWheel.net.ID.Value.ToString());
+        }
+
+        private void OnEntityKill(Signage signage)
+        {
+            if (!signage.IsValid()) return;
+
+            _RustAppEngine?.SignageWorker?.AddSignageDestroy(signage.net.ID.Value.ToString());
         }
 
         #endregion
@@ -3955,32 +3966,14 @@ namespace Oxide.Plugins
             _RustAppEngine?.SignageWorker?.SignageCreate(new FireworkUpdate(player, firework));
         }
 
-        private void OnEntityBuilt(Planner plan, GameObject go)
+        private void OnEntitySpawned(Signage signage)
         {
-            var player = plan.GetOwnerPlayer();
-            var ent = go.ToBaseEntity();
-
-            if (player == null || ent == null) return;
-
-            string shortName = go.ToBaseEntity().ShortPrefabName;
-            if (!shortName.Contains("sign"))
-            {
-                return;
-            }
-
-            var signage = go.ToBaseEntity().GetComponent<Signage>();
-
             NextTick(() =>
             {
-                if (signage == null)
-                {
-                    return;
-                }
+                if (signage == null || !signage.OwnerID.IsSteamId() || signage.GetTextureCRCs()[0] == 0) return;
 
-                if (signage.GetTextureCRCs()[0] == 0)
-                {
-                    return;
-                }
+                BasePlayer player = RelationshipManager.FindByID(signage.OwnerID);
+                if (player == null) return;
 
                 _RustAppEngine?.SignageWorker?.SignageCreate(new SignageUpdate(player, signage, 0));
             });
