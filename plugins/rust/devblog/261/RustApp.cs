@@ -3913,11 +3913,6 @@ namespace Oxide.Plugins
         {
             private readonly byte[] _image;
 
-            public class PaintedItemStorageEntity : BaseEntity
-            {
-                public uint _currentImageCrc;
-            }
-
             public PaintedItemUpdate(BasePlayer player, PaintedItemStorageEntity entity, Item item, byte[] image) : base(player, entity)
             {
                 _image = image;
@@ -4024,5 +4019,10 @@ namespace Oxide.Plugins
         }
 
         #endregion
+
+        public class PaintedItemStorageEntity : BaseEntity
+        {
+            public uint _currentImageCrc;
+        }
     }
 }
