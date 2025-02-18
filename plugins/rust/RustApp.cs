@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Oxide.Core;
 using Oxide.Core.Plugins;
 using System;
@@ -3694,7 +3694,7 @@ namespace Oxide.Plugins
                 }
             }
 
-            return false;
+            return connection.os == "nosteam" || connection.os == "nosteam-unsecured";
         }
 
         private static void ResurrectDictionary<T, V>(Dictionary<T, V> oldDict, Dictionary<T, V> newDict)
