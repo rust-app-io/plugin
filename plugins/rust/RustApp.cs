@@ -778,7 +778,6 @@ namespace Oxide.Plugins
                 {
                     Trace("Authed success, components enabled");
 
-                    SetupHeaders();
                     CreateSubWorkers();
                 };
 
@@ -792,7 +791,7 @@ namespace Oxide.Plugins
                 AuthWorker.CycleAuthUpdate();
             }
 
-            private void SetupHeaders() {
+            public void SetupHeaders() {
                 _apiHeaders = new[]
                 {
                     ("x-plugin-auth", _MetaInfo?.Value ?? ""),
@@ -989,6 +988,7 @@ namespace Oxide.Plugins
                             _RustApp.timer.Once(1f, () => _RustAppEngine?.AuthWorker?.CheckAuthStatus());
 
                             _MetaInfo = MetaInfo.Read();
+                            _RustAppEngine.SetupHeaders();
 
                             Log("Pairing completed, reloading...");
 
