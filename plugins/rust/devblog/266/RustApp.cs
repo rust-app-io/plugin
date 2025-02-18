@@ -25,7 +25,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.1.5")]
+    [Info("RustApp", "RustApp.io", "2.1.6")]
     public class RustApp : RustPlugin
     {
         #region Variables
