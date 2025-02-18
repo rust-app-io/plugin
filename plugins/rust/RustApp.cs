@@ -770,13 +770,7 @@ namespace Oxide.Plugins
 
             private void SetupAuthWorker()
             {
-                _apiHeaders = new[]
-                {
-                    ("x-plugin-auth", _MetaInfo?.Value ?? ""),
-                    ("x-plugin-version", _RustApp.Version.ToString()),
-                    ("x-plugin-port", ConVar.Server.port.ToString()),
-                    ("Content-Type", "application/json")
-                };
+                SetupHeaders();
 
                 AuthWorker = this.gameObject.AddComponent<AuthWorker>();
 
@@ -784,6 +778,7 @@ namespace Oxide.Plugins
                 {
                     Trace("Authed success, components enabled");
 
+                    SetupHeaders();
                     CreateSubWorkers();
                 };
 
@@ -795,6 +790,16 @@ namespace Oxide.Plugins
                 };
 
                 AuthWorker.CycleAuthUpdate();
+            }
+
+            private void SetupHeaders() {
+                _apiHeaders = new[]
+                {
+                    ("x-plugin-auth", _MetaInfo?.Value ?? ""),
+                    ("x-plugin-version", _RustApp.Version.ToString()),
+                    ("x-plugin-port", ConVar.Server.port.ToString()),
+                    ("Content-Type", "application/json")
+                };
             }
 
             private void CreateSubWorkers()
@@ -3212,6 +3217,7 @@ namespace Oxide.Plugins
                 }
                 _length = _encoding.GetChars(data, _reusableCharBuffer);
                 _pos = 0;
+
             }
 
             public override int Read(char[] buffer, int index, int count)
