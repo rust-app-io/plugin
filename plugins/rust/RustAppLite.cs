@@ -12,7 +12,7 @@ using Oxide.Game.Rust.Libraries;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp Lite", "RustApp", "1.0.7")]
+  [Info("RustApp Lite", "RustApp", "1.0.8")]
   [Description("Get reports on players in Discord, using a nicely designed interface or F7")]
   public class RustAppLite : RustPlugin
   {
@@ -105,7 +105,7 @@ namespace Oxide.Plugins
       {
         _RustAppLite.webrequest.Enqueue(url, JsonConvert.SerializeObject(this), (code, response) =>
         {
-          if (code == 200)
+          if (code == 200 || code == 204)
           {
             return;
           }
@@ -823,4 +823,4 @@ namespace Oxide.Plugins
 
     #endregion
   }
-}
+} 
