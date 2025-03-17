@@ -27,7 +27,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.2.1")]
+    [Info("RustApp", "RustApp.io", "2.2.2")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -1861,8 +1861,8 @@ namespace Oxide.Plugins
 
         private void OnNewSave(string saveName)
         {
-            // Remove in 5 minutes
-            timer.Once(300, static () =>
+            // Remove in 10 minutes
+            timer.Once(600, static () =>
             {
                 CourtApi.SendWipe().Execute();
             });
@@ -1987,6 +1987,11 @@ namespace Oxide.Plugins
         private void OnClientDisconnect(Network.Connection connection, string reason)
         {
             OnPlayerDisconnectedNormalized(connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : connection.userid.ToString(), reason);
+        }
+
+        private void OnClientDisconnected(Network.Connection connection, string reason)
+        {
+            OnPlayerDisconnectedNormalized(connection.userid.ToString(), reason);
         }
 
         #endregion
@@ -3110,8 +3115,13 @@ namespace Oxide.Plugins
                 _RustAppEngine.StateWorker.DisconnectReasons[steamId] = reason;
             }
 
-            _RustAppEngine.CheckWorker?.SetNoticeActive(steamId, false);
-            CourtApi.players.Remove(ulong.Parse(steamId));
+            _RustAppEngine?.CheckWorker?.SetNoticeActive(steamId, false);
+
+            var parsedSteamId = ulong.Parse(steamId);
+
+            if (CourtApi.players.ContainsKey(parsedSteamId)) {
+                CourtApi.players.Remove(parsedSteamId);
+            }
         }
 
         private void SetTeamChange(string initiatorSteamId, string targetSteamId)
