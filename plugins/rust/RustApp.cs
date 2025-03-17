@@ -27,7 +27,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.2.0")]
+    [Info("RustApp", "RustApp.io", "2.2.1")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -1986,7 +1986,6 @@ namespace Oxide.Plugins
 
         private void OnClientDisconnect(Network.Connection connection, string reason)
         {
-            CourtApi.players.Remove(connection.userid);
             OnPlayerDisconnectedNormalized(connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : connection.userid.ToString(), reason);
         }
 
@@ -3112,6 +3111,7 @@ namespace Oxide.Plugins
             }
 
             _RustAppEngine.CheckWorker?.SetNoticeActive(steamId, false);
+            CourtApi.players.Remove(ulong.Parse(steamId));
         }
 
         private void SetTeamChange(string initiatorSteamId, string targetSteamId)
