@@ -14,6 +14,7 @@ using System.Globalization;
 using System.IO;
 using ConVar;
 using Rust;
+using Network;
 using Steamworks;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -27,7 +28,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.2.2")]
+    [Info("RustApp", "RustApp.io", "2.2.3")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -791,7 +792,8 @@ namespace Oxide.Plugins
                 AuthWorker.CycleAuthUpdate();
             }
 
-            public void SetupHeaders() {
+            public void SetupHeaders()
+            {
                 _apiHeaders = new[]
                 {
                     ("x-plugin-auth", _MetaInfo?.Value ?? ""),
@@ -1979,14 +1981,29 @@ namespace Oxide.Plugins
 
         #region Disconnect hooks
 
-        private void OnPlayerDisconnected(BasePlayer player, string reason)
+        private ulong _tempPlayer;
+        private string _tempReason;
+
+        private void OnClientDisconnect(Connection connection, string reason)
         {
-            OnPlayerDisconnectedNormalized(player.UserIDString, reason);
+            _tempPlayer = connection.userid;
+            _tempReason = reason;
         }
 
-        private void OnClientDisconnect(Network.Connection connection, string reason)
+        private void OnClientDisconnected(Connection connection, string reason)
         {
-            OnPlayerDisconnectedNormalized(connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : connection.userid.ToString(), reason);
+            string reasonFull = reason;
+            if (connection.userid == _tempPlayer && !string.IsNullOrEmpty(_tempReason))
+            {
+                reasonFull = $"{reason}: {_tempReason}";
+            }
+
+            CourtApi.players.Remove(connection.userid);
+            OnPlayerDisconnectedNormalized(connection.player is BasePlayer basePlayer
+                ? basePlayer.UserIDString
+                : connection.userid.ToString(), reasonFull);
+
+            _tempReason = string.Empty;
         }
 
         #endregion
@@ -3107,16 +3124,13 @@ namespace Oxide.Plugins
         {
             if (_RustAppEngine?.StateWorker != null)
             {
-                _RustAppEngine.StateWorker.DisconnectReasons[steamId] = reason;
+                if (!_RustAppEngine.StateWorker.DisconnectReasons.ContainsKey(steamId))
+                {
+                    _RustAppEngine.StateWorker.DisconnectReasons[steamId] = reason;
+                }
             }
 
             _RustAppEngine?.CheckWorker?.SetNoticeActive(steamId, false);
-
-            var parsedSteamId = ulong.Parse(steamId);
-
-            if (CourtApi.players.ContainsKey(parsedSteamId)) {
-                CourtApi.players.Remove(parsedSteamId);
-            }
         }
 
         private void SetTeamChange(string initiatorSteamId, string targetSteamId)
