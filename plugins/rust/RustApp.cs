@@ -1989,11 +1989,6 @@ namespace Oxide.Plugins
             OnPlayerDisconnectedNormalized(connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : connection.userid.ToString(), reason);
         }
 
-        private void OnClientDisconnected(Network.Connection connection, string reason)
-        {
-            OnPlayerDisconnectedNormalized(connection.userid.ToString(), reason);
-        }
-
         #endregion
 
         #region Team hooks
