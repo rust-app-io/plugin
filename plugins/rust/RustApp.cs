@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Oxide.Core;
 using Oxide.Core.Plugins;
 using System;
@@ -863,6 +863,11 @@ namespace Oxide.Plugins
 
                     IsAuthed = true;
                     OnAuthSuccess?.Invoke();
+                    if (_RustApp._newSave)
+                    {
+                        _RustApp._newSave = false;
+                        CourtApi.SendWipe().Execute();
+                    }
                 };
 
                 CourtApi.GetServerInfo().Execute(
@@ -1858,14 +1863,10 @@ namespace Oxide.Plugins
             DestroyAllUi();
         }
 
-
+        private bool _newSave = false;
         private void OnNewSave(string saveName)
         {
-            // Remove in 10 minutes
-            timer.Once(600, static () =>
-            {
-                CourtApi.SendWipe().Execute();
-            });
+            _newSave = true;
         }
 
         protected override void LoadConfig()
