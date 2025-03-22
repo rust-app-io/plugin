@@ -15,6 +15,7 @@ using System.IO;
 using ConVar;
 using Rust;
 using Steamworks;
+using Network;
 using System.Drawing;
 using System.Drawing.Imaging;
 using System.Text;
@@ -27,7 +28,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.2.2")]
+    [Info("RustApp", "RustApp.io", "2.2.3")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -791,7 +792,8 @@ namespace Oxide.Plugins
                 AuthWorker.CycleAuthUpdate();
             }
 
-            public void SetupHeaders() {
+            public void SetupHeaders()
+            {
                 _apiHeaders = new[]
                 {
                     ("x-plugin-auth", _MetaInfo?.Value ?? ""),
@@ -1148,26 +1150,34 @@ namespace Oxide.Plugins
 
             public bool IsNoticeActive(string steamId)
             {
-                if (!ShowedNoticyCache.ContainsKey(steamId))
+                if (!ShowedNoticyCache.TryGetValue(steamId, out var value))
                 {
                     return false;
                 }
 
-                return ShowedNoticyCache[steamId];
+                return value;
             }
 
             public void SetNoticeActive(string steamId, bool value)
             {
-                var player = BasePlayer.Find(steamId);
+                BasePlayer player = null;
 
-                // TODO: Deprecated
-                if (value)
+                if (ulong.TryParse(steamId, out var userid))
                 {
-                    Interface.Oxide.CallHook("RustApp_OnCheckNoticeShowed", player);
+                    player = BasePlayer.FindByID(userid);
                 }
-                else
+
+                if (player != null)
                 {
-                    Interface.Oxide.CallHook("RustApp_OnCheckNoticeHidden", player);
+                    // TODO: Deprecated
+                    if (value)
+                    {
+                        Interface.Oxide.CallHook("RustApp_OnCheckNoticeShowed", player);
+                    }
+                    else
+                    {
+                        Interface.Oxide.CallHook("RustApp_OnCheckNoticeHidden", player);
+                    }
                 }
 
                 // TODO: New hook
@@ -1979,14 +1989,41 @@ namespace Oxide.Plugins
 
         #region Disconnect hooks
 
+        private ulong _tempPlayer;
+        private string _tempReason;
+
         private void OnPlayerDisconnected(BasePlayer player, string reason)
         {
             OnPlayerDisconnectedNormalized(player.UserIDString, reason);
         }
 
-        private void OnClientDisconnect(Network.Connection connection, string reason)
+        private void OnClientDisconnect(Connection connection, string reason)
         {
-            OnPlayerDisconnectedNormalized(connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : connection.userid.ToString(), reason);
+            _tempPlayer = connection.userid;
+            _tempReason = reason;
+        }
+
+        private void OnClientDisconnected(Connection connection, string reason)
+        {
+            // Prevent double call
+            if (connection.guid == 0uL)
+            {
+                return;
+            }
+
+            var userid = connection.userid;
+            var reasonFinal = reason;
+
+            if (userid == _tempPlayer && !string.IsNullOrEmpty(_tempReason))
+            {
+                reasonFinal = $"{reason}: {_tempReason}";
+            }
+
+            var steamId = connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : userid.ToString();
+            OnPlayerDisconnectedNormalized(steamId, reasonFinal);
+
+            CourtApi.players.Remove(userid);
+            _tempReason = string.Empty;
         }
 
         #endregion
@@ -3103,7 +3140,7 @@ namespace Oxide.Plugins
             _RustAppEngine?.BanWorker?.CheckBans(steamId, ip);
         }
 
-        private void OnPlayerDisconnectedNormalized(string steamId, string reason)
+        private static void OnPlayerDisconnectedNormalized(string steamId, string reason)
         {
             if (_RustAppEngine?.StateWorker != null)
             {
@@ -3111,12 +3148,6 @@ namespace Oxide.Plugins
             }
 
             _RustAppEngine?.CheckWorker?.SetNoticeActive(steamId, false);
-
-            var parsedSteamId = ulong.Parse(steamId);
-
-            if (CourtApi.players.ContainsKey(parsedSteamId)) {
-                CourtApi.players.Remove(parsedSteamId);
-            }
         }
 
         private void SetTeamChange(string initiatorSteamId, string targetSteamId)
