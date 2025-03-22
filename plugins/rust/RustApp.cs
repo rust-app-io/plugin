@@ -2007,7 +2007,7 @@ namespace Oxide.Plugins
 
             CourtApi.players.Remove(connection.userid);
             var steamId = connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : connection.userid.ToString();
-            OnPlayerDisconnectedNormalized(steamId, reasonFull, null);
+            OnPlayerDisconnectedNormalized(steamId, reasonFull);
             _tempReason = string.Empty;
         }
 
