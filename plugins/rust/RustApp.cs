@@ -4093,7 +4093,7 @@ namespace Oxide.Plugins
 
         private void OnEntityBuilt(Planner plan, GameObject go)
         {
-            if (plan.GetOwnerPlayer() is not BasePlayer player || go.ToBaseEntity() is not ISignage signage)
+            if (go.ToBaseEntity() is not ISignage signage || plan.GetOwnerPlayer() is not BasePlayer player)
             {
                 return;
             }
