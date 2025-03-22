@@ -14,6 +14,7 @@ using System.Globalization;
 using System.IO;
 using ConVar;
 using Rust;
+using Network;
 using Steamworks;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -27,7 +28,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.2.2")]
+    [Info("RustApp", "RustApp.io", "2.2.3")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -791,7 +792,8 @@ namespace Oxide.Plugins
                 AuthWorker.CycleAuthUpdate();
             }
 
-            public void SetupHeaders() {
+            public void SetupHeaders()
+            {
                 _apiHeaders = new[]
                 {
                     ("x-plugin-auth", _MetaInfo?.Value ?? ""),
@@ -1148,26 +1150,32 @@ namespace Oxide.Plugins
 
             public bool IsNoticeActive(string steamId)
             {
-                if (!ShowedNoticyCache.ContainsKey(steamId))
+                if (!ShowedNoticyCache.TryGetValue(steamId, out var value))
                 {
                     return false;
                 }
 
-                return ShowedNoticyCache[steamId];
+                return value;
             }
 
-            public void SetNoticeActive(string steamId, bool value)
+            public void SetNoticeActive(string steamId, bool value, BasePlayer player = null)
             {
-                var player = BasePlayer.Find(steamId);
-
-                // TODO: Deprecated
-                if (value)
+                if (player == null && ulong.TryParse(steamId, out var userid))
                 {
-                    Interface.Oxide.CallHook("RustApp_OnCheckNoticeShowed", player);
+                    player = BasePlayer.FindByID(userid);
                 }
-                else
+
+                if (player != null)
                 {
-                    Interface.Oxide.CallHook("RustApp_OnCheckNoticeHidden", player);
+                    // TODO: Deprecated
+                    if (value)
+                    {
+                        Interface.Oxide.CallHook("RustApp_OnCheckNoticeShowed", player);
+                    }
+                    else
+                    {
+                        Interface.Oxide.CallHook("RustApp_OnCheckNoticeHidden", player);
+                    }
                 }
 
                 // TODO: New hook
@@ -1218,14 +1226,10 @@ namespace Oxide.Plugins
 
             private void GetQueueTasks()
             {
-                QueueApi.GetQueueTasks()
-                  .Execute(
-                    CallQueueTasks,
-                    (error) =>
-                    {
-                        Debug($"Queue retreive failed {error}");
-                    }
-                  );
+                QueueApi.GetQueueTasks().Execute(CallQueueTasks, static (error) =>
+                {
+                    Debug($"Queue retreive failed {error}");
+                });
             }
 
             private void CallQueueTasks(List<QueueApi.QueueTaskResponse> queuesTasks)
@@ -1979,14 +1983,33 @@ namespace Oxide.Plugins
 
         #region Disconnect hooks
 
-        private void OnPlayerDisconnected(BasePlayer player, string reason)
+        private ulong _tempPlayer;
+        private string _tempReason;
+
+        private void OnPlayerDisconnected(BasePlayer player)
         {
-            OnPlayerDisconnectedNormalized(player.UserIDString, reason);
+            OnPlayerDisconnectedNormalized(player.UserIDString, string.Empty, player);
         }
 
-        private void OnClientDisconnect(Network.Connection connection, string reason)
+        private void OnClientDisconnect(Connection connection, string reason)
         {
-            OnPlayerDisconnectedNormalized(connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : connection.userid.ToString(), reason);
+            _tempPlayer = connection.userid;
+            _tempReason = reason;
+        }
+
+        private void OnClientDisconnected(Connection connection, string reason)
+        {
+            string reasonFull = reason;
+            if (connection.userid == _tempPlayer && !string.IsNullOrEmpty(_tempReason))
+            {
+                reasonFull = $"{reason}: {_tempReason}";
+            }
+
+            CourtApi.players.Remove(connection.userid);
+            var steamId = connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : connection.userid.ToString();
+            OnPlayerDisconnectedNormalized(steamId, reasonFull);
+
+            _tempReason = string.Empty;
         }
 
         #endregion
@@ -3103,19 +3126,22 @@ namespace Oxide.Plugins
             _RustAppEngine?.BanWorker?.CheckBans(steamId, ip);
         }
 
-        private void OnPlayerDisconnectedNormalized(string steamId, string reason)
+        private void OnPlayerDisconnectedNormalized(string steamId, string reason, BasePlayer player = null)
         {
-            if (_RustAppEngine?.StateWorker != null)
+            var disconnectReasons = _RustAppEngine?.StateWorker?.DisconnectReasons;
+            var reasonJustSaved = false;
+
+            // Don't allow reason saving on OnPlayerDisconnected hook or if already saved
+            if (player == null && disconnectReasons != null && !disconnectReasons.ContainsKey(steamId))
             {
-                _RustAppEngine.StateWorker.DisconnectReasons[steamId] = reason;
+                disconnectReasons[steamId] = reason;
+                reasonJustSaved = true;
             }
 
-            _RustAppEngine?.CheckWorker?.SetNoticeActive(steamId, false);
-
-            var parsedSteamId = ulong.Parse(steamId);
-
-            if (CourtApi.players.ContainsKey(parsedSteamId)) {
-                CourtApi.players.Remove(parsedSteamId);
+            // Only allow SetNoticeActive call on OnPlayerDisconnected hook or if reason was just saved
+            if (player != null || reasonJustSaved)
+            {
+                _RustAppEngine?.CheckWorker?.SetNoticeActive(steamId, false, player);
             }
         }
 
@@ -4072,7 +4098,7 @@ namespace Oxide.Plugins
 
         private void OnEntityBuilt(Planner plan, GameObject go)
         {
-            if (plan.GetOwnerPlayer() is not BasePlayer player || go.ToBaseEntity() is not ISignage signage)
+            if (go.ToBaseEntity() is not ISignage signage || plan.GetOwnerPlayer() is not BasePlayer player)
             {
                 return;
             }
