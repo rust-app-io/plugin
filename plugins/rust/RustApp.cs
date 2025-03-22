@@ -1150,26 +1150,32 @@ namespace Oxide.Plugins
 
             public bool IsNoticeActive(string steamId)
             {
-                if (!ShowedNoticyCache.ContainsKey(steamId))
+                if (!ShowedNoticyCache.TryGetValue(steamId, out var value))
                 {
                     return false;
                 }
 
-                return ShowedNoticyCache[steamId];
+                return value;
             }
 
-            public void SetNoticeActive(string steamId, bool value)
+            public void SetNoticeActive(string steamId, bool value, BasePlayer player = null)
             {
-                var player = BasePlayer.Find(steamId);
-
-                // TODO: Deprecated
-                if (value)
+                if (player == null && ulong.TryParse(steamId, out var userid))
                 {
-                    Interface.Oxide.CallHook("RustApp_OnCheckNoticeShowed", player);
+                    player = BasePlayer.FindByID(userid);
                 }
-                else
+
+                if (player != null)
                 {
-                    Interface.Oxide.CallHook("RustApp_OnCheckNoticeHidden", player);
+                    // TODO: Deprecated
+                    if (value)
+                    {
+                        Interface.Oxide.CallHook("RustApp_OnCheckNoticeShowed", player);
+                    }
+                    else
+                    {
+                        Interface.Oxide.CallHook("RustApp_OnCheckNoticeHidden", player);
+                    }
                 }
 
                 // TODO: New hook
@@ -1220,14 +1226,10 @@ namespace Oxide.Plugins
 
             private void GetQueueTasks()
             {
-                QueueApi.GetQueueTasks()
-                  .Execute(
-                    CallQueueTasks,
-                    (error) =>
-                    {
-                        Debug($"Queue retreive failed {error}");
-                    }
-                  );
+                QueueApi.GetQueueTasks().Execute(CallQueueTasks, static (error) =>
+                {
+                    Debug($"Queue retreive failed {error}");
+                });
             }
 
             private void CallQueueTasks(List<QueueApi.QueueTaskResponse> queuesTasks)
@@ -1984,6 +1986,11 @@ namespace Oxide.Plugins
         private ulong _tempPlayer;
         private string _tempReason;
 
+        private void OnPlayerDisconnected(BasePlayer player)
+        {
+            OnPlayerDisconnectedNormalized(player.UserIDString, null, player);
+        }
+
         private void OnClientDisconnect(Connection connection, string reason)
         {
             _tempPlayer = connection.userid;
@@ -1999,10 +2006,8 @@ namespace Oxide.Plugins
             }
 
             CourtApi.players.Remove(connection.userid);
-            OnPlayerDisconnectedNormalized(connection.player is BasePlayer basePlayer
-                ? basePlayer.UserIDString
-                : connection.userid.ToString(), reasonFull);
-
+            var steamId = connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : connection.userid.ToString();
+            OnPlayerDisconnectedNormalized(steamId, reasonFull, null);
             _tempReason = string.Empty;
         }
 
@@ -3120,17 +3125,19 @@ namespace Oxide.Plugins
             _RustAppEngine?.BanWorker?.CheckBans(steamId, ip);
         }
 
-        private void OnPlayerDisconnectedNormalized(string steamId, string reason)
+        private void OnPlayerDisconnectedNormalized(string steamId, string reason, BasePlayer player = null)
         {
-            if (_RustAppEngine?.StateWorker != null)
+            var disconnectReasons = _RustAppEngine?.StateWorker?.DisconnectReasons;
+
+            if (!string.IsNullOrEmpty(reason) && disconnectReasons != null && !disconnectReasons.ContainsKey(steamId))
             {
-                if (!_RustAppEngine.StateWorker.DisconnectReasons.ContainsKey(steamId))
-                {
-                    _RustAppEngine.StateWorker.DisconnectReasons[steamId] = reason;
-                }
+                disconnectReasons[steamId] = reason;
             }
 
-            _RustAppEngine?.CheckWorker?.SetNoticeActive(steamId, false);
+            if (disconnectReasons == null || !disconnectReasons.ContainsKey(steamId))
+            {
+                _RustAppEngine?.CheckWorker?.SetNoticeActive(steamId, false, player);
+            }
         }
 
         private void SetTeamChange(string initiatorSteamId, string targetSteamId)
