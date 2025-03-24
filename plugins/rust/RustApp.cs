@@ -3372,7 +3372,6 @@ namespace Oxide.Plugins
 
                 if (TryGetError(request, out var error))
                 {
-                    Error("Web request error: " + error);
                     onException?.Invoke(error);
                     yield break;
                 }
