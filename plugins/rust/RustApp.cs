@@ -1989,8 +1989,7 @@ namespace Oxide.Plugins
 
         #region Disconnect hooks
 
-        private ulong _tempPlayer;
-        private string _tempReason;
+        private readonly Dictionary<ulong, string> _tempDisconnectReasons = new();
 
         private void OnPlayerDisconnected(BasePlayer player, string reason)
         {
@@ -1999,8 +1998,7 @@ namespace Oxide.Plugins
 
         private void OnClientDisconnect(Connection connection, string reason)
         {
-            _tempPlayer = connection.userid;
-            _tempReason = reason;
+            _tempDisconnectReasons[connection.userid] = reason;
         }
 
         private void OnClientDisconnected(Connection connection, string reason)
@@ -2014,16 +2012,16 @@ namespace Oxide.Plugins
             var userid = connection.userid;
             var reasonFinal = reason;
 
-            if (userid == _tempPlayer && !string.IsNullOrEmpty(_tempReason))
+            if (_tempDisconnectReasons.TryGetValue(userid, out var tempReason))
             {
-                reasonFinal = $"{reason}: {_tempReason}";
+                reasonFinal = $"{reason}: {tempReason}";
             }
 
             var steamId = connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : userid.ToString();
             OnPlayerDisconnectedNormalized(steamId, reasonFinal);
 
             CourtApi.players.Remove(userid);
-            _tempReason = string.Empty;
+            _tempDisconnectReasons.Remove(userid);
         }
 
         #endregion
