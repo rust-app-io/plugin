@@ -4019,5 +4019,10 @@ namespace Oxide.Plugins
         }
 
         #endregion
+
+        public class PaintedItemStorageEntity : BaseEntity
+        {
+            public uint _currentImageCrc;
+        }
     }
 }
