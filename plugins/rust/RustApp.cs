@@ -1,4 +1,4 @@
-using Newtonsoft.Json;
+﻿using Newtonsoft.Json;
 using Oxide.Core;
 using Oxide.Core.Plugins;
 using System;
@@ -27,7 +27,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.2.2")]
+    [Info("RustApp", "RustApp.io", "2.2.3")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -37,6 +37,8 @@ namespace Oxide.Plugins
 
         private static MetaInfo _MetaInfo = MetaInfo.Read();
         private static CheckInfo _CheckInfo = CheckInfo.Read();
+
+        private static bool _TempWipeMarker = false;
 
         private static RustApp _RustApp;
         private static Configuration _Settings;
@@ -863,9 +865,10 @@ namespace Oxide.Plugins
 
                     IsAuthed = true;
                     OnAuthSuccess?.Invoke();
-                    if (_RustApp._newSave)
+
+                    if (_TempWipeMarker)
                     {
-                        _RustApp._newSave = false;
+                        _TempWipeMarker = false; 
                         CourtApi.SendWipe().Execute();
                     }
                 };
@@ -1863,10 +1866,9 @@ namespace Oxide.Plugins
             DestroyAllUi();
         }
 
-        private bool _newSave = false;
         private void OnNewSave(string saveName)
         {
-            _newSave = true;
+            _TempWipeMarker = true;
         }
 
         protected override void LoadConfig()
