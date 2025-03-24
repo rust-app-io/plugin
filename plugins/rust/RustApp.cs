@@ -27,7 +27,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.2.2")]
+    [Info("RustApp", "RustApp.io", "2.2.3")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -37,6 +37,8 @@ namespace Oxide.Plugins
 
         private static MetaInfo _MetaInfo = MetaInfo.Read();
         private static CheckInfo _CheckInfo = CheckInfo.Read();
+
+        private static bool _TempWipeMarker = false;
 
         private static RustApp _RustApp;
         private static Configuration _Settings;
@@ -863,6 +865,12 @@ namespace Oxide.Plugins
 
                     IsAuthed = true;
                     OnAuthSuccess?.Invoke();
+
+                    if (_TempWipeMarker)
+                    {
+                        _TempWipeMarker = false; 
+                        CourtApi.SendWipe().Execute();
+                    }
                 };
 
                 CourtApi.GetServerInfo().Execute(
@@ -1858,14 +1866,9 @@ namespace Oxide.Plugins
             DestroyAllUi();
         }
 
-
         private void OnNewSave(string saveName)
         {
-            // Remove in 10 minutes
-            timer.Once(600, static () =>
-            {
-                CourtApi.SendWipe().Execute();
-            });
+            _TempWipeMarker = true;
         }
 
         protected override void LoadConfig()
