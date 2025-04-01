@@ -58,7 +58,7 @@ namespace Oxide.Plugins
         {
             public static bool ErrorContains(string error, string text)
             {
-                return error.ToLower().Contains(text.ToLower());
+                return error.Contains(text, StringComparison.OrdinalIgnoreCase);
             }
         }
 
@@ -94,7 +94,7 @@ namespace Oxide.Plugins
 
             #endregion
 
-            private static readonly string BaseUrl = "https://court.rustapp.io";
+            private const string BaseUrl = "https://court.rustapp.io";
 
             #region GetServerInfo
 
@@ -870,7 +870,7 @@ namespace Oxide.Plugins
 
                     if (_TempWipeMarker)
                     {
-                        _TempWipeMarker = false; 
+                        _TempWipeMarker = false;
                         CourtApi.SendWipe().Execute();
                     }
                 };
@@ -2650,7 +2650,7 @@ namespace Oxide.Plugins
 
         #region Interface
 
-        private static string ReportLayer = "UI_RP_ReportPanelUI";
+        private const string ReportLayer = "UI_RP_ReportPanelUI";
 
         private void DrawReportInterface(BasePlayer player, int page = 0, string search = "", bool redraw = false)
         {
@@ -4103,7 +4103,7 @@ namespace Oxide.Plugins
 
         private void OnEntityBuilt(Planner plan, GameObject go)
         {
-            if (plan.GetOwnerPlayer() is not BasePlayer player || go.ToBaseEntity() is not ISignage signage)
+            if (go.ToBaseEntity() is not ISignage signage || plan.GetOwnerPlayer() is not BasePlayer player)
             {
                 return;
             }
