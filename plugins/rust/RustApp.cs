@@ -554,7 +554,7 @@ namespace Oxide.Plugins
                 public string GetLeftTime() {
                     var left = LeftSeconds();
 
-                    return $"{(float) left / 1000} seconds left";
+                    return $"{(float) left / 1000} sec.";
                 }
 
                 public string GetUnmuteDate() {
@@ -2050,7 +2050,11 @@ namespace Oxide.Plugins
                 ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>DM from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
                 ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Message from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
 
-                ["System.Ban.Broadcast"] = "Player <color=#5af>%TARGET%</color> <color=#bdbdbd></color>was banned.\n<size=12>- reason: <color=#d3d3d3>%REASON%</color></size>",
+                ["System.Mute.Broadcast.Mute"] = "Player <color=#5af>%TARGET%</color> was muted.\n<size=12>Reason: %REASON%</size>",
+                ["System.Mute.Broadcast.Unmute"] = "Player <color=#5af>%TARGET%</color> was unmuted.",
+                ["System.Mute.Message.Self"] = "You are muted!<size=12>\nReason: %REASON%\nLeft: %TIME%</size>",
+
+                ["System.Ban.Broadcast"] = "Player <color=#5af>%TARGET%</color> was banned.\n<size=12>Reason: %REASON%</size>",
                 ["System.Ban.Temp.Kick"] = "You are banned until %TIME% МСК, reason: %REASON%",
                 ["System.Ban.Perm.Kick"] = "You have perm ban, reason: %REASON%",
                 ["System.Ban.Ip.Kick"] = "You are restricted from entering the server!",
@@ -2085,7 +2089,11 @@ namespace Oxide.Plugins
                 ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
                 ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
 
-                ["System.Ban.Broadcast"] = "Игрок <color=#5af>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
+                ["System.Mute.Broadcast.Mute"] = "Игрок <color=#5af>%TARGET%</color> получил мут.\n<size=12>Причина: %REASON%</size>",
+                ["System.Mute.Broadcast.Unmute"] = "Игрок <color=#5af>%TARGET%</color> размучен.",
+                ["System.Mute.Message.Self"] = "Вы замьючены!<size=12>\nПричина: %REASON%\nОсталось: %TIME%</size>",
+
+                ["System.Ban.Broadcast"] = "Игрок <color=#5af>%TARGET%</color> был заблокирован.\n<size=12>Причина: %REASON%</size>",
                 ["System.Ban.Temp.Kick"] = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%",
                 ["System.Ban.Perm.Kick"] = "Вы навсегда забанены на этом сервере, причина: %REASON%",
                 ["System.Ban.Ip.Kick"] = "Вам ограничен вход на сервер!",
@@ -2181,8 +2189,12 @@ namespace Oxide.Plugins
             }
 
             var mute = _RustAppEngine?.PlayerMuteWorker?.GetMute(connection.userid);
-            if (mute != null && mute.LeftSeconds() > 0) {
-                BasePlayer.FindByID(connection.userid)?.ChatMessage($"You are muted: {mute.reason}, left: {mute.GetLeftTime()}");
+
+            if (mute != null) {
+                var player = BasePlayer.FindByID(connection.userid);
+                var msg = _RustApp.lang.GetMessage("System.Mute.Message.Self", _RustApp, connection.userid.ToString()).Replace("%REASON%", mute.reason).Replace("%TIME%", mute.GetLeftTime());
+
+                SendMessage(player, msg);
                 return false;
             }
 
@@ -2257,18 +2269,22 @@ namespace Oxide.Plugins
                 _RustAppEngine?.PlayerMuteWorker?.AddPlayerMute(mute.data);
 
                 if (mute.chat_broadcast) {
-                    var player = BasePlayer.Find(mute.data.target_steam_id);
-                    if (player != null && player.IsConnected) {
-                        Server.Broadcast($"Выда мут: {player.displayName} за {mute.data.reason} (до {mute.data.GetUnmuteDate()}), длительность - {mute.data.GetLeftTime()}");
+                    var target = BasePlayer.Find(mute.data.target_steam_id);
+                    foreach (var player in BasePlayer.activePlayerList)
+                    {
+                        var msg = _RustApp.lang.GetMessage("System.Mute.Broadcast.Mute", _RustApp, player.UserIDString).Replace("%TARGET%", target.displayName).Replace("%REASON%", mute.data.reason).Replace("%TIME%", mute.data.GetLeftTime());
+                        _RustApp.SendMessage(player, msg);
                     }
                 }
             } else {
                 _RustAppEngine?.PlayerMuteWorker?.RemovePlayerMute(mute.data);
  
                 if (mute.chat_broadcast) {
-                    var player = BasePlayer.Find(mute.data.target_steam_id);
-                    if (player != null && player.IsConnected) {
-                        Server.Broadcast($"Снят мут: {player.displayName}");
+                    var target = BasePlayer.Find(mute.data.target_steam_id);
+                    foreach (var player in BasePlayer.activePlayerList)
+                    {
+                        var msg = _RustApp.lang.GetMessage("System.Mute.Broadcast.Unmute", _RustApp, player.UserIDString).Replace("%TARGET%", target.displayName);
+                        _RustApp.SendMessage(player, msg);
                     }
                 }
             }
