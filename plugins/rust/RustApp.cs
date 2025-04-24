@@ -543,6 +543,36 @@ namespace Oxide.Plugins
             }
 
             #endregion
+
+            #region PlayerMute
+
+            public class PlayerMuteDto {
+                public string target_steam_id;
+                public long expired_at;
+                public string reason;
+
+                public string GetLeftTime() {
+                    var left = this.expired_at - DateTimeOffset.Now.ToUnixTimeMilliseconds();
+
+                    return $"{(float) left / 1000} seconds left";
+                }
+
+                public string GetUnmuteDate() {
+                    var date = DateTimeOffset.FromUnixTimeMilliseconds(this.expired_at);
+
+                    return $"{date.DateTime.ToShortDateString()} {date.DateTime.ToShortTimeString()}";
+                }
+            }
+
+            public class PlayerMuteDtoIn {
+                public List<PlayerMuteDto> data;
+            }
+
+            public static StableRequest<PlayerMuteDtoIn> GetPlayerMutes() {
+                return new StableRequest<PlayerMuteDtoIn>($"{BaseUrl}/plugin/player-mute", RequestMethod.GET, null);
+            }
+
+            #endregion
         }
 
         private static class QueueApi
@@ -722,8 +752,15 @@ namespace Oxide.Plugins
             [JsonProperty("[Check] Command to send contact")]
             public string check_contact_command = "contact";
 
-            [JsonProperty("Allow console command execution")]
-            public bool allow_execute_commands = true;
+            [JsonProperty("[Components • Custom actions] Allow console command execution")]
+            public bool components_custom_actions_enabled = true;
+
+            [JsonProperty("[Components • Signages] Collect signages")]
+            public bool components_signages_enabled = true;
+            
+            [JsonProperty("[Components • Kills] Collect kills")]
+            public bool components_kills_enabled = true;
+
 
             public static Configuration Generate()
             {
@@ -734,8 +771,11 @@ namespace Oxide.Plugins
                     report_ui_cooldown = 300,
                     report_ui_auto_parse = true,
                     report_ui_show_check_in = 7,
+                    chat_default_avatar_steamid = "76561198134964268",
 
-                    chat_default_avatar_steamid = "76561198134964268"
+                    components_custom_actions_enabled = true,
+                    components_kills_enabled = true,
+                    components_signages_enabled = true,
                 };
             }
         }
@@ -758,6 +798,7 @@ namespace Oxide.Plugins
             public PlayerAlertsWorker? PlayerAlertsWorker;
             public SignageWorker? SignageWorker;
             public KillsWorker? KillsWorker;
+            public PlayerMuteWorker? PlayerMuteWorker;
 
             private void Awake()
             {
@@ -818,6 +859,7 @@ namespace Oxide.Plugins
                 PlayerAlertsWorker = ChildObjectToWorkers.AddComponent<PlayerAlertsWorker>();
                 SignageWorker = ChildObjectToWorkers.AddComponent<SignageWorker>();
                 KillsWorker = ChildObjectToWorkers.AddComponent<KillsWorker>();
+                PlayerMuteWorker = ChildObjectToWorkers.AddComponent<PlayerMuteWorker>();
             }
 
             private void DestroySubWorkers()
@@ -1733,6 +1775,65 @@ namespace Oxide.Plugins
             }
         }
 
+        private class PlayerMuteWorker : RustAppWorker
+        {
+            public Dictionary<ulong, CourtApi.PlayerMuteDto> PlayerMutes = new Dictionary<ulong, CourtApi.PlayerMuteDto>();
+
+            private void Awake()
+            {
+                base.Awake();
+
+                InvokeRepeating(nameof(CycleUpdateMutes), 0f, 300f);
+            }
+
+            private void CycleUpdateMutes() {
+                var request = CourtApi.GetPlayerMutes();
+
+                request.Execute(
+                    (data) => {
+                        PlayerMutes.Clear();
+
+                        data.data.ForEach(v => AddPlayerMute(v));
+
+                        // TODO! Remove log
+                        _RustApp.Puts($"Загружено {data.data.Count} мутов");
+                    },
+                    (err) => { 
+                        // TODO! Remove log
+                        _RustApp.PrintError("Something went wrong");
+                    }
+                );
+            }
+
+            public void AddPlayerMute(CourtApi.PlayerMuteDto playerMuteDto) {
+                var steamId = ulong.Parse(playerMuteDto.target_steam_id);
+
+                if (!PlayerMutes.ContainsKey(steamId)) {
+                    PlayerMutes.Add(steamId, playerMuteDto);
+                }
+
+                PlayerMutes[steamId] = playerMuteDto;
+            }
+
+            public void RemovePlayerMute(CourtApi.PlayerMuteDto playerMuteDto) {
+                var steamId = ulong.Parse(playerMuteDto.target_steam_id);
+
+                if (!PlayerMutes.ContainsKey(steamId)) {
+                    return;
+                }
+
+                PlayerMutes.Remove(steamId);
+            }
+
+            public CourtApi.PlayerMuteDto? GetMute(ulong steamId) {
+                if (PlayerMutes.TryGetValue(steamId, out var mute)) {
+                    return mute;
+                }
+
+                return null;
+            }
+        }
+
         #endregion
 
         #region Commands
@@ -1859,6 +1960,22 @@ namespace Oxide.Plugins
             {
                 Error("Fix pending errors, and use 'o.reload RustApp'");
                 return;
+            }
+
+            if (!_Settings.components_kills_enabled) {
+                Unsubscribe(nameof(OnPlayerWound));
+                Unsubscribe(nameof(OnPlayerRespawn));
+                Unsubscribe(nameof(OnPlayerRecovered));
+                Unsubscribe(nameof(OnPlayerDeath));
+            }
+
+            if (!_Settings.components_signages_enabled) {
+                Unsubscribe(nameof(OnEntityKill));
+                Unsubscribe(nameof(OnImagePost));
+                Unsubscribe(nameof(OnSignUpdated));
+                Unsubscribe(nameof(OnItemPainted));
+                Unsubscribe(nameof(OnFireworkDesignChanged));
+                Unsubscribe(nameof(OnEntityBuilt));
             }
 
             timer.Once(1f, () =>
@@ -2053,6 +2170,21 @@ namespace Oxide.Plugins
 
         #region Chat hooks
 
+        private object OnClientCommand(Connection connection, string text)
+        {
+            if (!text.StartsWith("chat.say")) {
+                return null;
+            }
+
+            var mute = _RustAppEngine?.PlayerMuteWorker?.GetMute(connection.userid);
+            if (mute != null) {
+                BasePlayer.FindByID(connection.userid)?.ChatMessage($"You are muted: {mute.reason}, left: {mute.GetLeftTime()}");
+                return false;
+            }
+
+            return null;
+        }
+
         private void OnPlayerChat(BasePlayer player, string message, ConVar.Chat.ChatChannel channel)
         {
             if (channel != ConVar.Chat.ChatChannel.Team && channel != ConVar.Chat.ChatChannel.Global && channel != ConVar.Chat.ChatChannel.Local)
@@ -2098,6 +2230,45 @@ namespace Oxide.Plugins
 
         private object RustApp_InternalQueue_HealthCheck(JObject raw)
         {
+            return true;
+        }
+
+        #endregion
+
+        #region PlayerMute
+
+        private class QueuePlayerMute {
+            public string type;
+
+            public CourtApi.PlayerMuteDto data;
+
+            public bool chat_broadcast; 
+        }
+        
+        private object RustApp_InternalQueue_PlayerMute(JObject raw)
+        {
+            var mute = raw.ToObject<QueuePlayerMute>();
+
+            if (mute.type == "created") {
+                _RustAppEngine?.PlayerMuteWorker?.AddPlayerMute(mute.data);
+
+                if (mute.chat_broadcast) {
+                    var player = BasePlayer.Find(mute.data.target_steam_id);
+                    if (player != null && player.IsConnected) {
+                        Server.Broadcast($"Выда мут: {player.displayName} за {mute.data.reason} (до {mute.data.GetUnmuteDate()}), длительность - {mute.data.GetLeftTime()}");
+                    }
+                }
+            } else {
+                _RustAppEngine?.PlayerMuteWorker?.RemovePlayerMute(mute.data);
+ 
+                if (mute.chat_broadcast) {
+                    var player = BasePlayer.Find(mute.data.target_steam_id);
+                    if (player != null && player.IsConnected) {
+                        Server.Broadcast($"Снят мут: {player.displayName}");
+                    }
+                }
+            }
+
             return true;
         }
 
@@ -2278,7 +2449,7 @@ namespace Oxide.Plugins
 
         private object RustApp_InternalQueue_ExecuteCommand(JObject raw)
         {
-            if (!_Settings.allow_execute_commands)
+            if (!_Settings.components_custom_actions_enabled) 
             {
                 return "Console command execution is disabled";
             }
@@ -2551,20 +2722,6 @@ namespace Oxide.Plugins
                     steam_id = player.UserIDString
                 }
             });
-        }
-
-        #endregion
-
-        #region SignageHooks
-
-        private void OnEntityKill(BaseNetworkable entity)
-        {
-            if (entity is not ISignage || entity.net is null)
-            {
-                return;
-            }
-
-            _RustAppEngine?.SignageWorker?.AddSignageDestroy(entity.net.ID.Value.ToString());
         }
 
         #endregion
@@ -4059,6 +4216,16 @@ namespace Oxide.Plugins
 
                 return FileStorage.server.Get(crc, FileStorage.Type.png, sign.NetworkID, TextureIndex);
             }
+        }
+
+        private void OnEntityKill(BaseNetworkable entity)
+        {
+            if (entity is not ISignage || entity.net is null)
+            {
+                return;
+            }
+
+            _RustAppEngine?.SignageWorker?.AddSignageDestroy(entity.net.ID.Value.ToString());
         }
 
         private void OnImagePost(BasePlayer player, string url, bool raw, ISignage signage, uint textureIndex)
