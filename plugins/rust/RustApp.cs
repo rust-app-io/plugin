@@ -552,7 +552,7 @@ namespace Oxide.Plugins
                 public string reason;
 
                 public string GetLeftTime() {
-                    var left = this.expired_at - DateTimeOffset.Now.ToUnixTimeMilliseconds();
+                    var left = LeftSeconds();
 
                     return $"{(float) left / 1000} seconds left";
                 }
@@ -561,6 +561,10 @@ namespace Oxide.Plugins
                     var date = DateTimeOffset.FromUnixTimeMilliseconds(this.expired_at);
 
                     return $"{date.DateTime.ToShortDateString()} {date.DateTime.ToShortTimeString()}";
+                }
+
+                public long LeftSeconds() {
+                    return this.expired_at - DateTimeOffset.Now.ToUnixTimeMilliseconds();
                 }
             }
 
@@ -2177,7 +2181,7 @@ namespace Oxide.Plugins
             }
 
             var mute = _RustAppEngine?.PlayerMuteWorker?.GetMute(connection.userid);
-            if (mute != null) {
+            if (mute != null && mute.LeftSeconds() > 0) {
                 BasePlayer.FindByID(connection.userid)?.ChatMessage($"You are muted: {mute.reason}, left: {mute.GetLeftTime()}");
                 return false;
             }
