@@ -2187,10 +2187,10 @@ namespace Oxide.Plugins
             if (!text.StartsWith("chat.say")) {
                 return null;
             }
-
+ 
             var mute = _RustAppEngine?.PlayerMuteWorker?.GetMute(connection.userid);
 
-            if (mute != null) {
+            if (mute != null && mute.LeftSeconds() > 0) {
                 var player = BasePlayer.FindByID(connection.userid);
                 var msg = _RustApp.lang.GetMessage("System.Mute.Message.Self", _RustApp, connection.userid.ToString()).Replace("%REASON%", mute.reason).Replace("%TIME%", mute.GetLeftTime());
 
