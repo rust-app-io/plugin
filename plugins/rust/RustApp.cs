@@ -2205,8 +2205,8 @@ namespace Oxide.Plugins
         #region Chat hooks
 
         private object OnClientCommand(Connection connection, string text)
-        {
-            if (!text.StartsWith("chat.say")) {
+        { 
+            if (!text.StartsWith("chat.say") || text.StartsWith("chat.say /")) {
                 return null;
             }
  
@@ -2463,7 +2463,7 @@ namespace Oxide.Plugins
                     var message = _RustApp.lang.GetMessage("System.Chat.Global", _RustApp, player.UserIDString)
                       .Replace("%CLIENT_TAG%", data.initiator_name)
                       .Replace("%MSG%", data.message);
-                      
+
                     _RustApp.SendMessage(player, message, data.initiator_steam_id ?? "");
                 }
             }
