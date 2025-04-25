@@ -2425,7 +2425,7 @@ namespace Oxide.Plugins
         private class QueueTaskChatMessageDto
         {
             public string initiator_name;
-            public string initiator_steam_id;
+            [CanBeNull] public string initiator_steam_id;
 
             [CanBeNull] public string target_steam_id;
 
@@ -2452,7 +2452,7 @@ namespace Oxide.Plugins
                   .Replace("%CLIENT_TAG%", data.initiator_name)
                   .Replace("%MSG%", data.message);
 
-                _RustApp.SendMessage(player, message);
+                _RustApp.SendMessage(player, message, data.initiator_steam_id ?? "");
 
                 _RustApp.SoundToast(player, _RustApp.lang.GetMessage("Chat.Direct.Toast", _RustApp, player.UserIDString), SoundToastType.Error);
             }
@@ -2463,8 +2463,8 @@ namespace Oxide.Plugins
                     var message = _RustApp.lang.GetMessage("System.Chat.Global", _RustApp, player.UserIDString)
                       .Replace("%CLIENT_TAG%", data.initiator_name)
                       .Replace("%MSG%", data.message);
-
-                    _RustApp.SendMessage(player, message);
+                      
+                    _RustApp.SendMessage(player, message, data.initiator_steam_id ?? "");
                 }
             }
 
