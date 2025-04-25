@@ -551,10 +551,24 @@ namespace Oxide.Plugins
                 public long expired_at;
                 public string reason;
 
-                public string GetLeftTime() {
-                    var left = LeftSeconds();
+                public string GetLeftTime()
+                {
+                    var leftMs = LeftSeconds();
+                    if (leftMs <= 0) return RustApp._RustApp.lang.GetMessage("Time.Seconds", RustApp._RustApp, null).Replace("%COUNT%", "0");
 
-                    return $"{(float) left / 1000} sec.";
+                    var time = TimeSpan.FromMilliseconds(leftMs);
+                    var parts = new List<string>();
+
+                    if (time.Days > 0)
+                        parts.Add(RustApp._RustApp.lang.GetMessage("Time.Days", RustApp._RustApp, null).Replace("%COUNT%", time.Days.ToString()));
+                    if (time.Hours > 0)
+                        parts.Add(RustApp._RustApp.lang.GetMessage("Time.Hours", RustApp._RustApp, null).Replace("%COUNT%", time.Hours.ToString()));
+                    if (time.Minutes > 0)
+                        parts.Add(RustApp._RustApp.lang.GetMessage("Time.Minutes", RustApp._RustApp, null).Replace("%COUNT%", time.Minutes.ToString()));
+                    if (time.Seconds > 0)
+                        parts.Add(RustApp._RustApp.lang.GetMessage("Time.Seconds", RustApp._RustApp, null).Replace("%COUNT%", time.Seconds.ToString()));
+
+                    return string.Join(", ", parts);
                 }
 
                 public string GetUnmuteDate() {
@@ -1800,7 +1814,7 @@ namespace Oxide.Plugins
                         data.data.ForEach(v => AddPlayerMute(v));
 
                         // TODO! Remove log
-                        _RustApp.Puts($"Загружено {data.data.Count} мутов");
+                        _RustApp.Puts($"Загружено мутов: {data.data.Count} шт.");
                     },
                     (err) => { 
                         // TODO! Remove log
@@ -2050,17 +2064,21 @@ namespace Oxide.Plugins
                 ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>DM from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
                 ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Message from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
 
-                ["System.Mute.Broadcast.Mute"] = "Player <color=#5af>%TARGET%</color> was muted.\n<size=12>Reason: %REASON%</size>",
-                ["System.Mute.Broadcast.Unmute"] = "Player <color=#5af>%TARGET%</color> was unmuted.",
-                ["System.Mute.Message.Self"] = "You are muted!<size=12>\nReason: %REASON%\nLeft: %TIME%</size>",
+                ["System.Mute.Broadcast.Mute"] = "Player <color=#5af>%TARGET%</color> was muted.\n<size=12>- reason: %REASON%</size>",
+                ["System.Mute.Message.Self"] = "You are muted!<size=12>\n- reason: %REASON%\n- left: %TIME%</size>",
 
-                ["System.Ban.Broadcast"] = "Player <color=#5af>%TARGET%</color> was banned.\n<size=12>Reason: %REASON%</size>",
-                ["System.Ban.Temp.Kick"] = "You are banned until %TIME% МСК, reason: %REASON%",
+                ["System.Ban.Broadcast"] = "Player <color=#5af>%TARGET%</color> was banned.\n<size=12>- reason: %REASON%</size>",
+                ["System.Ban.Temp.Kick"] = "You are banned until %TIME% (UTC+3), reason: %REASON%",
                 ["System.Ban.Perm.Kick"] = "You have perm ban, reason: %REASON%",
                 ["System.Ban.Ip.Kick"] = "You are restricted from entering the server!",
 
-                ["System.BanSync.Temp.Kick"] = "Detected ban on another project until %TIME% МСК, reason: %REASON%",
+                ["System.BanSync.Temp.Kick"] = "Detected ban on another project until %TIME% (UTC+3), reason: %REASON%",
                 ["System.BanSync.Perm.Kick"] = "Detected ban on another project, reason: %REASON%",
+
+                ["Time.Days"] = "%COUNT% day",
+                ["Time.Hours"] = "%COUNT% hour",
+                ["Time.Minutes"] = "%COUNT% min",
+                ["Time.Seconds"] = "%COUNT% sec",
             }, this, "en");
 
             lang.RegisterMessages(new Dictionary<string, string>
@@ -2089,17 +2107,21 @@ namespace Oxide.Plugins
                 ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
                 ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
 
-                ["System.Mute.Broadcast.Mute"] = "Игрок <color=#5af>%TARGET%</color> получил мут.\n<size=12>Причина: %REASON%</size>",
-                ["System.Mute.Broadcast.Unmute"] = "Игрок <color=#5af>%TARGET%</color> размучен.",
-                ["System.Mute.Message.Self"] = "Вы замьючены!<size=12>\nПричина: %REASON%\nОсталось: %TIME%</size>",
+                ["System.Mute.Broadcast.Mute"] = "Игрок <color=#5af>%TARGET%</color> получил мут.\n<size=12>- причина: %REASON%</size>",
+                ["System.Mute.Message.Self"] = "Вы замьючены!<size=12>\n- причина: %REASON%\n- осталось: %TIME%</size>",
 
-                ["System.Ban.Broadcast"] = "Игрок <color=#5af>%TARGET%</color> был заблокирован.\n<size=12>Причина: %REASON%</size>",
-                ["System.Ban.Temp.Kick"] = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%",
+                ["System.Ban.Broadcast"] = "Игрок <color=#5af>%TARGET%</color> был заблокирован.\n<size=12>- причина: %REASON%</size>",
+                ["System.Ban.Temp.Kick"] = "Вы забанены на этом сервере до %TIME% (МСК), причина: %REASON%",
                 ["System.Ban.Perm.Kick"] = "Вы навсегда забанены на этом сервере, причина: %REASON%",
                 ["System.Ban.Ip.Kick"] = "Вам ограничен вход на сервер!",
 
-                ["System.BanSync.Temp.Kick"] = "Обнаружена блокировка на другом проекте до %TIME% МСК, причина: %REASON%",
+                ["System.BanSync.Temp.Kick"] = "Обнаружена блокировка на другом проекте до %TIME% (МСК), причина: %REASON%",
                 ["System.BanSync.Perm.Kick"] = "Обнаружена блокировка на другом проекте, причина: %REASON%",
+
+                ["Time.Days"] = "%COUNT% дн",
+                ["Time.Hours"] = "%COUNT% час",
+                ["Time.Minutes"] = "%COUNT% мин",
+                ["Time.Seconds"] = "%COUNT% сек",
             }, this, "ru");
         }
 
@@ -2278,15 +2300,6 @@ namespace Oxide.Plugins
                 }
             } else {
                 _RustAppEngine?.PlayerMuteWorker?.RemovePlayerMute(mute.data);
- 
-                if (mute.chat_broadcast) {
-                    var target = BasePlayer.Find(mute.data.target_steam_id);
-                    foreach (var player in BasePlayer.activePlayerList)
-                    {
-                        var msg = _RustApp.lang.GetMessage("System.Mute.Broadcast.Unmute", _RustApp, player.UserIDString).Replace("%TARGET%", target.displayName);
-                        _RustApp.SendMessage(player, msg);
-                    }
-                }
             }
 
             return true;
