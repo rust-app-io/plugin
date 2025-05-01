@@ -28,7 +28,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.2.2")]
+    [Info("RustApp", "RustApp.io", "2.3.0")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -548,8 +548,13 @@ namespace Oxide.Plugins
 
             public class PlayerMuteDto {
                 public string target_steam_id;
-                public long expired_at;
                 public string reason;
+                public long left_time_ms;
+                public long received_at = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+
+                private long GetExpiredAt() {
+                    return received_at + left_time_ms;
+                }
 
                 public string GetLeftTime()
                 {
@@ -572,13 +577,13 @@ namespace Oxide.Plugins
                 }
 
                 public string GetUnmuteDate() {
-                    var date = DateTimeOffset.FromUnixTimeMilliseconds(this.expired_at);
+                    var date = DateTimeOffset.FromUnixTimeMilliseconds(GetExpiredAt());
 
                     return $"{date.DateTime.ToShortDateString()} {date.DateTime.ToShortTimeString()}";
                 }
-
+ 
                 public long LeftSeconds() {
-                    return this.expired_at - DateTimeOffset.Now.ToUnixTimeMilliseconds();
+                    return GetExpiredAt() - DateTimeOffset.Now.ToUnixTimeMilliseconds();
                 }
             }
 
@@ -1812,14 +1817,8 @@ namespace Oxide.Plugins
                         PlayerMutes.Clear();
 
                         data.data.ForEach(v => AddPlayerMute(v));
-
-                        // TODO! Remove log
-                        _RustApp.Puts($"Загружено мутов: {data.data.Count} шт.");
                     },
-                    (err) => { 
-                        // TODO! Remove log
-                        _RustApp.PrintError("Something went wrong");
-                    }
+                    (err) => {}
                 );
             }
 
