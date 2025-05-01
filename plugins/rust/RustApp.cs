@@ -2213,7 +2213,7 @@ namespace Oxide.Plugins
 
         private object OnClientCommand(Connection connection, string text)
         { 
-            if (!text.StartsWith("chat.say") || text.StartsWith("chat.say \"/")) {
+            if (!text.StartsWith("chat.say") || text.StartsWith("chat.say \"/") || text.StartsWith("chat.say /")) {
                 return null;
             } 
  
