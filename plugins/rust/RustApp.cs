@@ -2213,9 +2213,9 @@ namespace Oxide.Plugins
 
         private object OnClientCommand(Connection connection, string text)
         { 
-            if (!text.StartsWith("chat.say") || text.StartsWith("chat.say /")) {
+            if (!text.StartsWith("chat.say") || text.StartsWith("chat.say \"/")) {
                 return null;
-            }
+            } 
  
             var mute = _RustAppEngine?.PlayerMuteWorker?.GetMute(connection.userid);
 
@@ -3664,6 +3664,12 @@ namespace Oxide.Plugins
         #endregion
 
         #region Plugin API
+
+        private long? RA_IsPlayerMuted(BasePlayer player) {
+            var mute = _RustAppEngine?.PlayerMuteWorker?.GetMute(player.userID);
+        
+            return mute?.LeftSeconds();
+        }
 
         private void RA_DirectMessageHandler(string from, string to, string message)
         {
