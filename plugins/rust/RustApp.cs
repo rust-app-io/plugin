@@ -28,7 +28,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.2.2")]
+    [Info("RustApp", "RustApp.io", "2.3.0")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -543,6 +543,59 @@ namespace Oxide.Plugins
             }
 
             #endregion
+
+            #region PlayerMute
+
+            public class PlayerMuteDto {
+                public string target_steam_id;
+                public string reason;
+                public long left_time_ms;
+                public long received_at = DateTimeOffset.Now.ToUnixTimeMilliseconds();
+
+                private long GetExpiredAt() {
+                    return received_at + left_time_ms;
+                }
+
+                public string GetLeftTime()
+                {
+                    var leftMs = LeftSeconds();
+                    if (leftMs <= 0) return RustApp._RustApp.lang.GetMessage("Time.Seconds", RustApp._RustApp, null).Replace("%COUNT%", "0");
+
+                    var time = TimeSpan.FromMilliseconds(leftMs);
+                    var parts = new List<string>();
+
+                    if (time.Days > 0)
+                        parts.Add(RustApp._RustApp.lang.GetMessage("Time.Days", RustApp._RustApp, null).Replace("%COUNT%", time.Days.ToString()));
+                    if (time.Hours > 0)
+                        parts.Add(RustApp._RustApp.lang.GetMessage("Time.Hours", RustApp._RustApp, null).Replace("%COUNT%", time.Hours.ToString()));
+                    if (time.Minutes > 0)
+                        parts.Add(RustApp._RustApp.lang.GetMessage("Time.Minutes", RustApp._RustApp, null).Replace("%COUNT%", time.Minutes.ToString()));
+                    if (time.Seconds > 0)
+                        parts.Add(RustApp._RustApp.lang.GetMessage("Time.Seconds", RustApp._RustApp, null).Replace("%COUNT%", time.Seconds.ToString()));
+
+                    return string.Join(", ", parts);
+                }
+
+                public string GetUnmuteDate() {
+                    var date = DateTimeOffset.FromUnixTimeMilliseconds(GetExpiredAt());
+
+                    return $"{date.DateTime.ToShortDateString()} {date.DateTime.ToShortTimeString()}";
+                }
+ 
+                public long LeftSeconds() {
+                    return GetExpiredAt() - DateTimeOffset.Now.ToUnixTimeMilliseconds();
+                }
+            }
+
+            public class PlayerMuteDtoIn {
+                public List<PlayerMuteDto> data;
+            }
+
+            public static StableRequest<PlayerMuteDtoIn> GetPlayerMutes() {
+                return new StableRequest<PlayerMuteDtoIn>($"{BaseUrl}/plugin/player-mute", RequestMethod.GET, null);
+            }
+
+            #endregion
         }
 
         private static class QueueApi
@@ -722,8 +775,18 @@ namespace Oxide.Plugins
             [JsonProperty("[Check] Command to send contact")]
             public string check_contact_command = "contact";
 
-            [JsonProperty("Allow console command execution")]
-            public bool allow_execute_commands = true;
+            [JsonProperty("[Components • Custom actions] Allow console command execution")]
+            public bool components_custom_actions_enabled = true;
+
+            [JsonProperty("[Components • Signages] Collect signages")]
+            public bool components_signages_enabled = true;
+            
+            [JsonProperty("[Components • Kills] Collect kills")]
+            public bool components_kills_enabled = true;
+
+            [JsonProperty("[Components • Mutes] Support mutes system")]
+            public bool components_mutes_enabled = true;
+
 
             public static Configuration Generate()
             {
@@ -734,8 +797,12 @@ namespace Oxide.Plugins
                     report_ui_cooldown = 300,
                     report_ui_auto_parse = true,
                     report_ui_show_check_in = 7,
+                    chat_default_avatar_steamid = "76561198134964268",
 
-                    chat_default_avatar_steamid = "76561198134964268"
+                    components_custom_actions_enabled = true,
+                    components_kills_enabled = true,
+                    components_signages_enabled = true,
+                    components_mutes_enabled = true,
                 };
             }
         }
@@ -758,6 +825,7 @@ namespace Oxide.Plugins
             public PlayerAlertsWorker? PlayerAlertsWorker;
             public SignageWorker? SignageWorker;
             public KillsWorker? KillsWorker;
+            public PlayerMuteWorker? PlayerMuteWorker;
 
             private void Awake()
             {
@@ -818,6 +886,7 @@ namespace Oxide.Plugins
                 PlayerAlertsWorker = ChildObjectToWorkers.AddComponent<PlayerAlertsWorker>();
                 SignageWorker = ChildObjectToWorkers.AddComponent<SignageWorker>();
                 KillsWorker = ChildObjectToWorkers.AddComponent<KillsWorker>();
+                PlayerMuteWorker = ChildObjectToWorkers.AddComponent<PlayerMuteWorker>();
             }
 
             private void DestroySubWorkers()
@@ -1733,6 +1802,59 @@ namespace Oxide.Plugins
             }
         }
 
+        private class PlayerMuteWorker : RustAppWorker
+        {
+            public Dictionary<ulong, CourtApi.PlayerMuteDto> PlayerMutes = new Dictionary<ulong, CourtApi.PlayerMuteDto>();
+
+            private void Awake()
+            {
+                base.Awake();
+
+                InvokeRepeating(nameof(CycleUpdateMutes), 0f, 300f);
+            }
+
+            private void CycleUpdateMutes() {
+                var request = CourtApi.GetPlayerMutes();
+
+                request.Execute(
+                    (data) => {
+                        PlayerMutes.Clear();
+
+                        data.data.ForEach(v => AddPlayerMute(v));
+                    },
+                    (err) => {}
+                );
+            }
+
+            public void AddPlayerMute(CourtApi.PlayerMuteDto playerMuteDto) {
+                var steamId = ulong.Parse(playerMuteDto.target_steam_id);
+
+                if (!PlayerMutes.ContainsKey(steamId)) {
+                    PlayerMutes.Add(steamId, playerMuteDto);
+                }
+
+                PlayerMutes[steamId] = playerMuteDto;
+            }
+
+            public void RemovePlayerMute(CourtApi.PlayerMuteDto playerMuteDto) {
+                var steamId = ulong.Parse(playerMuteDto.target_steam_id);
+
+                if (!PlayerMutes.ContainsKey(steamId)) {
+                    return;
+                }
+
+                PlayerMutes.Remove(steamId);
+            }
+
+            public CourtApi.PlayerMuteDto? GetMute(ulong steamId) {
+                if (PlayerMutes.TryGetValue(steamId, out var mute)) {
+                    return mute;
+                }
+
+                return null;
+            }
+        }
+
         #endregion
 
         #region Commands
@@ -1861,6 +1983,26 @@ namespace Oxide.Plugins
                 return;
             }
 
+            if (!_Settings.components_kills_enabled) {
+                Unsubscribe(nameof(OnPlayerWound));
+                Unsubscribe(nameof(OnPlayerRespawn));
+                Unsubscribe(nameof(OnPlayerRecovered));
+                Unsubscribe(nameof(OnPlayerDeath));
+            }
+
+            if (!_Settings.components_signages_enabled) {
+                Unsubscribe(nameof(OnEntityKill));
+                Unsubscribe(nameof(OnImagePost));
+                Unsubscribe(nameof(OnSignUpdated));
+                Unsubscribe(nameof(OnItemPainted));
+                Unsubscribe(nameof(OnFireworkDesignChanged));
+                Unsubscribe(nameof(OnEntityBuilt));
+            }
+
+            if (!_Settings.components_mutes_enabled) {
+                Unsubscribe(nameof(OnClientCommand));
+            }
+
             timer.Once(1f, () =>
             {
                 MetaInfo.Read();
@@ -1929,13 +2071,21 @@ namespace Oxide.Plugins
                 ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>DM from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
                 ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Message from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
 
-                ["System.Ban.Broadcast"] = "Player <color=#5af>%TARGET%</color> <color=#bdbdbd></color>was banned.\n<size=12>- reason: <color=#d3d3d3>%REASON%</color></size>",
-                ["System.Ban.Temp.Kick"] = "You are banned until %TIME% МСК, reason: %REASON%",
+                ["System.Mute.Broadcast.Mute"] = "Player <color=#5af>%TARGET%</color> was muted.\n<size=12>- reason: %REASON%</size>",
+                ["System.Mute.Message.Self"] = "You are muted!<size=12>\n- reason: %REASON%\n- left: %TIME%</size>",
+
+                ["System.Ban.Broadcast"] = "Player <color=#5af>%TARGET%</color> was banned.\n<size=12>- reason: %REASON%</size>",
+                ["System.Ban.Temp.Kick"] = "You are banned until %TIME% (UTC+3), reason: %REASON%",
                 ["System.Ban.Perm.Kick"] = "You have perm ban, reason: %REASON%",
                 ["System.Ban.Ip.Kick"] = "You are restricted from entering the server!",
 
-                ["System.BanSync.Temp.Kick"] = "Detected ban on another project until %TIME% МСК, reason: %REASON%",
+                ["System.BanSync.Temp.Kick"] = "Detected ban on another project until %TIME% (UTC+3), reason: %REASON%",
                 ["System.BanSync.Perm.Kick"] = "Detected ban on another project, reason: %REASON%",
+
+                ["Time.Days"] = "%COUNT% day",
+                ["Time.Hours"] = "%COUNT% hour",
+                ["Time.Minutes"] = "%COUNT% min",
+                ["Time.Seconds"] = "%COUNT% sec",
             }, this, "en");
 
             lang.RegisterMessages(new Dictionary<string, string>
@@ -1964,13 +2114,21 @@ namespace Oxide.Plugins
                 ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
                 ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
 
-                ["System.Ban.Broadcast"] = "Игрок <color=#5af>%TARGET%</color> <color=#bdbdbd></color>был заблокирован.\n<size=12>- причина: <color=#d3d3d3>%REASON%</color></size>",
-                ["System.Ban.Temp.Kick"] = "Вы забанены на этом сервере до %TIME% МСК, причина: %REASON%",
+                ["System.Mute.Broadcast.Mute"] = "Игрок <color=#5af>%TARGET%</color> получил мут.\n<size=12>- причина: %REASON%</size>",
+                ["System.Mute.Message.Self"] = "Вы замьючены!<size=12>\n- причина: %REASON%\n- осталось: %TIME%</size>",
+
+                ["System.Ban.Broadcast"] = "Игрок <color=#5af>%TARGET%</color> был заблокирован.\n<size=12>- причина: %REASON%</size>",
+                ["System.Ban.Temp.Kick"] = "Вы забанены на этом сервере до %TIME% (МСК), причина: %REASON%",
                 ["System.Ban.Perm.Kick"] = "Вы навсегда забанены на этом сервере, причина: %REASON%",
                 ["System.Ban.Ip.Kick"] = "Вам ограничен вход на сервер!",
 
-                ["System.BanSync.Temp.Kick"] = "Обнаружена блокировка на другом проекте до %TIME% МСК, причина: %REASON%",
+                ["System.BanSync.Temp.Kick"] = "Обнаружена блокировка на другом проекте до %TIME% (МСК), причина: %REASON%",
                 ["System.BanSync.Perm.Kick"] = "Обнаружена блокировка на другом проекте, причина: %REASON%",
+
+                ["Time.Days"] = "%COUNT% дн",
+                ["Time.Hours"] = "%COUNT% час",
+                ["Time.Minutes"] = "%COUNT% мин",
+                ["Time.Seconds"] = "%COUNT% сек",
             }, this, "ru");
         }
 
@@ -2053,6 +2211,25 @@ namespace Oxide.Plugins
 
         #region Chat hooks
 
+        private object OnClientCommand(Connection connection, string text)
+        { 
+            if (!text.StartsWith("chat.say") || text.StartsWith("chat.say \"/")) {
+                return null;
+            } 
+ 
+            var mute = _RustAppEngine?.PlayerMuteWorker?.GetMute(connection.userid);
+
+            if (mute != null && mute.LeftSeconds() > 0) {
+                var player = BasePlayer.FindByID(connection.userid);
+                var msg = _RustApp.lang.GetMessage("System.Mute.Message.Self", _RustApp, connection.userid.ToString()).Replace("%REASON%", mute.reason).Replace("%TIME%", mute.GetLeftTime());
+
+                SendMessage(player, msg);
+                return false;
+            }
+
+            return null;
+        }
+
         private void OnPlayerChat(BasePlayer player, string message, ConVar.Chat.ChatChannel channel)
         {
             if (channel != ConVar.Chat.ChatChannel.Team && channel != ConVar.Chat.ChatChannel.Global && channel != ConVar.Chat.ChatChannel.Local)
@@ -2098,6 +2275,40 @@ namespace Oxide.Plugins
 
         private object RustApp_InternalQueue_HealthCheck(JObject raw)
         {
+            return true;
+        }
+
+        #endregion
+
+        #region PlayerMute
+
+        private class QueuePlayerMute {
+            public string type;
+
+            public CourtApi.PlayerMuteDto data;
+
+            public bool chat_broadcast; 
+        }
+        
+        private object RustApp_InternalQueue_PlayerMute(JObject raw)
+        {
+            var mute = raw.ToObject<QueuePlayerMute>();
+
+            if (mute.type == "created") {
+                _RustAppEngine?.PlayerMuteWorker?.AddPlayerMute(mute.data);
+
+                if (mute.chat_broadcast) {
+                    var target = BasePlayer.Find(mute.data.target_steam_id);
+                    foreach (var player in BasePlayer.activePlayerList)
+                    {
+                        var msg = _RustApp.lang.GetMessage("System.Mute.Broadcast.Mute", _RustApp, player.UserIDString).Replace("%TARGET%", target.displayName).Replace("%REASON%", mute.data.reason).Replace("%TIME%", mute.data.GetLeftTime());
+                        _RustApp.SendMessage(player, msg);
+                    }
+                }
+            } else {
+                _RustAppEngine?.PlayerMuteWorker?.RemovePlayerMute(mute.data);
+            }
+
             return true;
         }
 
@@ -2221,7 +2432,7 @@ namespace Oxide.Plugins
         private class QueueTaskChatMessageDto
         {
             public string initiator_name;
-            public string initiator_steam_id;
+            [CanBeNull] public string initiator_steam_id;
 
             [CanBeNull] public string target_steam_id;
 
@@ -2248,7 +2459,7 @@ namespace Oxide.Plugins
                   .Replace("%CLIENT_TAG%", data.initiator_name)
                   .Replace("%MSG%", data.message);
 
-                _RustApp.SendMessage(player, message);
+                _RustApp.SendMessage(player, message, data.initiator_steam_id ?? "");
 
                 _RustApp.SoundToast(player, _RustApp.lang.GetMessage("Chat.Direct.Toast", _RustApp, player.UserIDString), SoundToastType.Error);
             }
@@ -2260,7 +2471,7 @@ namespace Oxide.Plugins
                       .Replace("%CLIENT_TAG%", data.initiator_name)
                       .Replace("%MSG%", data.message);
 
-                    _RustApp.SendMessage(player, message);
+                    _RustApp.SendMessage(player, message, data.initiator_steam_id ?? "");
                 }
             }
 
@@ -2278,7 +2489,7 @@ namespace Oxide.Plugins
 
         private object RustApp_InternalQueue_ExecuteCommand(JObject raw)
         {
-            if (!_Settings.allow_execute_commands)
+            if (!_Settings.components_custom_actions_enabled) 
             {
                 return "Console command execution is disabled";
             }
@@ -2551,20 +2762,6 @@ namespace Oxide.Plugins
                     steam_id = player.UserIDString
                 }
             });
-        }
-
-        #endregion
-
-        #region SignageHooks
-
-        private void OnEntityKill(BaseNetworkable entity)
-        {
-            if (entity is not ISignage || entity.net is null)
-            {
-                return;
-            }
-
-            _RustAppEngine?.SignageWorker?.AddSignageDestroy(entity.net.ID.Value.ToString());
         }
 
         #endregion
@@ -3468,6 +3665,12 @@ namespace Oxide.Plugins
 
         #region Plugin API
 
+        private long? RA_IsPlayerMuted(BasePlayer player) {
+            var mute = _RustAppEngine?.PlayerMuteWorker?.GetMute(player.userID);
+        
+            return mute?.LeftSeconds();
+        }
+
         private void RA_DirectMessageHandler(string from, string to, string message)
         {
             _RustAppEngine?.ChatWorker?.SaveChatMessage(new CourtApi.PluginChatMessageDto
@@ -4059,6 +4262,16 @@ namespace Oxide.Plugins
 
                 return FileStorage.server.Get(crc, FileStorage.Type.png, sign.NetworkID, TextureIndex);
             }
+        }
+
+        private void OnEntityKill(BaseNetworkable entity)
+        {
+            if (entity is not ISignage || entity.net is null)
+            {
+                return;
+            }
+
+            _RustAppEngine?.SignageWorker?.AddSignageDestroy(entity.net.ID.Value.ToString());
         }
 
         private void OnImagePost(BasePlayer player, string url, bool raw, ISignage signage, uint textureIndex)
