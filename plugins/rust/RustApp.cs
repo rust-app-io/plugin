@@ -784,6 +784,9 @@ namespace Oxide.Plugins
             [JsonProperty("[Components • Kills] Collect kills")]
             public bool components_kills_enabled = true;
 
+            [JsonProperty("[Components • Mutes] Support mutes system")]
+            public bool components_mutes_enabled = true;
+
 
             public static Configuration Generate()
             {
@@ -799,6 +802,7 @@ namespace Oxide.Plugins
                     components_custom_actions_enabled = true,
                     components_kills_enabled = true,
                     components_signages_enabled = true,
+                    components_mutes_enabled = true,
                 };
             }
         }
@@ -1993,6 +1997,10 @@ namespace Oxide.Plugins
                 Unsubscribe(nameof(OnItemPainted));
                 Unsubscribe(nameof(OnFireworkDesignChanged));
                 Unsubscribe(nameof(OnEntityBuilt));
+            }
+
+            if (!_Settings.components_mutes_enabled) {
+                Unsubscribe(nameof(OnClientCommand));
             }
 
             timer.Once(1f, () =>
