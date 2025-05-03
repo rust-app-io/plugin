@@ -544,7 +544,7 @@ namespace Oxide.Plugins
 
             #endregion
 
-            #region PlayerMute
+            #region PlayerMuteGetActive
 
             public class PlayerMuteDto {
                 public string target_steam_id;
@@ -591,8 +591,39 @@ namespace Oxide.Plugins
                 public List<PlayerMuteDto> data;
             }
 
-            public static StableRequest<PlayerMuteDtoIn> GetPlayerMutes() {
-                return new StableRequest<PlayerMuteDtoIn>($"{BaseUrl}/plugin/player-mute", RequestMethod.GET, null);
+            public static StableRequest<PlayerMuteDtoIn> PlayerMuteGetActive() {
+                return new StableRequest<PlayerMuteDtoIn>($"{BaseUrl}/plugin/player-mute/get-active", RequestMethod.GET, null);
+            }
+
+            #endregion
+
+            #region PlayerMuteCreate
+
+            public class PlayerMuteCreateDto {
+                public string target_steam_id;
+                public string reason;
+                public string duration;
+
+                public bool broadcast;
+
+                [CanBeNull] public string comment;
+                [CanBeNull] public string references_message;
+            }
+
+            public static StableRequest<object> PlayerMuteCreate(PlayerMuteCreateDto data) {
+                return new StableRequest<object>($"{BaseUrl}/plugin/player-mute/mute-player", RequestMethod.POST, data);
+            }
+
+            #endregion
+
+            #region PlayerMuteDelete
+
+            public class PlayerMuteDeleteDto {
+                public string target_steam_id;
+            }
+
+            public static StableRequest<object> PlayerMuteDelete(PlayerMuteDeleteDto data) {
+                return new StableRequest<object>($"{BaseUrl}/plugin/player-mute/unmute-player", RequestMethod.POST, data);
             }
 
             #endregion
@@ -1814,15 +1845,16 @@ namespace Oxide.Plugins
             }
 
             private void CycleUpdateMutes() {
-                var request = CourtApi.GetPlayerMutes();
+                var request = CourtApi.PlayerMuteGetActive();
 
                 request.Execute(
                     (data) => {
-                        PlayerMutes.Clear();
+                        PlayerMutes.Clear(); 
 
                         data.data.ForEach(v => AddPlayerMute(v));
                     },
-                    (err) => {}
+                    (err) => {
+                    }
                 );
             }
 
@@ -1908,6 +1940,47 @@ namespace Oxide.Plugins
             var code = args.Args[0];
 
             _RustAppEngine?.gameObject.AddComponent<PairWorker>().StartPairing(code);
+        }
+
+        [ConsoleCommand("ra.mute")]
+        private void CmdConsoleMute(ConsoleSystem.Arg args) {
+            if (args.Player() != null && !args.Player().IsAdmin)
+            {
+                return;
+            }
+
+            var clearArgs = (args.Args ?? Array.Empty<string>()).Where(v => v != "--broadcast").ToList();
+            if (clearArgs.Count() < 3)
+            {
+                Error("Incorrect command format!\nCorrect format: ra.mute <steam-id> <reason> <time>\n\nAdditional options are available:\n'--broadcast' - broadcast mute");
+                return;
+            }
+
+            var steamId = clearArgs[0];
+            var reason = clearArgs[1];
+            var duration = clearArgs[2];
+
+            var broadcast_bool = args.FullString.Contains("--global");
+
+            RustApp_PlayerMuteCreate(steamId, reason, duration, null, null, broadcast_bool);
+        }
+
+        [ConsoleCommand("ra.unmute")]
+        private void CmdConsoleUnmute(ConsoleSystem.Arg args) {
+            if (args.Player() != null && !args.Player().IsAdmin)
+            {
+                return;
+            }
+
+            if (args.Args.Count() < 1)
+            {
+                Error("Incorrect command format!\nCorrect format: ra.unmute <steam-id>");
+                return;
+            }
+
+            var steamId = args.Args[0];
+
+            RustApp_PlayerMuteDelete(steamId);
         }
 
         [ConsoleCommand("ra.ban")]
@@ -3664,6 +3737,41 @@ namespace Oxide.Plugins
         #endregion
 
         #region Plugin API
+
+        private void RustApp_PlayerMuteCreate(string targetSteamId, string reason, string duration, string comment = null, string referenceMessageText = null, bool broadcast = false) {
+            var request = CourtApi.PlayerMuteCreate(new CourtApi.PlayerMuteCreateDto {
+                target_steam_id = targetSteamId,
+                reason = reason,
+                broadcast = broadcast,
+                comment = comment,
+                duration = duration,
+                references_message = referenceMessageText
+            });
+
+            request.Execute(
+                (obj) => {
+                    Puts($"Player ({targetSteamId}) is muted");
+                },
+                (err) => {
+                    PrintError($"Failed to mute player: {err}");
+                }
+            );
+        }
+
+        private void RustApp_PlayerMuteDelete(string targetSteamId) {
+            var request = CourtApi.PlayerMuteDelete(new CourtApi.PlayerMuteDeleteDto {
+                target_steam_id = targetSteamId
+            });
+
+            request.Execute(
+                (obj) => {
+                    Puts($"Player ({targetSteamId}) is unmuted");
+                },
+                (err) => {
+                    PrintError($"Failed to unmute player: {err}");
+                }
+            );
+        }
 
         private long? RA_IsPlayerMuted(BasePlayer player) {
             var mute = _RustAppEngine?.PlayerMuteWorker?.GetMute(player.userID);
