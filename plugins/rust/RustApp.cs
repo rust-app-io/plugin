@@ -2285,18 +2285,26 @@ namespace Oxide.Plugins
         #region Chat hooks
 
         private object OnClientCommand(Connection connection, string text)
-        { 
-            if (!text.StartsWith("chat.say") || text.StartsWith("chat.say \"/") || text.StartsWith("chat.say /")) {
+        {
+            if (!text.StartsWith("chat.say", StringComparison.OrdinalIgnoreCase)
+                || text.StartsWith("chat.say \"/", StringComparison.OrdinalIgnoreCase)
+                || text.StartsWith("chat.say /", StringComparison.OrdinalIgnoreCase))
+            {
                 return null;
-            } 
- 
+            }
+
             var mute = _RustAppEngine?.PlayerMuteWorker?.GetMute(connection.userid);
+            if (mute != null && mute.LeftSeconds() > 0)
+            {
+                var msg = _RustApp.lang.GetMessage("System.Mute.Message.Self", _RustApp, connection.userid.ToString())
+                    .Replace("%REASON%", mute.reason)
+                    .Replace("%TIME%", mute.GetLeftTime());
 
-            if (mute != null && mute.LeftSeconds() > 0) {
-                var player = BasePlayer.FindByID(connection.userid);
-                var msg = _RustApp.lang.GetMessage("System.Mute.Message.Self", _RustApp, connection.userid.ToString()).Replace("%REASON%", mute.reason).Replace("%TIME%", mute.GetLeftTime());
+                if (connection.player is BasePlayer player)
+                {
+                    SendMessage(player, msg);
+                }
 
-                SendMessage(player, msg);
                 return false;
             }
 
