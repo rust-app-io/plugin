@@ -136,7 +136,7 @@ namespace Oxide.Plugins
 
                     payload.status = status;
 
-                    payload.no_license = DetectNoLicense(connection);
+                    payload.no_license = true;
                     try { payload.meta = CollectPlayerMeta(payload.steam_id, payload.meta); } catch { }
 
                     var team = RelationshipManager.Instance.FindPlayersTeam(connection.userid);
