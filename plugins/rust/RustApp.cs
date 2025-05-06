@@ -3446,7 +3446,7 @@ namespace Oxide.Plugins
 
         private void RustAppEngineDestroy()
         {
-            UnityEngine.Object.Destroy(_RustAppEngine.gameObject);
+            UnityEngine.Object.Destroy(_RustAppEngine?.gameObject);
         }
 
         private void BanCreate(string steamId, CourtApi.PluginBanCreatePayload payload)
@@ -3765,7 +3765,7 @@ namespace Oxide.Plugins
                 }
             );
         }
-
+ 
         private void RustApp_PlayerMuteDelete(string targetSteamId) {
             var request = CourtApi.PlayerMuteDelete(new CourtApi.PlayerMuteDeleteDto {
                 target_steam_id = targetSteamId
