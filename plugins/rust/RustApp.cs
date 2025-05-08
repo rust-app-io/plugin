@@ -1960,7 +1960,7 @@ namespace Oxide.Plugins
             var reason = clearArgs[1];
             var duration = clearArgs[2];
 
-            var broadcast_bool = args.FullString.Contains("--global");
+            var broadcast_bool = args.FullString.Contains("--broadcast");
 
             RustApp_PlayerMuteCreate(steamId, reason, duration, null, null, broadcast_bool);
         }
