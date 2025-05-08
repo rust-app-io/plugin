@@ -126,7 +126,7 @@ namespace Oxide.Plugins
 
             public class PluginStatePlayerMetaDto
             {
-                public List<string> tags = new List<string>();
+                public Dictionary<string, string> tags = new Dictionary<string, string>();
                 public Dictionary<string, string> fields = new Dictionary<string, string>();
             }
 
@@ -3367,10 +3367,10 @@ namespace Oxide.Plugins
 
             return new HitRecord(info);
         }
-
+ 
         private void DestroyAllUi()
         {
-            foreach (var check in BasePlayer.activePlayerList)
+            foreach (var check in BasePlayer.activePlayerList) 
             {
                 CuiHelper.DestroyUi(check, CheckLayer);
                 CuiHelper.DestroyUi(check, ReportLayer);
