@@ -330,7 +330,6 @@ namespace Oxide.Plugins
             public static class PluginPlayerAlertType
             {
                 public static readonly string join_with_ip_ban = "join_with_ip_ban";
-                public static readonly string dug_up_stash = "dug_up_stash";
                 public static readonly string custom_api = "custom_api";
             }
 
@@ -2804,46 +2803,6 @@ namespace Oxide.Plugins
         }
 
         #endregion
-
-        #endregion
-
-        #region Alert hooks
-
-        private void OnStashExposed(StashContainer stash, BasePlayer player)
-        {
-            if (stash == null)
-            {
-                return;
-            }
-
-            var team = player.Team;
-            if (team != null)
-            {
-                if (team.members.Contains(stash.OwnerID))
-                {
-                    return;
-                }
-            }
-
-            var owner = stash.OwnerID;
-
-            if (player.userID == stash.OwnerID || owner == 0)
-            {
-                return;
-            }
-
-            _RustAppEngine?.PlayerAlertsWorker?.SavePlayerAlert(new CourtApi.PluginPlayerAlertDto
-            {
-                type = CourtApi.PluginPlayerAlertType.dug_up_stash,
-                meta = new CourtApi.PluginPlayerAlertDugUpStashMeta
-                {
-                    owner_steam_id = owner.ToString(),
-                    position = player.transform.position.ToString(),
-                    square = MapHelper.PositionToString(player.transform.position),
-                    steam_id = player.UserIDString
-                }
-            });
-        }
 
         #endregion
 
