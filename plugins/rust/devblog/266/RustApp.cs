@@ -31,7 +31,7 @@ namespace Oxide.Plugins
         #region Variables
 
         // References to other plugin with API
-        [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting, TirifyGamePluginPirate, ExtRaidBlock;
+        [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting, TGPP, ExtRaidBlock;
 
         private static MetaInfo _MetaInfo = MetaInfo.Read();
         private static CheckInfo _CheckInfo = CheckInfo.Read();
@@ -3570,11 +3570,11 @@ namespace Oxide.Plugins
                 }
             }
 
-            if (_RustApp.TirifyGamePluginPirate != null && _RustApp.TirifyGamePluginPirate.IsLoaded)
+            if (_RustApp.TGPP != null && _RustApp.TGPP.IsLoaded)
             {
                 try
                 {
-                    var isSteam = (bool)_RustApp.TirifyGamePluginPirate.Call("IsSteam", connection);
+                    var isSteam = (bool)_RustApp.TGPP.Call("IsSteam", connection);
 
                     return !isSteam;
                 }
