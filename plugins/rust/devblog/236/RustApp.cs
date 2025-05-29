@@ -1863,7 +1863,7 @@ namespace Oxide.Plugins
                 ["Check.Text"] = "<color=#c6bdb4><size=32><b>YOU ARE SUMMONED FOR A CHECK-UP</b></size></color>\n<color=#958D85>You have <color=#c6bdb4><b>3 minutes</b></color> to send discord and accept the friend request.\nUse the <b><color=#c6bdb4>%COMMAND%</color></b> command to send discord.\n\nTo contact a moderator - use chat, not a command.</color>",
                 ["Chat.Direct.Toast"] = "Received a message from admin, look at the chat!",
                 ["UI.CheckMark"] = "Checked",
-                ["Paid.Announce.Clean"] = "Your complaint about \"%SUSPECT_NAME%\" has been checked!\n<size=12><color=#81C5F480>As a result of the check, no violations were found</color ></size>",
+                ["Paid.Announce.Clean"] = "Your complaint about \"%SUSPECT_NAME%\" has been checked!\n<size=12><color=#81C5F480>As a result of the check, no violations were found</color></size>",
                 ["Paid.Announce.Ban"] = "Your complaint about \"%SUSPECT_NAME%\" has been verified!\n<color=#F7D4D080><size=12>Player banned, reason: %REASON%</size></color>",
 
                 ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>DM from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
@@ -2228,7 +2228,7 @@ namespace Oxide.Plugins
 
         #endregion
 
-        #region DeleteEntity
+        #region DeleteEntity 
 
         private class QueueTaskDeleteEntityDto
         {
@@ -3303,7 +3303,7 @@ namespace Oxide.Plugins
 
         #region Plugin API
 
-    private void RA_DirectMessageHandler(string from, string to, string message)
+        private void RA_DirectMessageHandler(string from, string to, string message)
         {
             _RustAppEngine?.ChatWorker?.SaveChatMessage(new CourtApi.PluginChatMessageDto
             {
