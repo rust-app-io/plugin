@@ -2143,7 +2143,7 @@ namespace Oxide.Plugins
                 ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>DM from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
                 ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Message from Administration</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
 
-                ["System.Mute.Broadcast.Mute"] = "Player <color=#5af>%TARGET%</color> was muted.\n<size=12>- reason: %REASON%</size>",
+                ["System.Mute.Broadcast.Mute"] = "Player <color=#5af>%TARGET%</color> was muted.\n<size=12>- reason: %REASON%\n- duration: %TIME%</size>",
                 ["System.Mute.Message.Self"] = "You are muted!<size=12>\n- reason: %REASON%\n- left: %TIME%</size>",
 
                 ["System.Ban.Broadcast"] = "Player <color=#5af>%TARGET%</color> was banned.\n<size=12>- reason: %REASON%</size>",
@@ -2186,7 +2186,7 @@ namespace Oxide.Plugins
                 ["System.Chat.Direct"] = "<size=12><color=#ffffffB3>ЛС от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
                 ["System.Chat.Global"] = "<size=12><color=#ffffffB3>Сообщение от Администратора</color></size>\n<color=#AAFF55>%CLIENT_TAG%</color>: %MSG%",
 
-                ["System.Mute.Broadcast.Mute"] = "Игрок <color=#5af>%TARGET%</color> получил мут.\n<size=12>- причина: %REASON%</size>",
+                ["System.Mute.Broadcast.Mute"] = "Игрок <color=#5af>%TARGET%</color> получил мут.\n<size=12>- причина: %REASON%\n- срок: %TIME%</size>",
                 ["System.Mute.Message.Self"] = "Вы замьючены!<size=12>\n- причина: %REASON%\n- осталось: %TIME%</size>",
 
                 ["System.Ban.Broadcast"] = "Игрок <color=#5af>%TARGET%</color> был заблокирован.\n<size=12>- причина: %REASON%</size>",
