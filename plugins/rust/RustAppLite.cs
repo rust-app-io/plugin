@@ -12,7 +12,7 @@ using Oxide.Game.Rust.Libraries;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp Lite", "RustApp", "1.0.8")]
+  [Info("RustApp Lite", "RustApp", "1.0.9")]
   [Description("Get reports on players in Discord, using a nicely designed interface or F7")]
   public class RustAppLite : RustPlugin
   {
@@ -517,7 +517,7 @@ namespace Oxide.Plugins
 
     #region Hooks
 
-    private void OnPlayerReported(BasePlayer reporter, string targetName, string targetId, string subject, string message, string type)
+    private void OnPlayerReported(BasePlayer reporter, string targetId, string type, string subject, string message)
     {
       // TODO: Unsubscribed, if _Settings.report_ui_auto_parse is setted to false
 
@@ -823,4 +823,4 @@ namespace Oxide.Plugins
 
     #endregion
   }
-} 
+}
