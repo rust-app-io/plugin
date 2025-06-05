@@ -28,7 +28,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.3.1")]
+    [Info("RustApp", "RustApp.io", "2.4.0")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -2355,7 +2355,7 @@ namespace Oxide.Plugins
 
         #region Report hooks
 
-        private void OnPlayerReported(BasePlayer reporter, string targetName, string targetId, string subject, string message, string type)
+        private void OnPlayerReported(BasePlayer reporter, string targetId, string type, string subject, string message)
         {
             if (!_Settings.report_ui_auto_parse)
             {
