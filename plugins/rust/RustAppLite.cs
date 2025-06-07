@@ -12,7 +12,7 @@ using Oxide.Game.Rust.Libraries;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp Lite", "RustApp", "1.0.9")]
+  [Info("RustApp Lite", "RustApp", "1.0.10")]
   [Description("Get reports on players in Discord, using a nicely designed interface or F7")]
   public class RustAppLite : RustPlugin
   {
@@ -446,7 +446,7 @@ namespace Oxide.Plugins
 
       Log(
         "\nВы пользуетесь упрощённой версией плагина RustApp!\nВ полной версии есть:\n — статистика игрока\n — система вызова на проверку\n — бан система\n — история чата/команд\n — и многое другое на сайте: https://rustapp.io",
-        "\nYou are using the simplified version of the RustApp plugin!\nThe full version includes:\n — player statistics\n — inspection system\n — ban system\n — chat/team history\n — and much more on the website: https://rustapp.io"
+        "\nYou are using the simplified version of the RustApp plugin!\nThe full version includes:\n — player statistics\n — inspection system\n — ban/mute system\n — chat/team history\n — and much more on the website: https://rustapp.io"
       );
 
       if (!_Settings.report_ui_auto_parse)
@@ -517,7 +517,7 @@ namespace Oxide.Plugins
 
     #region Hooks
 
-    private void OnPlayerReported(BasePlayer reporter, string targetId, string type, string subject, string message)
+    private void OnPlayerReported(BasePlayer reporter, string targetName, string targetId, string subject, string message, string type)
     {
       // TODO: Unsubscribed, if _Settings.report_ui_auto_parse is setted to false
 
