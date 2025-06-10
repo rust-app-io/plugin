@@ -1,3 +1,3 @@
-Плагин точно работает на 266 дб, возможно будет работать на девблогах ниже/выше
+**⚠️ Внимание: Этот плагин больше не поддерживается.** Он предоставляется "как есть" — без гарантий актуальности или совместимости с текущими версиями. Используйте на свой страх и риск. Поддержка и обновления не предусмотрены.
 
-![image](https://github.com/user-attachments/assets/fb3e345b-e6af-48c6-a146-116b045f87ae)
+**⚠️ Warning: This plugin is no longer supported.** It is provided "as is" — without any guarantees of compatibility or future updates. Use at your own risk. No support or maintenance will be provided.
