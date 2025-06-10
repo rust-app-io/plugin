@@ -1,5 +1,3 @@
-Плагин точно работает на 236 дб, возможно будет работать на девблогах выше
+**⚠️ Внимание: Этот плагин больше не поддерживается.** Он предоставляется "как есть" — без гарантий актуальности или совместимости с текущими версиями. Используйте на свой страх и риск. Поддержка и обновления не предусмотрены.
 
-- не работает сохранений картинок с феерверков
-
-![image](https://github.com/user-attachments/assets/934f381e-16d6-4829-860b-10696d061ee7)
+**⚠️ Warning: This plugin is no longer supported.** It is provided "as is" — without any guarantees of compatibility or future updates. Use at your own risk. No support or maintenance will be provided.
