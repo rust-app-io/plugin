@@ -23,12 +23,12 @@ using Oxide.Core.Libraries;
 using Unity.Collections;
 using Color = System.Drawing.Color;
 using Graphics = System.Drawing.Graphics;
-using Pool = Facepunch.Pool;
+using Pool = Facepunch.Pool; 
 using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.4.1")]
+    [Info("RustApp", "RustApp.io", "2.5.0")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -296,6 +296,27 @@ namespace Oxide.Plugins
             public static StableRequest<object> SendWipe()
             {
                 return new StableRequest<object>($"{BaseUrl}/plugin/wipe", RequestMethod.POST, null);
+            }
+
+            #endregion
+
+            #region Sleeping bag
+
+            public class PluginSleepingBagDto
+            {
+                public string initiator_steam_id;
+                public string target_steam_id;
+                public string position;
+                public bool are_friends;
+            }
+
+            public class PluginSleepingBagBatchDto {
+                public List<PluginSleepingBagDto> sleeping_bags = new List<PluginSleepingBagDto>();
+            }
+
+            public static StableRequest<object> SleepingBagCreate(PluginSleepingBagBatchDto payload)
+            {
+                return new StableRequest<object>($"{BaseUrl}/plugin/sleeping-bag", RequestMethod.POST, payload);
             }
 
             #endregion
@@ -867,8 +888,9 @@ namespace Oxide.Plugins
             public ReportWorker? ReportWorker;
             public PlayerAlertsWorker? PlayerAlertsWorker;
             public SignageWorker? SignageWorker;
-            public KillsWorker? KillsWorker;
+            public KillsWorker? KillsWorker; 
             public PlayerMuteWorker? PlayerMuteWorker;
+            public SleepingBagWorker? SleepingBagWorker;
 
             private void Awake()
             {
@@ -930,6 +952,7 @@ namespace Oxide.Plugins
                 SignageWorker = ChildObjectToWorkers.AddComponent<SignageWorker>();
                 KillsWorker = ChildObjectToWorkers.AddComponent<KillsWorker>();
                 PlayerMuteWorker = ChildObjectToWorkers.AddComponent<PlayerMuteWorker>();
+                SleepingBagWorker = ChildObjectToWorkers.AddComponent<SleepingBagWorker>();
             }
 
             private void DestroySubWorkers()
@@ -1803,6 +1826,51 @@ namespace Oxide.Plugins
             }
         }
 
+        private class SleepingBagWorker : RustAppWorker
+        {
+            public List<CourtApi.PluginSleepingBagDto> SleepingBags = new List<CourtApi.PluginSleepingBagDto>();
+
+            private void Awake()
+            {
+                base.Awake(); 
+
+                InvokeRepeating(nameof(CycleSendSleepingBags), 5f, 5f);
+            }
+
+            public void AddSleepingBag(CourtApi.PluginSleepingBagDto data)
+            {
+                SleepingBags.Add(data);
+            }
+
+            private void CycleSendSleepingBags()
+            {
+                if (SleepingBags.Count == 0)
+                {
+                    return;
+                }
+
+                var payload = new CourtApi.PluginSleepingBagBatchDto { 
+                    sleeping_bags = Pool.Get<List<CourtApi.PluginSleepingBagDto>>() 
+                };
+
+                payload.sleeping_bags.AddRange(SleepingBags);
+                SleepingBags.Clear();
+
+                CourtApi.SleepingBagCreate(payload)
+                  .Execute(
+                    (_) =>
+                    {
+                        Pool.FreeUnmanaged(ref payload.sleeping_bags);
+                    },
+                    (_) =>
+                    {
+                        SleepingBags.AddRange(payload.sleeping_bags);
+                        Pool.FreeUnmanaged(ref payload.sleeping_bags);
+                    }
+                  );
+            }
+        }
+
         private class KillsWorker : RustAppWorker
         {
             public Dictionary<string, HitRecord> WoundedHits = new Dictionary<string, HitRecord>();
@@ -2351,6 +2419,21 @@ namespace Oxide.Plugins
                 is_team = channel == ConVar.Chat.ChatChannel.Team,
 
                 text = message
+            });
+        }
+
+        #endregion
+
+        #region Sleeping bag
+
+        private void CanAssignBed(BasePlayer player, SleepingBag bag, ulong targetPlayerId)
+        {
+            _RustAppEngine.SleepingBagWorker?.AddSleepingBag(new CourtApi.PluginSleepingBagDto {
+                initiator_steam_id = player.UserIDString,
+                target_steam_id = targetPlayerId.ToString(),
+
+                position = bag.transform.position.ToString(),
+                are_friends = player.Team?.members?.Contains(targetPlayerId) ?? false
             });
         }
 
