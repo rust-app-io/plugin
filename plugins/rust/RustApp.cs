@@ -2492,6 +2492,11 @@ namespace Oxide.Plugins
                 if (mute.chat_broadcast)
                 {
                     var target = BasePlayer.Find(mute.data.target_steam_id);
+                    if (target == null)
+                    {
+                        return true;
+                    }
+
                     foreach (var player in BasePlayer.activePlayerList)
                     {
                         var msg = _RustApp.lang.GetMessage("System.Mute.Broadcast.Mute", _RustApp, player.UserIDString).Replace("%TARGET%", target.displayName).Replace("%REASON%", mute.data.reason).Replace("%TIME%", mute.data.GetLeftTime());
@@ -3246,6 +3251,11 @@ namespace Oxide.Plugins
         private void DrawPlayerReportReasons(BasePlayer player, string targetId, string min, string max, bool leftAlign)
         {
             BasePlayer target = BasePlayer.Find(targetId) ?? BasePlayer.FindSleeping(targetId);
+            if (target == null) 
+            {
+                Puts($"Trying report not exists player: {targetId}");
+                return;
+            }
 
             Effect effect = new Effect("assets/prefabs/tools/detonator/effects/unpress.prefab", player, 0, new Vector3(), new Vector3());
             EffectNetwork.Send(effect, player.Connection);
@@ -3295,46 +3305,59 @@ namespace Oxide.Plugins
             container.Add(new CuiElement
             {
                 Parent = ReportLayer + $".T",
-                Components =
-        {
-            // Do not change in devblogs
-            new CuiRawImageComponent { SteamId = target.UserIDString, Sprite = "assets/icons/loading.png" },
-            new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
-        }
+                Components = {
+                    // Do not change in devblogs
+                    new CuiRawImageComponent { SteamId = target.UserIDString, Sprite = "assets/icons/loading.png" },
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
+                }
             });
 
-            var was_checked = _CheckInfo.LastChecks.ContainsKey(target.UserIDString) && CurrentTime() - _CheckInfo.LastChecks[target.UserIDString] < _Settings.report_ui_show_check_in * 24 * 60 * 60;
-            if (was_checked)
+            try
             {
-                container.Add(new CuiPanel
+                var was_checked = _CheckInfo.LastChecks.ContainsKey(target.UserIDString) && CurrentTime() - _CheckInfo.LastChecks[target.UserIDString] < _Settings.report_ui_show_check_in * 24 * 60 * 60;
+                if (was_checked)
                 {
-                    RectTransform = { AnchorMin = "0 1", AnchorMax = "1 1", OffsetMin = "5 -25", OffsetMax = "-5 -5" },
-                    Image = { Color = "0.239 0.568 0.294 1", Material = "assets/icons/greyout.mat" },
-                }, ReportLayer + $".T", ReportLayer + $".T.Recent");
+                    container.Add(new CuiPanel
+                    {
+                        RectTransform = { AnchorMin = "0 1", AnchorMax = "1 1", OffsetMin = "5 -25", OffsetMax = "-5 -5" },
+                        Image = { Color = "0.239 0.568 0.294 1", Material = "assets/icons/greyout.mat" },
+                    }, ReportLayer + $".T", ReportLayer + $".T.Recent");
 
-                container.Add(new CuiLabel
-                {
-                    RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "0 0", OffsetMax = "0 0" },
-                    Text = { Text = lang.GetMessage("UI.CheckMark", this, player.UserIDString), Align = TextAnchor.MiddleCenter, Font = "robotocondensed-regular.ttf", FontSize = 12, Color = "0.639 0.968 0.694 1" }
-                }, ReportLayer + $".T.Recent");
+                    container.Add(new CuiLabel
+                    {
+                        RectTransform = { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMin = "0 0", OffsetMax = "0 0" },
+                        Text = { Text = lang.GetMessage("UI.CheckMark", this, player.UserIDString), Align = TextAnchor.MiddleCenter, Font = "robotocondensed-regular.ttf", FontSize = 12, Color = "0.639 0.968 0.694 1" }
+                    }, ReportLayer + $".T.Recent");
+                }
+            }
+            catch
+            {
+                Puts($"Failed to apply was_checked mark for {targetId}");
             }
 
-            for (var i = 0; i < _Settings.report_ui_reasons.Count; i++)
+            try
             {
-                var offXMin = (20 + (i * 5)) + i * 80;
-                var offXMax = 20 + (i * 5) + (i + 1) * 80;
-
-                var sendReportCommand = UICommand((player, args, input) =>
+                for (var i = 0; i < _Settings.report_ui_reasons.Count; i++)
                 {
-                    SendReport(player, args.target_id, args.reason);
-                }, new { target_id = target.UserIDString, reason = _Settings.report_ui_reasons[i] }, "sendReportToPlayer");
+                    var offXMin = (20 + (i * 5)) + i * 80;
+                    var offXMax = 20 + (i * 5) + (i + 1) * 80;
 
-                container.Add(new CuiButton()
-                {
-                    RectTransform = { AnchorMin = $"{(leftAlign ? 0 : 1)} 0", AnchorMax = $"{(leftAlign ? 0 : 1)} 0", OffsetMin = $"{(leftAlign ? -offXMax : offXMin)} 15", OffsetMax = $"{(leftAlign ? -offXMin : offXMax)} 45" },
-                    Button = { FadeIn = 0.4f + i * 0.2f, Color = HexToRustFormat("#D0C6BD4D"), Command = sendReportCommand },
-                    Text = { FadeIn = 0.4f + i * 0.2f, Text = $"{_Settings.report_ui_reasons[i]}", Align = TextAnchor.MiddleCenter, Color = HexToRustFormat("#D0C6BD"), Font = "robotocondensed-bold.ttf", FontSize = 16 }
-                }, ReportLayer + $".T");
+                    var sendReportCommand = UICommand((player, args, input) =>
+                    {
+                        SendReport(player, args.target_id, args.reason);
+                    }, new { target_id = target.UserIDString, reason = _Settings.report_ui_reasons[i] }, "sendReportToPlayer");
+
+                    container.Add(new CuiButton()
+                    {
+                        RectTransform = { AnchorMin = $"{(leftAlign ? 0 : 1)} 0", AnchorMax = $"{(leftAlign ? 0 : 1)} 0", OffsetMin = $"{(leftAlign ? -offXMax : offXMin)} 15", OffsetMax = $"{(leftAlign ? -offXMin : offXMax)} 45" },
+                        Button = { FadeIn = 0.4f + i * 0.2f, Color = HexToRustFormat("#D0C6BD4D"), Command = sendReportCommand },
+                        Text = { FadeIn = 0.4f + i * 0.2f, Text = $"{_Settings.report_ui_reasons[i]}", Align = TextAnchor.MiddleCenter, Color = HexToRustFormat("#D0C6BD"), Font = "robotocondensed-bold.ttf", FontSize = 16 }
+                    }, ReportLayer + $".T");
+                }
+            }
+            catch
+            {
+                Puts($"Failed to add report reasons for {targetId}");
             }
 
             CuiHelper.AddUi(player, container);
