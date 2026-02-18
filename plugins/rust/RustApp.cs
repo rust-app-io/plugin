@@ -10,7 +10,7 @@ using System.Linq;
 using UnityEngine;
 using UnityEngine.Networking;
 using Newtonsoft.Json.Linq;
-using System.Globalization;
+using System.Globalization; 
 using System.IO;
 using ConVar;
 using Rust;
@@ -28,7 +28,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.5.1")]
+    [Info("RustApp", "RustApp.io", "2.5.0")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -128,10 +128,10 @@ namespace Oxide.Plugins
             #region StateUpdate
 
             public class PluginStatePlayerMetaDto
-            {
+            { 
                 public Dictionary<string, string> tags = new Dictionary<string, string>();
                 public Dictionary<string, string> fields = new Dictionary<string, string>();
-            }
+            } 
 
             public static Dictionary<ulong, PluginStatePlayerDto> players = new Dictionary<ulong, PluginStatePlayerDto>();
 
