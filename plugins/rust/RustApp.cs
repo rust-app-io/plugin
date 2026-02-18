@@ -28,7 +28,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.5.0")]
+    [Info("RustApp", "RustApp.io", "2.5.1")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -48,7 +48,7 @@ namespace Oxide.Plugins
 
         private static JsonSerializer _jsonSerializer = JsonSerializer.CreateDefault(null);
 
-        private static (string name, string value)[] _apiHeaders = Array.Empty<(string, string)>();
+        private static (string name, string value)[] _ApiHeaders = Array.Empty<(string, string)>();
 
         #endregion
 
@@ -929,7 +929,7 @@ namespace Oxide.Plugins
 
             public void SetupHeaders()
             {
-                _apiHeaders = new[]
+                _ApiHeaders = new[]
                 {
                     ("x-plugin-auth", _MetaInfo?.Value ?? ""),
                     ("x-plugin-version", _RustApp.Version.ToString()),
@@ -2428,7 +2428,7 @@ namespace Oxide.Plugins
 
         private void CanAssignBed(BasePlayer player, SleepingBag bag, ulong targetPlayerId)
         {
-            _RustAppEngine.SleepingBagWorker?.AddSleepingBag(new CourtApi.PluginSleepingBagDto {
+            _RustAppEngine?.SleepingBagWorker?.AddSleepingBag(new CourtApi.PluginSleepingBagDto {
                 initiator_steam_id = player.UserIDString,
                 target_steam_id = targetPlayerId.ToString(),
 
@@ -3496,9 +3496,8 @@ namespace Oxide.Plugins
                 return;
             }
 
-            BasePlayer target = BasePlayer.Find(targetId) ?? BasePlayer.FindSleeping(targetId);
+            RA_ReportSend(initiator.UserIDString, targetId, reason, "");
 
-            RA_ReportSend(initiator.UserIDString, target.UserIDString, reason, "");
             CuiHelper.DestroyUi(initiator, ReportLayer);
 
             SoundToast(initiator, lang.GetMessage("Sent", this, initiator.UserIDString), SoundToastType.Info);
@@ -3544,6 +3543,15 @@ namespace Oxide.Plugins
         private void RustAppEngineDestroy()
         {
             UnityEngine.Object.Destroy(_RustAppEngine?.gameObject);
+            
+            // Clean-up stale static references
+            _RustApp = null;
+            _MetaInfo = null;
+            _CheckInfo = null;
+            _Settings = null;
+            _ApiHeaders = null;
+
+            CourtApi.players = null;
         }
 
         private void BanCreate(string steamId, CourtApi.PluginBanCreatePayload payload)
@@ -3765,7 +3773,7 @@ namespace Oxide.Plugins
                 request.downloadHandler = new DownloadHandlerBuffer();
                 request.timeout = 10;
 
-                foreach (var header in _apiHeaders)
+                foreach (var header in _ApiHeaders)
                 {
                     request.SetRequestHeader(header.name, header.value);
                 }
