@@ -1142,7 +1142,7 @@ namespace Oxide.Plugins
 
                         if (_RustAppEngine?.StateWorker != null)
                         {
-                            _RustAppEngine?.StateWorker?.SendUpdate(true, () => saveData());
+                            _RustAppEngine?.StateWorker?.SendUpdate(() => saveData());
                         }
                         else
                         {
@@ -1180,26 +1180,16 @@ namespace Oxide.Plugins
 
             public void CycleSendUpdate()
             {
-                SendUpdate(false);
+                SendUpdate();
             }
 
-            public void SendUpdate(bool unload = false, Action? onFinished = null)
+            public void SendUpdate(Action? onFinished = null)
             {
                 var players = Pool.Get<List<CourtApi.PluginStatePlayerDto>>();
-                if (!unload)
-                {
-                    CollectPlayers(players);
-                }
+                CollectPlayers(players);
 
                 var disconnected = Pool.Get<Dictionary<string, string>>();
-                if (unload)
-                {
-                    CollectFakeDisconnects(disconnected);
-                }
-                else
-                {
-                    ResurrectDictionary(DisconnectReasons, disconnected);
-                }
+                ResurrectDictionary(DisconnectReasons, disconnected);
 
                 var teamChanges = Pool.Get<Dictionary<string, string>>();
                 ResurrectDictionary(TeamChanges, teamChanges);
@@ -1282,8 +1272,6 @@ namespace Oxide.Plugins
             public void OnDestroy()
             {
                 base.OnDestroy();
-
-                SendUpdate(true);
             }
         }
 
