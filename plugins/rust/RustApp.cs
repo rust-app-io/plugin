@@ -28,7 +28,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.5.1")]
+    [Info("RustApp", "RustApp.io", "2.5.2")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -2122,6 +2122,14 @@ namespace Oxide.Plugins
         #region Hooks
 
         #region System hooks
+
+        private void Init()
+        {
+            _MetaInfo = MetaInfo.Read();
+            _CheckInfo = CheckInfo.Read();
+
+            CourtApi.players = new Dictionary<ulong, CourtApi.PluginStatePlayerDto>();
+        }
 
         private void OnServerInitialized()
         {
