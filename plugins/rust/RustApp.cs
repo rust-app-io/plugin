@@ -1,4 +1,4 @@
-﻿using Newtonsoft.Json;
+using Newtonsoft.Json;
 using Oxide.Core;
 using Oxide.Core.Plugins;
 using System;
@@ -28,7 +28,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.5.2")]
+    [Info("RustApp", "RustApp.io", "2.5.3")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -2938,9 +2938,11 @@ namespace Oxide.Plugins
                 }
 
                 InitiatorPlayer = info.InitiatorPlayer;
-                Weapon = info.Weapon?.name ?? info.WeaponPrefab?.name ?? "unknown";
+
                 Distance = info.ProjectileDistance;
                 IsHeadshot = info.isHeadshot;
+                
+                Weapon = GetName(info.Weapon) ?? GetName(info.WeaponPrefab) ?? "unknown";
             }
         }
 
@@ -3391,6 +3393,11 @@ namespace Oxide.Plugins
         #endregion
 
         #region Methods
+
+        private static string GetName(UnityEngine.Object obj)
+        {
+            return obj == null ? null : obj?.name;
+        }
 
         private static List<CourtApi.CombatLogEventDto> GetCorrectCombatlog(ulong target)
         {
