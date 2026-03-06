@@ -1,29 +1,29 @@
-using Newtonsoft.Json;
-using Oxide.Core;
-using Oxide.Core.Plugins;
-using System;
+﻿using System;
 using System.Collections;
 using System.Collections.Generic;
-using JetBrains.Annotations;
-using Oxide.Game.Rust.Cui;
-using System.Linq;
-using UnityEngine;
-using UnityEngine.Networking;
-using Newtonsoft.Json.Linq;
-using System.Globalization; 
-using System.IO;
-using ConVar;
-using Rust;
-using Steamworks;
-using Network;
 using System.Drawing;
 using System.Drawing.Imaging;
+using System.Globalization;
+using System.IO;
+using System.Linq;
 using System.Text;
+using ConVar;
+using JetBrains.Annotations;
+using Network;
+using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
+using Oxide.Core;
 using Oxide.Core.Libraries;
+using Oxide.Core.Plugins;
+using Oxide.Game.Rust.Cui;
+using Rust;
+using Steamworks;
 using Unity.Collections;
+using UnityEngine;
+using UnityEngine.Networking;
 using Color = System.Drawing.Color;
 using Graphics = System.Drawing.Graphics;
-using Pool = Facepunch.Pool; 
+using Pool = Facepunch.Pool;
 using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
@@ -128,10 +128,10 @@ namespace Oxide.Plugins
             #region StateUpdate
 
             public class PluginStatePlayerMetaDto
-            { 
+            {
                 public Dictionary<string, string> tags = new Dictionary<string, string>();
                 public Dictionary<string, string> fields = new Dictionary<string, string>();
-            } 
+            }
 
             public static Dictionary<ulong, PluginStatePlayerDto> players = new Dictionary<ulong, PluginStatePlayerDto>();
 
@@ -310,7 +310,8 @@ namespace Oxide.Plugins
                 public bool are_friends;
             }
 
-            public class PluginSleepingBagBatchDto {
+            public class PluginSleepingBagBatchDto
+            {
                 public List<PluginSleepingBagDto> sleeping_bags = new List<PluginSleepingBagDto>();
             }
 
@@ -888,7 +889,7 @@ namespace Oxide.Plugins
             public ReportWorker? ReportWorker;
             public PlayerAlertsWorker? PlayerAlertsWorker;
             public SignageWorker? SignageWorker;
-            public KillsWorker? KillsWorker; 
+            public KillsWorker? KillsWorker;
             public PlayerMuteWorker? PlayerMuteWorker;
             public SleepingBagWorker? SleepingBagWorker;
 
@@ -1010,73 +1011,69 @@ namespace Oxide.Plugins
                     }
                 };
 
-                CourtApi.GetServerInfo().Execute(
-                  (_) =>
-                  {
-                      onSuccess();
-                      return;
-                  },
-                  (err) =>
-                  {
-                      // secret = ""
-                      var codeError1 = Api.ErrorContains(err, "some of required headers are wrong or missing");
-                      // secret = "123"
-                      var codeError2 = Api.ErrorContains(err, "authorization secret is corrupted");
-                      // server.ip != this.ip || server.port != this.port
-                      var codeError3 = Api.ErrorContains(err, "Check server configuration, required");
+                CourtApi.GetServerInfo().Execute(() =>
+                {
+                    onSuccess();
+                    return;
+                },
+                (err) =>
+                {
+                    // secret = ""
+                    var codeError1 = Api.ErrorContains(err, "some of required headers are wrong or missing");
+                    // secret = "123"
+                    var codeError2 = Api.ErrorContains(err, "authorization secret is corrupted");
+                    // server.ip != this.ip || server.port != this.port
+                    var codeError3 = Api.ErrorContains(err, "Check server configuration, required");
 
-                      if (codeError1 || codeError2 || codeError3)
-                      {
-                          if (IsAuthed != false)
-                          {
-                              Error("Your server is not paired with our network, follow instructions to pair server:");
-                              Error("1. If you already start pairing, enter 'ra.pair %code%' which you get from our site");
-                              Error("2. Open servers page, press 'connect server', and enter command which you get on it");
-                          }
+                    if (codeError1 || codeError2 || codeError3)
+                    {
+                        if (IsAuthed != false)
+                        {
+                            Error("Your server is not paired with our network, follow instructions to pair server:");
+                            Error("1. If you already start pairing, enter 'ra.pair %code%' which you get from our site");
+                            Error("2. Open servers page, press 'connect server', and enter command which you get on it");
+                        }
 
-                          onError();
-                          return;
-                      }
+                        onError();
+                        return;
+                    }
 
-                      // version < minVersion
-                      var versionError1 = Api.ErrorContains(err, " is lower than minimal: ");
-                      // if we block some version
-                      var versionError2 = Api.ErrorContains(err, "This version contains serious bug, please update plugin");
+                    // version < minVersion
+                    var versionError1 = Api.ErrorContains(err, " is lower than minimal: ");
+                    // if we block some version
+                    var versionError2 = Api.ErrorContains(err, "This version contains serious bug, please update plugin");
 
-                      if (versionError1 || versionError2)
-                      {
-                          Error("Your plugin is outdated, you should download new version!");
-                          Error("1. Open servers page, press 'update' near server to download new version, then just replace plugin");
-                          Error("2. If you don't have 'update' button, press settings icon and choose 'download plugin' button");
+                    if (versionError1 || versionError2)
+                    {
+                        Error("Your plugin is outdated, you should download new version!");
+                        Error("1. Open servers page, press 'update' near server to download new version, then just replace plugin");
+                        Error("2. If you don't have 'update' button, press settings icon and choose 'download plugin' button");
 
-                          onError();
-                          return;
-                      }
+                        onError();
+                        return;
+                    }
 
-                      // if tariff finished/balance zero
-                      var paymentError1 = Api.ErrorContains(err, "У вас кончились средства на балансе проекта, пополните на");
-                      // If some limits broken
-                      var paymentError2 = Api.ErrorContains(err, "Вы превысили лимиты по");
+                    // if tariff finished/balance zero
+                    var paymentError1 = Api.ErrorContains(err, "У вас кончились средства на балансе проекта, пополните на");
+                    // If some limits broken
+                    var paymentError2 = Api.ErrorContains(err, "Вы превысили лимиты по");
 
-                      if (paymentError1)
-                      {
-                          Error("Your balance is not enough to continue working with our service, top-up it");
+                    if (paymentError1)
+                    {
+                        Error("Your balance is not enough to continue working with our service, top-up it");
+                        onError();
+                        return;
+                    }
 
-                          onError();
-                          return;
-                      }
+                    if (paymentError2)
+                    {
+                        Error("You have reached your limits, please upgrade your plan");
+                        onError();
+                        return;
+                    }
 
-                      if (paymentError2)
-                      {
-                          Error("You have reached your limits, please upgrade your plan");
-
-                          onError();
-                          return;
-                      }
-
-                      Debug($"Unknown exception in auth: {err}");
-                  }
-                );
+                    Debug($"Unknown exception in auth: {err}");
+                });
             }
         }
 
@@ -1088,81 +1085,75 @@ namespace Oxide.Plugins
             {
                 EnteredCode = code;
 
-                CourtApi.SendPairDetails(EnteredCode)
-                  .Execute(
-                    (_) =>
+                CourtApi.SendPairDetails(EnteredCode).Execute(() =>
+                {
+                    InvokeRepeating(nameof(WaitPairFinish), 0f, 1f);
+                },
+                (err) =>
+                {
+                    if (Api.ErrorContains(err, "code not exists"))
                     {
-                        InvokeRepeating(nameof(WaitPairFinish), 0f, 1f);
-                    },
-                    (err) =>
-                    {
-                        if (Api.ErrorContains(err, "code not exists"))
-                        {
-                            Error("Pairing failed: requested code not exists");
-                        }
-                        else if (Api.ErrorContains(err, "pairing prevented from abuse"))
-                        {
-                            Error("Pairing failed: seems this server was already connected to another project, please contact TG: @rustapp_help if you think, that it is wrong");
-                        }
-                        else
-                        {
-                            Debug($"Pairing failed: unknown exception {err}");
-                        }
-
-                        Destroy(this);
+                        Error("Pairing failed: requested code not exists");
                     }
-                  );
+                    else if (Api.ErrorContains(err, "pairing prevented from abuse"))
+                    {
+                        Error("Pairing failed: seems this server was already connected to another project, please contact TG: @rustapp_help if you think, that it is wrong");
+                    }
+                    else
+                    {
+                        Debug($"Pairing failed: unknown exception {err}");
+                    }
+
+                    Destroy(this);
+                });
             }
 
             public void WaitPairFinish()
             {
-                CourtApi.SendPairDetails(EnteredCode)
-                  .Execute(
-                    (data) =>
+                CourtApi.SendPairDetails(EnteredCode).Execute((data) =>
+                {
+                    if (data?.token == null || data.token.Length == 0)
                     {
-                        if (data.token == null || data.token.Length == 0)
-                        {
-                            Log("Complete pairing on site...");
-                            return;
-                        }
+                        Log("Complete pairing on site...");
+                        return;
+                    }
 
-                        Action saveData = () =>
-                        {
-                            MetaInfo.write(new MetaInfo { Value = data.token });
-
-                            _RustApp.timer.Once(1f, () => _RustAppEngine?.AuthWorker?.CheckAuthStatus());
-
-                            _MetaInfo = MetaInfo.Read();
-                            _RustAppEngine.SetupHeaders();
-
-                            Log("Pairing completed, reloading...");
-
-                            Destroy(this);
-                        };
-
-                        if (_RustAppEngine?.StateWorker != null)
-                        {
-                            _RustAppEngine?.StateWorker?.SendUpdate(() => saveData());
-                        }
-                        else
-                        {
-                            saveData();
-                        }
-                    },
-                    (err) =>
+                    Action saveData = () =>
                     {
-                        if (Api.ErrorContains(err, "code not exists"))
-                        {
-                            Error("Pairing failed: seems you closed modal on site");
-                        }
-                        else
-                        {
-                            Error($"Pairing failed: unknown exception {err}");
-                        }
+                        MetaInfo.write(new MetaInfo { Value = data.token });
+
+                        _RustApp.timer.Once(1f, () => _RustAppEngine?.AuthWorker?.CheckAuthStatus());
+
+                        _MetaInfo = MetaInfo.Read();
+                        _RustAppEngine.SetupHeaders();
+
+                        Log("Pairing completed, reloading...");
 
                         Destroy(this);
+                    };
+
+                    if (_RustAppEngine?.StateWorker != null)
+                    {
+                        _RustAppEngine?.StateWorker?.SendUpdate(() => saveData());
                     }
-                  );
+                    else
+                    {
+                        saveData();
+                    }
+                },
+                (err) =>
+                {
+                    if (Api.ErrorContains(err, "code not exists"))
+                    {
+                        Error("Pairing failed: seems you closed modal on site");
+                    }
+                    else
+                    {
+                        Error($"Pairing failed: unknown exception {err}");
+                    }
+
+                    Destroy(this);
+                });
             }
         }
 
@@ -1202,24 +1193,22 @@ namespace Oxide.Plugins
                     players = players,
                     disconnected = disconnected,
                     team_changes = teamChanges
-                }).Execute(
-                    (_) =>
-                    {
-                        Pool.FreeUnmanaged(ref disconnected);
-                        Pool.FreeUnmanaged(ref teamChanges);
-                        Trace("State was sent successfull");
-                        onFinished?.Invoke();
-                    },
-                    (err) =>
-                    {
-                        onFinished?.Invoke();
-                        Debug($"State sent error: {err}");
-                        ResurrectDictionary(disconnected, DisconnectReasons);
-                        Pool.FreeUnmanaged(ref disconnected);
-                        ResurrectDictionary(teamChanges, TeamChanges);
-                        Pool.FreeUnmanaged(ref teamChanges);
-                    }
-                  );
+                }).Execute(() =>
+                {
+                    Pool.FreeUnmanaged(ref disconnected);
+                    Pool.FreeUnmanaged(ref teamChanges);
+                    Trace("State was sent successfull");
+                    onFinished?.Invoke();
+                },
+                (err) =>
+                {
+                    onFinished?.Invoke();
+                    Debug($"State sent error: {err}");
+                    ResurrectDictionary(disconnected, DisconnectReasons);
+                    Pool.FreeUnmanaged(ref disconnected);
+                    ResurrectDictionary(teamChanges, TeamChanges);
+                    Pool.FreeUnmanaged(ref teamChanges);
+                });
 
                 Pool.FreeUnmanaged(ref players);
             }
@@ -1359,19 +1348,17 @@ namespace Oxide.Plugins
 
             private void GetQueueTasks()
             {
-                QueueApi.GetQueueTasks()
-                  .Execute(
-                    CallQueueTasks,
-                    (error) =>
-                    {
-                        Debug($"Queue retreive failed {error}");
-                    }
-                  );
+                QueueApi.GetQueueTasks().Execute(
+                CallQueueTasks,
+                (error) =>
+                {
+                    Debug($"Queue retreive failed {error}");
+                });
             }
 
             private void CallQueueTasks(List<QueueApi.QueueTaskResponse> queuesTasks)
             {
-                if (queuesTasks.Count == 0)
+                if (queuesTasks == null || queuesTasks.Count == 0)
                 {
                     return;
                 }
@@ -1416,21 +1403,16 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                QueueApi.ProcessQueueTasks(new QueueApi.QueueTaskResponsePayload { data = queueResponses })
-                  .Execute(
-                    (_) =>
-                    {
-                        QueueProcessedIds.Clear();
-
-                        Trace("Ответ по очередям успешно доставлен");
-                    },
-                    (err) =>
-                    {
-                        QueueProcessedIds.Clear();
-
-                        Debug($"Failed to process queue: {err}");
-                    }
-                  );
+                QueueApi.ProcessQueueTasks(new QueueApi.QueueTaskResponsePayload { data = queueResponses }).Execute(() =>
+                {
+                    QueueProcessedIds.Clear();
+                    Trace("Ответ по очередям успешно доставлен");
+                },
+                (err) =>
+                {
+                    QueueProcessedIds.Clear();
+                    Debug($"Failed to process queue: {err}");
+                });
             }
 
             private string ConvertToRustAppQueueFormat(string input, bool isInternalCall)
@@ -1550,27 +1532,22 @@ namespace Oxide.Plugins
                 payload.players.AddRange(BanUpdateQueue);
                 BanUpdateQueue.Clear();
 
-                BanApi.BanGetBatch(payload)
-                  .Execute(
-                    (data) =>
+                BanApi.BanGetBatch(payload).Execute((data) =>
+                {
+                    payload.players.ForEach(originalPlayer =>
                     {
-                        payload.players.ForEach(originalPlayer =>
-                        {
-                            var exists = data.entries?.Find(banPlayer => banPlayer.steam_id == originalPlayer.steam_id);
-
-                            var ban = exists?.bans?.FirstOrDefault(v => v.computed_is_active);
-
-                            callback.Invoke(originalPlayer.steam_id, ban);
-                        });
-                        Pool.FreeUnmanaged(ref payload.players);
-                    },
-                    (_) =>
-                    {
-                        Error($"Failed to process ban checks ({payload.players.Count}), retrying...");
-                        BanUpdateQueue.AddRange(payload.players);
-                        Pool.FreeUnmanaged(ref payload.players);
-                    }
-                  );
+                        var exists = data?.entries?.Find(banPlayer => banPlayer.steam_id == originalPlayer.steam_id);
+                        var ban = exists?.bans?.FirstOrDefault(v => v.computed_is_active);
+                        callback.Invoke(originalPlayer.steam_id, ban);
+                    });
+                    Pool.FreeUnmanaged(ref payload.players);
+                },
+                (_) =>
+                {
+                    Error($"Failed to process ban checks ({payload.players.Count}), retrying...");
+                    BanUpdateQueue.AddRange(payload.players);
+                    Pool.FreeUnmanaged(ref payload.players);
+                });
             }
 
             public void ReactOnDirectBan(string steamId, BanApi.BanDto ban)
@@ -1647,18 +1624,15 @@ namespace Oxide.Plugins
                 payload.messages.AddRange(QueueMessages);
                 QueueMessages.Clear();
 
-                CourtApi.SendChatMessages(payload)
-                  .Execute(
-                    (_) =>
-                    {
-                        Pool.FreeUnmanaged(ref payload.messages);
-                    },
-                    (_) =>
-                    {
-                        QueueMessages.AddRange(payload.messages);
-                        Pool.FreeUnmanaged(ref payload.messages);
-                    }
-                  );
+                CourtApi.SendChatMessages(payload).Execute(() =>
+                {
+                    Pool.FreeUnmanaged(ref payload.messages);
+                },
+                (_) =>
+                {
+                    QueueMessages.AddRange(payload.messages);
+                    Pool.FreeUnmanaged(ref payload.messages);
+                });
             }
         }
 
@@ -1690,18 +1664,15 @@ namespace Oxide.Plugins
                 payload.reports.AddRange(QueueReportSend);
                 QueueReportSend.Clear();
 
-                CourtApi.SendReports(payload)
-                  .Execute(
-                    (_) =>
-                    {
-                        Pool.FreeUnmanaged(ref payload.reports);
-                    },
-                    (_) =>
-                    {
-                        QueueReportSend.AddRange(payload.reports);
-                        Pool.FreeUnmanaged(ref payload.reports);
-                    }
-                  );
+                CourtApi.SendReports(payload).Execute(() =>
+                {
+                    Pool.FreeUnmanaged(ref payload.reports);
+                },
+                (_) =>
+                {
+                    QueueReportSend.AddRange(payload.reports);
+                    Pool.FreeUnmanaged(ref payload.reports);
+                });
             }
         }
 
@@ -1732,18 +1703,15 @@ namespace Oxide.Plugins
                 alerts.AddRange(PlayerAlertQueue);
                 PlayerAlertQueue.Clear();
 
-                CourtApi.CreatePlayerAlerts(alerts)
-                  .Execute(
-                    (_) =>
-                    {
-                        Pool.FreeUnmanaged(ref alerts);
-                    },
-                    (_) =>
-                    {
-                        PlayerAlertQueue.AddRange(alerts);
-                        Pool.FreeUnmanaged(ref alerts);
-                    }
-                  );
+                CourtApi.CreatePlayerAlerts(alerts).Execute(() =>
+                {
+                    Pool.FreeUnmanaged(ref alerts);
+                },
+                (_) =>
+                {
+                    PlayerAlertQueue.AddRange(alerts);
+                    Pool.FreeUnmanaged(ref alerts);
+                });
             }
         }
 
@@ -1799,18 +1767,15 @@ namespace Oxide.Plugins
                 payload.net_ids.AddRange(DestroyedSignagesQueue);
                 DestroyedSignagesQueue.Clear();
 
-                CourtApi.SendSignageDestroyed(payload)
-                  .Execute(
-                    (_) =>
-                    {
-                        Pool.FreeUnmanaged(ref payload.net_ids);
-                    },
-                    (_) =>
-                    {
-                        DestroyedSignagesQueue.AddRange(payload.net_ids);
-                        Pool.FreeUnmanaged(ref payload.net_ids);
-                    }
-                  );
+                CourtApi.SendSignageDestroyed(payload).Execute(() =>
+                {
+                    Pool.FreeUnmanaged(ref payload.net_ids);
+                },
+                (_) =>
+                {
+                    DestroyedSignagesQueue.AddRange(payload.net_ids);
+                    Pool.FreeUnmanaged(ref payload.net_ids);
+                });
             }
         }
 
@@ -1820,7 +1785,7 @@ namespace Oxide.Plugins
 
             private void Awake()
             {
-                base.Awake(); 
+                base.Awake();
 
                 InvokeRepeating(nameof(CycleSendSleepingBags), 5f, 5f);
             }
@@ -1837,25 +1802,23 @@ namespace Oxide.Plugins
                     return;
                 }
 
-                var payload = new CourtApi.PluginSleepingBagBatchDto { 
-                    sleeping_bags = Pool.Get<List<CourtApi.PluginSleepingBagDto>>() 
+                var payload = new CourtApi.PluginSleepingBagBatchDto
+                {
+                    sleeping_bags = Pool.Get<List<CourtApi.PluginSleepingBagDto>>()
                 };
 
                 payload.sleeping_bags.AddRange(SleepingBags);
                 SleepingBags.Clear();
 
-                CourtApi.SleepingBagCreate(payload)
-                  .Execute(
-                    (_) =>
-                    {
-                        Pool.FreeUnmanaged(ref payload.sleeping_bags);
-                    },
-                    (_) =>
-                    {
-                        SleepingBags.AddRange(payload.sleeping_bags);
-                        Pool.FreeUnmanaged(ref payload.sleeping_bags);
-                    }
-                  );
+                CourtApi.SleepingBagCreate(payload).Execute(() =>
+                {
+                    Pool.FreeUnmanaged(ref payload.sleeping_bags);
+                },
+                (_) =>
+                {
+                    SleepingBags.AddRange(payload.sleeping_bags);
+                    Pool.FreeUnmanaged(ref payload.sleeping_bags);
+                });
             }
         }
 
@@ -1882,22 +1845,20 @@ namespace Oxide.Plugins
                 {
                     return;
                 }
+
                 var payload = new CourtApi.PluginKillsDto { kills = Pool.Get<List<CourtApi.PluginKillEntryDto>>() };
                 payload.kills.AddRange(KillsQueue);
                 KillsQueue.Clear();
 
-                CourtApi.SendKills(payload)
-                  .Execute(
-                    (_) =>
-                    {
-                        Pool.FreeUnmanaged(ref payload.kills);
-                    },
-                    (_) =>
-                    {
-                        KillsQueue.AddRange(payload.kills);
-                        Pool.FreeUnmanaged(ref payload.kills);
-                    }
-                  );
+                CourtApi.SendKills(payload).Execute(() =>
+                {
+                    Pool.FreeUnmanaged(ref payload.kills);
+                },
+                (_) =>
+                {
+                    KillsQueue.AddRange(payload.kills);
+                    Pool.FreeUnmanaged(ref payload.kills);
+                });
             }
         }
 
@@ -1916,17 +1877,12 @@ namespace Oxide.Plugins
             {
                 var request = CourtApi.PlayerMuteGetActive();
 
-                request.Execute(
-                    (data) =>
-                    {
-                        PlayerMutes.Clear();
-
-                        data.data.ForEach(v => AddPlayerMute(v));
-                    },
-                    (err) =>
-                    {
-                    }
-                );
+                request.Execute((data) =>
+                {
+                    PlayerMutes.Clear();
+                    data?.data?.ForEach(v => AddPlayerMute(v));
+                },
+                (_) => { });
             }
 
             public void AddPlayerMute(CourtApi.PlayerMuteDto playerMuteDto)
@@ -1976,15 +1932,12 @@ namespace Oxide.Plugins
                 return;
             }
 
-            CourtApi.SendContact(player.UserIDString, String.Join(" ", args))
-              .Execute(
-                (_) =>
-                {
-                    SendMessage(player, lang.GetMessage("Contact.Sent", this, player.UserIDString) + $"<color=#8393cd> {String.Join(" ", args)}</color>");
-                    SendMessage(player, lang.GetMessage("Contact.SentWait", this, player.UserIDString));
-                },
-                (_) => { }
-              );
+            CourtApi.SendContact(player.UserIDString, string.Join(" ", args)).Execute(() =>
+            {
+                SendMessage(player, lang.GetMessage("Contact.Sent", this, player.UserIDString) + $"<color=#8393cd> {string.Join(" ", args)}</color>");
+                SendMessage(player, lang.GetMessage("Contact.SentWait", this, player.UserIDString));
+            },
+            (_) => { });
         }
 
         private void CmdChatReportInterface(BasePlayer player)
@@ -2424,7 +2377,8 @@ namespace Oxide.Plugins
 
         private void CanAssignBed(BasePlayer player, SleepingBag bag, ulong targetPlayerId)
         {
-            _RustAppEngine?.SleepingBagWorker?.AddSleepingBag(new CourtApi.PluginSleepingBagDto {
+            _RustAppEngine?.SleepingBagWorker?.AddSleepingBag(new CourtApi.PluginSleepingBagDto
+            {
                 initiator_steam_id = player.UserIDString,
                 target_steam_id = targetPlayerId.ToString(),
 
@@ -2941,7 +2895,7 @@ namespace Oxide.Plugins
 
                 Distance = info.ProjectileDistance;
                 IsHeadshot = info.isHeadshot;
-                
+
                 Weapon = GetName(info.Weapon) ?? GetName(info.WeaponPrefab) ?? "unknown";
             }
         }
@@ -3249,7 +3203,7 @@ namespace Oxide.Plugins
         private void DrawPlayerReportReasons(BasePlayer player, string targetId, string min, string max, bool leftAlign)
         {
             BasePlayer target = BasePlayer.Find(targetId) ?? BasePlayer.FindSleeping(targetId);
-            if (target == null) 
+            if (target == null)
             {
                 Puts($"Trying report not exists player: {targetId}");
                 return;
@@ -3546,7 +3500,7 @@ namespace Oxide.Plugins
         private void RustAppEngineDestroy()
         {
             UnityEngine.Object.Destroy(_RustAppEngine?.gameObject);
-            
+
             // Clean-up stale static references
             _RustApp = null;
             _MetaInfo = null;
@@ -3559,29 +3513,23 @@ namespace Oxide.Plugins
 
         private void BanCreate(string steamId, CourtApi.PluginBanCreatePayload payload)
         {
-            CourtApi.BanCreate(payload).Execute(
-              (_) =>
-              {
-                  Log($"Player {steamId} banned for {payload.reason}");
-              },
-              (err) =>
-              {
-                  Error($"Failed to ban {steamId}. Reason: {err}");
-              }
-            );
+            CourtApi.BanCreate(payload).Execute(() =>
+            {
+                Log($"Player {steamId} banned for {payload.reason}");
+            },
+            (err) =>
+            {
+                Error($"Failed to ban {steamId}. Reason: {err}");
+            });
         }
 
         private void BanDelete(string steamId)
         {
-            CourtApi.BanDelete(steamId)
-              .Execute(
-                (_) =>
-                {
-                    Log($"Player {steamId} unbanned");
-                },
-                (err) => Error(
-                  $"Failed to unban {steamId}. Reason: {err}"
-              ));
+            CourtApi.BanDelete(steamId).Execute(() =>
+            {
+                Log($"Player {steamId} unbanned");
+            },
+            (err) => Error($"Failed to unban {steamId}. Reason: {err}"));
         }
 
         private void CreatePlayerAlertsCustom(Plugin plugin, string message, object data = null, object meta = null)
@@ -3756,32 +3704,43 @@ namespace Oxide.Plugins
 
             public void Execute()
             {
-                Rust.Global.Runner.StartCoroutine(SendWebRequest(onComplete: null, onException: null));
+                Rust.Global.Runner.StartCoroutine(SendWebRequestDeserialize(onComplete: null, onException: null));
             }
 
             public void Execute(Action<string> onException)
             {
-                Rust.Global.Runner.StartCoroutine(SendWebRequest(onComplete: null, onException));
+                Rust.Global.Runner.StartCoroutine(SendWebRequestDeserialize(onComplete: null, onException));
             }
 
             public void Execute(Action<T> onComplete, Action<string> onException)
             {
+                Rust.Global.Runner.StartCoroutine(SendWebRequestDeserialize(onComplete, onException));
+            }
+
+            // Overload for requests when we don't need to deserialize response
+            public void Execute(Action onComplete, Action<string> onException)
+            {
                 Rust.Global.Runner.StartCoroutine(SendWebRequest(onComplete, onException));
             }
 
-            private IEnumerator SendWebRequest(Action<T> onComplete, Action<string> onException)
+            private IEnumerator SendWebRequest(Action onComplete, Action<string> onException)
             {
-                using var request = new UnityWebRequest(url, method);
+                using var request = CreateWebRequest();
 
-                request.downloadHandler = new DownloadHandlerBuffer();
-                request.timeout = 10;
+                yield return request.SendWebRequest();
 
-                foreach (var header in _ApiHeaders)
+                if (TryGetError(request, out var error))
                 {
-                    request.SetRequestHeader(header.name, header.value);
+                    onException?.Invoke(error);
+                    yield break;
                 }
 
-                SetWebRequestPayload(request, data);
+                onComplete?.Invoke();
+            }
+
+            private IEnumerator SendWebRequestDeserialize(Action<T> onComplete, Action<string> onException)
+            {
+                using var request = CreateWebRequest();
 
                 yield return request.SendWebRequest();
 
@@ -3799,7 +3758,7 @@ namespace Oxide.Plugins
                 try
                 {
                     var obj = DeserializeWebResponse(request);
-                    onComplete?.Invoke(obj);
+                    onComplete.Invoke(obj);
                 }
                 catch (Exception parseException)
                 {
@@ -3807,10 +3766,29 @@ namespace Oxide.Plugins
                 }
             }
 
-            private static void SetWebRequestPayload(UnityWebRequest webRequest, object data)
+            private UnityWebRequest CreateWebRequest()
+            {
+                var request = new UnityWebRequest(url, method)
+                {
+                    downloadHandler = new DownloadHandlerBuffer(),
+                    timeout = 10
+                };
+
+                foreach (var (name, value) in _ApiHeaders)
+                {
+                    request.SetRequestHeader(name, value);
+                }
+
+                SetWebRequestPayload(request, data);
+                return request;
+            }
+
+            private static void SetWebRequestPayload(UnityWebRequest request, object data)
             {
                 if (data == null)
+                {
                     return;
+                }
 
                 using var stringWriter = new PooledTextWriterUtf8();
                 _jsonSerializer.Serialize(stringWriter, data);
@@ -3818,8 +3796,10 @@ namespace Oxide.Plugins
                 var dataNativeArray = new NativeArray<byte>(dataArray.Count, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
                 NativeArray<byte>.Copy(dataArray.Array, dataNativeArray, dataArray.Count);
 
-                webRequest.uploadHandler = new UploadHandlerRaw(dataNativeArray, transferOwnership: true);
-                webRequest.uploadHandler.contentType = "application/json";
+                request.uploadHandler = new UploadHandlerRaw(dataNativeArray, transferOwnership: true)
+                {
+                    contentType = "application/json"
+                };
             }
 
             private static bool TryGetError(UnityWebRequest request, out string error)
@@ -3842,7 +3822,14 @@ namespace Oxide.Plugins
             {
                 var data = request.downloadHandler.nativeData;
                 if (data.Length == 0)
+                {
                     return default;
+                }
+
+                if (data.Length == 2 && data[0] == '[' && data[1] == ']')
+                {
+                    return default;
+                }
 
                 using var textReader = new PooledTextReaderUtf8(data.AsReadOnlySpan());
                 using var reader = new JsonTextReader(textReader);
@@ -3866,16 +3853,14 @@ namespace Oxide.Plugins
                 references_message = referenceMessageText
             });
 
-            request.Execute(
-                (obj) =>
-                {
-                    Puts($"Player ({targetSteamId}) is muted");
-                },
-                (err) =>
-                {
-                    PrintError($"Failed to mute player: {err}");
-                }
-            );
+            request.Execute(() =>
+            {
+                Puts($"Player ({targetSteamId}) is muted");
+            },
+            (err) =>
+            {
+                PrintError($"Failed to mute player: {err}");
+            });
         }
 
         private void RustApp_PlayerMuteDelete(string targetSteamId)
@@ -3885,16 +3870,14 @@ namespace Oxide.Plugins
                 target_steam_id = targetSteamId
             });
 
-            request.Execute(
-                (obj) =>
-                {
-                    Puts($"Player ({targetSteamId}) is unmuted");
-                },
-                (err) =>
-                {
-                    PrintError($"Failed to unmute player: {err}");
-                }
-            );
+            request.Execute(() =>
+            {
+                Puts($"Player ({targetSteamId}) is unmuted");
+            },
+            (err) =>
+            {
+                PrintError($"Failed to unmute player: {err}");
+            });
         }
 
         private long? RA_IsPlayerMuted(BasePlayer player)
