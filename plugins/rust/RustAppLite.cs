@@ -12,7 +12,7 @@ using Oxide.Game.Rust.Libraries;
 
 namespace Oxide.Plugins
 {
-  [Info("RustApp Lite", "RustApp", "1.0.10")]
+  [Info("RustApp Lite", "RustApp", "1.0.11")]
   [Description("Get reports on players in Discord, using a nicely designed interface or F7")]
   public class RustAppLite : RustPlugin
   {
@@ -24,9 +24,10 @@ namespace Oxide.Plugins
       [JsonProperty("[UI] Chat commands")]
       public List<string> report_ui_commands = new List<string>();
 
-      [JsonProperty("[UI] Report reasons")]
+      [JsonProperty("[UI] Report reasons ENG lang")]
       public List<string> report_ui_reasons = new List<string>();
-
+      [JsonProperty("[UI] Report reasons RU lang")]
+      public List<string> report_ui_reasons_ru = new List<string>();
       [JsonProperty("[UI] Cooldown between reports (seconds)")]
       public int report_ui_cooldown = 300;
 
@@ -53,7 +54,8 @@ namespace Oxide.Plugins
         return new Configuration
         {
           report_ui_commands = new List<string> { "report", "reports" },
-          report_ui_reasons = new List<string> { "Cheat", "Abusive", "Spam" },
+          report_ui_reasons = new List<string> { "Cheat", "Suspicious", "Toxic" },
+          report_ui_reasons_ru = new List<string> { "Читер", "Подозрительный", "Токсик" },
           report_ui_cooldown = 300,
           report_ui_auto_parse = true,
           discord_webhook = "",
@@ -443,7 +445,7 @@ namespace Oxide.Plugins
       {
         cmd.AddChatCommand(v, this, nameof(ChatCmdReport));
       });
-
+      // -_-
       Log(
         "\nВы пользуетесь упрощённой версией плагина RustApp!\nВ полной версии есть:\n — статистика игрока\n — система вызова на проверку\n — бан система\n — история чата/команд\n — и многое другое на сайте: https://rustapp.io",
         "\nYou are using the simplified version of the RustApp plugin!\nThe full version includes:\n — player statistics\n — inspection system\n — ban/mute system\n — chat/team history\n — and much more on the website: https://rustapp.io"
@@ -482,7 +484,8 @@ namespace Oxide.Plugins
         ["Subject.SubHead"] = "For player %PLAYER%",
         ["Cooldown"] = "Wait %TIME% sec.",
         ["Sent"] = "Report succesful sent",
-        ["Player.Not.Found"] = "Player with requested ID not found"
+        ["Player.Not.Found"] = "Player with requested ID not found",
+        ["IfTryReportYourSelf"] = "Oops... Nice try! You can't report yourself, but we appreciate your self-awareness!"
       }, this, "en");
 
       lang.RegisterMessages(new Dictionary<string, string>
@@ -497,7 +500,8 @@ namespace Oxide.Plugins
         ["Subject.SubHead"] = "На игрока %PLAYER%",
         ["Cooldown"] = "Подожди %TIME% сек.",
         ["Sent"] = "Жалоба успешно отправлена",
-        ["Player.Not.Found"] = "Игрок с указанным ID не найден"
+        ["Player.Not.Found"] = "Игрок с указанным ID не найден",
+        ["IfTryReportYourSelf"] = "ой.. Это кажется вы :)"
       }, this, "ru");
     }
 
@@ -594,7 +598,27 @@ namespace Oxide.Plugins
               Button = { Close = $"{ReportLayer}.T", Color = "0 0 0 0.5", Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat" }
             }, ReportLayer + $".T");
 
+            if (targetId == player.UserIDString)
+            {
+              container.Add(new CuiLabel
+              {
+                RectTransform = { AnchorMin = $"{(leftAlign ? "0" : "1")} 0", AnchorMax = $"{(leftAlign ? "0" : "1")} 1", OffsetMin = $"{(leftAlign ? "-350" : "20")} 0", OffsetMax = $"{(leftAlign ? "-20" : "350")} -5" },
+                Text = { FadeIn = 0.4f, Text = lang.GetMessage("IfTryReportYourSelf", this, player.UserIDString), Font = "robotocondensed-bold.ttf", Color = HexToRustFormat("#D0C6BD"), FontSize = 24, Align = leftAlign ? TextAnchor.UpperRight : TextAnchor.UpperLeft }
+              }, ReportLayer + ".T");
 
+              container.Add(new CuiElement
+              {
+                Parent = ReportLayer + $".T",
+                Components =
+                {
+                    new CuiRawImageComponent { SteamId = target.UserIDString, Sprite = "assets/icons/loading.png" },
+                    new CuiRectTransformComponent { AnchorMin = "0 0", AnchorMax = "1 1", OffsetMax = "0 0" }
+                }
+              });
+              CuiHelper.AddUi(player, container);
+              break;
+            };
+            
             container.Add(new CuiLabel
             {
               RectTransform = { AnchorMin = $"{(leftAlign ? "0" : "1")} 0", AnchorMax = $"{(leftAlign ? "0" : "1")} 1", OffsetMin = $"{(leftAlign ? "-350" : "20")} 0", OffsetMax = $"{(leftAlign ? "-20" : "350")} -5" },
@@ -617,16 +641,20 @@ namespace Oxide.Plugins
               }
             });
 
-            for (var i = 0; i < _Settings.report_ui_reasons.Count; i++)
+            // Выбор списка причин по языку пользователя
+            var userLang = lang.GetLanguage(player.UserIDString);
+            var reasons = (userLang == "ru") ? _Settings.report_ui_reasons_ru : _Settings.report_ui_reasons;
+            for (var i = 0; i < reasons.Count; i++)
             {
-              var offXMin = (20 + (i * 5)) + i * 80;
-              var offXMax = 20 + (i * 5) + (i + 1) * 80;
+              var buttonWidth = 120;
+              var offXMin = (20 + (i * 5)) + i * buttonWidth;
+              var offXMax = 20 + (i * 5) + (i + 1) * buttonWidth;
 
               container.Add(new CuiButton()
               {
                 RectTransform = { AnchorMin = $"{(leftAlign ? 0 : 1)} 0", AnchorMax = $"{(leftAlign ? 0 : 1)} 0", OffsetMin = $"{(leftAlign ? -offXMax : offXMin)} 15", OffsetMax = $"{(leftAlign ? -offXMin : offXMax)} 45" },
-                Button = { FadeIn = 0.4f + i * 0.2f, Color = HexToRustFormat("#D0C6BD4D"), Command = $"RAL_CommandHandler report {target.UserIDString} {_Settings.report_ui_reasons[i].Replace(" ", "0")}" },
-                Text = { FadeIn = 0.4f + i * 0.2f, Text = $"{_Settings.report_ui_reasons[i]}", Align = TextAnchor.MiddleCenter, Color = HexToRustFormat("#D0C6BD"), Font = "robotocondensed-bold.ttf", FontSize = 16 }
+                Button = { FadeIn = 0.4f + i * 0.2f, Color = HexToRustFormat("#D0C6BD4D"), Command = $"RAL_CommandHandler report {target.UserIDString} {reasons[i].Replace(" ", "0")}" },
+                Text = { FadeIn = 0.4f + i * 0.2f, Text = $"{reasons[i]}", Align = TextAnchor.MiddleCenter, Color = HexToRustFormat("#D0C6BD"), Font = "robotocondensed-bold.ttf", FontSize = 16 }
               }, ReportLayer + $".T");
             }
 
