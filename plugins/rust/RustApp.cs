@@ -50,6 +50,8 @@ namespace Oxide.Plugins
 
         private static (string name, string value)[] _ApiHeaders = Array.Empty<(string, string)>();
 
+        private static readonly object _false = false; // avoid boxing for hooks
+
         #endregion
 
         #region Web API
@@ -2119,6 +2121,14 @@ namespace Oxide.Plugins
                 Unsubscribe(nameof(OnClientCommand));
             }
 
+#if OXIDE
+            _chatCommandPrefixes = Interface.Oxide.Config.Commands.ChatPrefix.ToArray();
+#endif
+
+#if CARBON
+            _chatCommandPrefixes = API.Commands.Command.Prefixes.Select(p => p.Value).ToArray();
+#endif
+
             timer.Once(1f, () =>
             {
                 MetaInfo.Read();
@@ -2329,11 +2339,11 @@ namespace Oxide.Plugins
 
         #region Chat hooks
 
+        private static string[] _chatCommandPrefixes = new[] { "/" };
+
         private object OnClientCommand(Connection connection, string text)
         {
-            if (!text.StartsWith("chat.say", StringComparison.OrdinalIgnoreCase)
-                || text.StartsWith("chat.say \"/", StringComparison.OrdinalIgnoreCase)
-                || text.StartsWith("chat.say /", StringComparison.OrdinalIgnoreCase))
+            if (!IsChatSayCommand(text) || HasCommandPrefix(text))
             {
                 return null;
             }
@@ -2350,15 +2360,47 @@ namespace Oxide.Plugins
                     SendMessage(player, msg);
                 }
 
-                return false;
+                return _false;
             }
 
             return null;
+
+            static bool IsChatSayCommand(string text)
+            {
+                return text.StartsWith("chat.say", StringComparison.OrdinalIgnoreCase);
+            }
+
+            static bool HasCommandPrefix(string text)
+            {
+                const int ChatSayLength = 8;
+
+                if (text.Length < ChatSayLength + 2)
+                {
+                    return false;
+                }
+
+                var textSpan = text.AsSpan().Slice(ChatSayLength); // here we have at least 2 chars in textSpan
+                textSpan = textSpan.TrimStart().TrimStart('"'); // remove whitespaces and quotes
+                if (textSpan.IsEmpty)
+                {
+                    return false;
+                }
+
+                foreach (var prefix in _chatCommandPrefixes)
+                {
+                    if (textSpan.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                    {
+                        return true;
+                    }
+                }
+
+                return false;
+            }
         }
 
         private void OnPlayerChat(BasePlayer player, string message, ConVar.Chat.ChatChannel channel)
         {
-            if (channel != ConVar.Chat.ChatChannel.Team && channel != ConVar.Chat.ChatChannel.Global && channel != ConVar.Chat.ChatChannel.Local)
+            if (channel is not ConVar.Chat.ChatChannel.Team and not ConVar.Chat.ChatChannel.Global and not ConVar.Chat.ChatChannel.Local)
             {
                 return;
             }
@@ -2366,9 +2408,7 @@ namespace Oxide.Plugins
             _RustAppEngine?.ChatWorker?.SaveChatMessage(new CourtApi.PluginChatMessageDto
             {
                 steam_id = player.UserIDString,
-
                 is_team = channel == ConVar.Chat.ChatChannel.Team,
-
                 text = message
             });
         }
