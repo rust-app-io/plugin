@@ -28,7 +28,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.5.3")]
+    [Info("RustApp", "RustApp.io", "2.5.4")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -2174,7 +2174,8 @@ namespace Oxide.Plugins
                 ["Subject.Head"] = "Select the reason for the report",
                 ["Subject.SubHead"] = "For player %PLAYER%",
                 ["Cooldown"] = "Wait %TIME% sec.",
-                ["Sent"] = "Report succesful sent",
+                ["Sent"] = "Complaint successfully submitted!",
+                ["Sent.F7"] = "Your complaint has been submitted and will be reviewed shortly.",
                 ["Contact.Error"] = "You did not sent your Discord",
                 ["Contact.Sent"] = "You sent:",
                 ["Contact.SentWait"] = "If you sent the correct discord - wait for a friend request.",
@@ -2217,7 +2218,8 @@ namespace Oxide.Plugins
                 ["Subject.Head"] = "Выберите причину репорта",
                 ["Subject.SubHead"] = "На игрока %PLAYER%",
                 ["Cooldown"] = "Подожди %TIME% сек.",
-                ["Sent"] = "Жалоба успешно отправлена",
+                ["Sent"] = "Жалоба успешно отправлена!",
+                ["Sent.F7"] = "Ваша жалоба отправлена и будет рассмотрена в ближайшее время.",
                 ["Contact.Error"] = "Вы не отправили свой Discord",
                 ["Contact.Sent"] = "Вы отправили:",
                 ["Contact.SentWait"] = "<size=12>Если вы отправили корректный дискорд - ждите заявку в друзья.</size>",
@@ -2405,6 +2407,7 @@ namespace Oxide.Plugins
             }
 
             RA_ReportSend(reporter.UserIDString, targetId, type, message);
+            SendMessage(reporter, lang.GetMessage("Sent.F7", this, reporter.UserIDString));
         }
 
         #endregion
@@ -3973,9 +3976,9 @@ namespace Oxide.Plugins
         private static void Debug(string text)
         {
 #if DEBUG
-      
-        _RustApp.Puts($"DEBUG | {text}");
-      
+
+            _RustApp.Puts($"DEBUG | {text}");
+
 #endif
         }
 
