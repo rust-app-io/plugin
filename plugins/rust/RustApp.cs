@@ -28,7 +28,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins
 {
-    [Info("RustApp", "RustApp.io", "2.5.4")]
+    [Info("RustApp", "RustApp.io", "2.6.0")]
     public class RustApp : RustPlugin
     {
         #region Variables
@@ -77,6 +77,7 @@ namespace Oxide.Plugins
                 public string level_url = ConVar.Server.levelurl;
                 // Thanks for the information, DezLife
                 public string level_image_url = MapUploader.ImageUrl;
+                public int world_size = ConVar.Server.worldsize;
                 public string description = ConVar.Server.description + " " + ConVar.Server.motd;
                 public string branch = ConVar.Server.branch;
 
@@ -2384,7 +2385,7 @@ namespace Oxide.Plugins
                 if (textSpan.IsEmpty)
                 {
                     return false;
-                }
+                } 
 
                 foreach (var prefix in _chatCommandPrefixes)
                 {
