@@ -5,7 +5,7 @@ using UnityEngine;
 
 namespace Oxide.Plugins
 {
-    [Info("ExtDemoRecorder", "RustApp", "1.0.0")]
+    [Info("ExtDemoRecorder", "RustApp", "1.0.1")]
     [Description("Allows you to start recording a demo for a specified player for a specified amount of time.")]
     public class ExtDemoRecorder : RustPlugin
     {
@@ -53,11 +53,11 @@ namespace Oxide.Plugins
         {
             if (player == null) return;
 
-            player.StartDemoRecording();
+            player.StartServerDemoRecording();
 
-            timer.Once(time * 60, () => 
-            { 
-                player.StopDemoRecording(); 
+            timer.Once(time * 60, () =>
+            {
+                player.StopServerDemoRecording();
             });
         }
     }
