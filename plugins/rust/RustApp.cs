@@ -2038,9 +2038,6 @@ namespace Oxide.Plugins
             var global_bool = args.FullString.Contains("--global");
             var ip_bool = args.FullString.Contains("--ban-ip");
 
-            var global_bool = args.FullString.Contains("--global");
-            var ip_bool = args.FullString.Contains("--ban-ip");
-
             BanCreate(steam_id, new CourtApi.PluginBanCreatePayload
             {
                 target_steam_id = steam_id,
