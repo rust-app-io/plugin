@@ -1970,7 +1970,7 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var code = args.Args[0];
+            var code = args.GetString(0);
 
             _RustAppEngine?.gameObject.AddComponent<PairWorker>().StartPairing(code);
         }
@@ -1983,16 +1983,15 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var clearArgs = (args.Args ?? Array.Empty<string>()).Where(v => v != "--broadcast").ToList();
-            if (clearArgs.Count() < 3)
+            if (args.Args.Length < 3)
             {
                 Error("Incorrect command format!\nCorrect format: ra.mute <steam-id> <reason> <time>\n\nAdditional options are available:\n'--broadcast' - broadcast mute");
                 return;
             }
 
-            var steamId = clearArgs[0];
-            var reason = clearArgs[1];
-            var duration = clearArgs[2];
+            var steamId = args.GetString(0);
+            var reason = args.GetString(1);
+            var duration = args.GetString(2);
 
             var broadcast_bool = args.FullString.Contains("--broadcast");
 
@@ -2007,13 +2006,13 @@ namespace Oxide.Plugins
                 return;
             }
 
-            if (args.Args.Count() < 1)
+            if (args.Args.Length < 1)
             {
                 Error("Incorrect command format!\nCorrect format: ra.unmute <steam-id>");
                 return;
             }
 
-            var steamId = args.Args[0];
+            var steamId = args.GetString(0);
 
             RustApp_PlayerMuteDelete(steamId);
         }
@@ -2026,17 +2025,18 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var clearArgs = (args.Args ?? Array.Empty<string>()).Where(v => v != "--ban-ip" && v != "--global").ToList();
-
-            if (clearArgs.Count() < 2)
+            if (args.Args.Length < 2)
             {
                 Error("Incorrect command format!\nCorrect format: ra.ban <steam-id> <reason> <time (optional)>\n\nAdditional options are available:\n'--ban-ip' - bans IP\n'--global' - bans globally\n\nExample of banning with IP, globally: ra.ban 7656119812110397 \"cheat\" 7d --ban-ip --global");
                 return;
             }
 
-            var steam_id = clearArgs[0];
-            var reason = clearArgs[1];
-            var duration = clearArgs.Count() == 3 ? clearArgs[2] : "";
+            var steam_id = args.GetString(0);
+            var reason = args.GetString(1);
+            var duration = args.GetString(3, "");
+
+            var global_bool = args.FullString.Contains("--global");
+            var ip_bool = args.FullString.Contains("--ban-ip");
 
             var global_bool = args.FullString.Contains("--global");
             var ip_bool = args.FullString.Contains("--ban-ip");
@@ -2060,15 +2060,13 @@ namespace Oxide.Plugins
                 return;
             }
 
-            var clearArgs = (args.Args ?? Array.Empty<string>()).ToList();
-
-            if (clearArgs.Count() != 1)
+              if (args.Args.Length != 1)
             {
                 Error("Incorrect command format!\nCorrect format: ra.unban <steam-id>");
                 return;
             }
 
-            var steam_id = clearArgs[0];
+            var steam_id = args.GetString(0);
 
             BanDelete(steam_id);
         }
