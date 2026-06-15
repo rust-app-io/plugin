@@ -2,6 +2,7 @@
 
 using System;
 using System.Collections;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -9,6 +10,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading.Tasks;
 using ConVar;
 using Cysharp.Text;
 using JetBrains.Annotations;
@@ -246,62 +248,86 @@ public class RustApp : RustPlugin
             public readonly Dictionary<string, string> fields = new();
         }
 
-        public static Dictionary<ulong, PluginStatePlayerDto> players = new();
+        public static ConcurrentDictionary<ulong, PluginStatePlayerDto> Players = new();
+        private static readonly object _hookLock = new();
 
         public class PluginStatePlayerDto
         {
-            public static PluginStatePlayerDto FromConnection(Network.Connection connection, string status)
+            // CAN BE CALLED FROM NON-MAIN THREAD
+            public static PluginStatePlayerDto FromConnection(Connection connection, string status)
             {
                 var userid = connection.userid;
-                if (!players.TryGetValue(userid, out var payload))
+                if (!Players.TryGetValue(userid, out var payload))
                 {
-                    payload = new PluginStatePlayerDto();
-                    players[userid] = payload;
-                    payload.steam_id = connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : RustApp.GetSteamIdString(userid);
-                    payload.steam_name = connection.username.Replace("<blank>", "blank");
-                    payload.ip = IPAddressWithoutPort(connection.ipaddress);
-                    payload.no_license = DetectNoLicense(connection);
-                    payload.team = Pool.Get<List<string>>();
+                    Players[userid] = payload = new PluginStatePlayerDto
+                    {
+                        steam_id = connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : GetSteamIdString(userid),
+                        steam_name = connection.username.Replace("<blank>", "blank"),
+                        ip = IPAddressWithoutPort(connection.ipaddress),
+                        no_license = DetectNoLicense(connection),
+                    };
                 }
 
                 payload.ping = Network.Net.sv.GetAveragePing(connection);
                 payload.seconds_connected = (int)connection.GetSecondsConnected();
                 payload.language = _RustApp.lang.GetLanguage(payload.steam_id);
                 payload.status = status;
-                try { payload.meta = CollectPlayerMeta(payload.steam_id, payload.meta); } catch (Exception ex) { Debug(ex.ToString()); }
+
+                try
+                {
+                    lock (_hookLock)
+                    {
+                        payload.meta = CollectPlayerMeta(payload.steam_id, payload.meta);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug(ex.ToString());
+                }
 
                 payload.team ??= Pool.Get<List<string>>();
                 payload.team.Clear();
 
-                RelationshipManager.PlayerTeam? newTeam = RelationshipManager.ServerInstance.FindPlayersTeam(userid);
-                if (newTeam == null)
+                var newTeam = RelationshipManager.ServerInstance.FindPlayersTeam(userid);
+                if (newTeam != null)
                 {
-                    return payload;
-                }
-
-                for (int index = 0; index < newTeam.members.Count; index++)
-                {
-                    ulong member = newTeam.members[index];
-                    if (member != userid)
-                        payload.team.Add(member.ToString());
+                    var members = newTeam.members;
+                    for (int i = 0; i < members.Count; i++)
+                    {
+                        ulong member = members[i];
+                        if (member != userid)
+                        {
+                            payload.team.Add(GetSteamIdString(member));
+                        }
+                    }
                 }
 
                 return payload;
             }
 
-            public static PluginStatePlayerDto FromPlayer(BasePlayer player)
+            public static PluginStatePlayerDto FromPlayerParallel(BasePlayer player)
             {
-                PluginStatePlayerDto payload = FromConnection(player.Connection, "active");
-
+                var payload = FromConnection(player.Connection, "active");
                 payload.position = player.transform.position.ToString();
                 payload.rotation = player.eyes.rotation.ToString();
                 payload.coords = MapHelper.PositionToString(player.transform.position);
-
                 payload.can_build = DetectBuildingAuth(player);
-                payload.is_raiding = DetectIsRaidBlock(player);
                 payload.is_alive = player.IsAlive();
 
+                lock (_hookLock)
+                {
+                    payload.is_raiding = DetectIsRaidBlock(player);
+                }
+
                 return payload;
+            }
+
+            private static bool DetectNoLicense(Connection connection)
+            {
+                lock (_hookLock)
+                {
+                    return RustApp.DetectNoLicense(connection);
+                }
             }
 
             public string steam_id;
@@ -1652,7 +1678,6 @@ public class RustApp : RustPlugin
 
         public void SendUpdate(Action? onFinished = null)
         {
-
             CourtApi.PluginStateUpdatePayload? payload = Pool.Get<CourtApi.PluginStateUpdatePayload>();
             payload.FillSnapshot();
             payload.server_info.FillSnapshot();
@@ -1686,12 +1711,27 @@ public class RustApp : RustPlugin
             });
         }
 
+        private static List<CourtApi.PluginStatePlayerDto> _playerStateDtos;
+
         private void CollectPlayers(List<CourtApi.PluginStatePlayerDto> playerStateDtos)
         {
-            foreach (BasePlayer? player in BasePlayer.activePlayerList)
+            _playerStateDtos = playerStateDtos; // avoid variable capturing in Parallel.For
+
+            Parallel.For(0, BasePlayer.activePlayerList.Count, static i =>
             {
-                try { playerStateDtos.Add(CourtApi.PluginStatePlayerDto.FromPlayer(player)); } catch (Exception ex) { Debug($"FromPlayer failed: {ex}"); }
-            }
+                try
+                {
+                    var state = CourtApi.PluginStatePlayerDto.FromPlayerParallel(BasePlayer.activePlayerList[i]);
+                    lock (_playerStateDtos)
+                    {
+                        _playerStateDtos.Add(state);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Error("[FromPlayerParallel] player error: " + ex);
+                }
+            });
 
             foreach (Connection? connection in ServerMgr.Instance.connectionQueue.joining)
             {
@@ -2644,7 +2684,7 @@ public class RustApp : RustPlugin
         _MetaInfo = MetaInfo.Read();
         _CheckInfo = CheckInfo.Read();
 
-        CourtApi.players = new Dictionary<ulong, CourtApi.PluginStatePlayerDto>();
+        CourtApi.Players = new();
 
         _UiCommandName = "x" + Guid.NewGuid().ToString("N");
         _UiSearchCommand = _UiCommandName + " search ";
@@ -2910,10 +2950,10 @@ public class RustApp : RustPlugin
         string? steamId = connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : GetSteamIdString(userid);
         OnPlayerDisconnectedNormalized(steamId, reasonFinal);
 
-        if (CourtApi.players != null && CourtApi.players.TryGetValue(userid, out CourtApi.PluginStatePlayerDto? dto))
+        if (CourtApi.Players != null && CourtApi.Players.TryGetValue(userid, out CourtApi.PluginStatePlayerDto? dto))
         {
             dto.FreePooledFields();
-            CourtApi.players.Remove(userid);
+            CourtApi.Players.TryRemove(userid, out _);
         }
         _tempDisconnectReasons.Remove(userid);
     }
@@ -4202,8 +4242,8 @@ public class RustApp : RustPlugin
         UnityEngine.Object.Destroy(_RustAppEngine?.gameObject);
 
 
-        if (CourtApi.players != null)
-            foreach (CourtApi.PluginStatePlayerDto? dto in CourtApi.players.Values)
+        if (CourtApi.Players != null)
+            foreach (CourtApi.PluginStatePlayerDto? dto in CourtApi.Players.Values)
                 dto.FreePooledFields();
 
         // Clean-up stale static references
@@ -4213,7 +4253,7 @@ public class RustApp : RustPlugin
         _Settings = null;
         _ApiHeaders = null;
 
-        CourtApi.players = null;
+        CourtApi.Players = null;
     }
 
     private void BanCreate(string steamId, CourtApi.PluginBanCreatePayload payload)
@@ -4694,46 +4734,61 @@ public class RustApp : RustPlugin
         player.Command("gametip.showtoast", (int)type, text, 1);
     }
 
-    [ThreadStatic] private static List<BuildingBlock> _buildAuthBlocks;
-    [ThreadStatic] private static HashSet<uint> _buildAuthSeenBuildings;
+    [ThreadStatic]
+    private static BaseEntity[] _entitySearchArray;
 
+    // Not as accurate as BasePlayer.IsBuildingAuthed(), but about 10x faster and thread-safe
     private static bool DetectBuildingAuth(BasePlayer player)
     {
-        const float SearchRadius = 18f;
-        const float SqrRadius = SearchRadius * SearchRadius;
+        const float Distance = 16f; // don't change
+        const float SqrDistance = Distance * Distance;
 
-        List<BuildingBlock> blocks = _buildAuthBlocks ??= new List<BuildingBlock>(48);
-        HashSet<uint> seenBuildings = _buildAuthSeenBuildings ??= new HashSet<uint>();
-        blocks.Clear();
-        seenBuildings.Clear();
+        var searchArray = _entitySearchArray ??= new BaseEntity[16384];
+        var entCount = 0;
 
-        Vector3 pos = player.transform.position;
-        BaseEntity.Query.Server.GetInSphere(pos, SearchRadius, blocks, BaseEntity.Query.DistanceCheckType.None);
-
-        ulong userId = player.userID;
-        int blockCount = blocks.Count;
-
-        for (int i = 0; i < blockCount; i++)
+        try
         {
-            BuildingBlock? block = blocks[i];
-            if ((block.transform.position - pos).sqrMagnitude > SqrRadius) continue;
+            BuildingBlock lastBuildingBlock = null;
+            BuildingPrivlidge buildingPrivilege = null;
 
-            if (!seenBuildings.Add(block.buildingID)) continue;
+            var pos = player.transform.position;
+            entCount = BaseEntity.Query.Server.GetInSphereFast(pos, Distance, searchArray, static ent => ent is BuildingBlock);
 
-            BuildingManager.Building? building = block.GetBuilding();
-            if (building == null) continue;
+            for (int i = 0; i < entCount; i++)
+            {
+                var buildingBlock = (BuildingBlock)searchArray[i];
+                if (!buildingBlock.IsOlderThan(lastBuildingBlock))
+                {
+                    continue;
+                }
 
-            BuildingPrivlidge? tc = building.GetDominatingBuildingPrivilege();
-            if (!tc || !tc.authorizedPlayers.Contains(userId)) continue;
+                var building = BuildingManager.server.GetBuilding(buildingBlock.buildingID);
+                if (building == null)
+                {
+                    continue;
+                }
 
-            blocks.Clear();
-            seenBuildings.Clear();
-            return true;
+                var dominatingPrivilege = building.GetDominatingBuildingPrivilege();
+                if (dominatingPrivilege == null)
+                {
+                    continue;
+                }
+
+                if ((buildingBlock.transform.position - pos).sqrMagnitude > SqrDistance)
+                {
+                    continue;
+                }
+
+                lastBuildingBlock = buildingBlock;
+                buildingPrivilege = dominatingPrivilege;
+            }
+
+            return buildingPrivilege != null && buildingPrivilege.CanBuild(player);
         }
-
-        blocks.Clear();
-        seenBuildings.Clear();
-        return false;
+        finally
+        {
+            Array.Clear(searchArray, 0, entCount);
+        }
     }
 
     private static readonly HashSet<char> _normalizeAllowed = new()
@@ -4966,13 +5021,16 @@ public class RustApp : RustPlugin
     public static bool IsRealSteamId(BasePlayer player)
         => player.userID >= SteamId64Base;
 
-    private static readonly Dictionary<ulong, string> _steamIdStringCache = new();
+    private static readonly ConcurrentDictionary<ulong, string> _steamIdStringCache = new();
 
     public static string GetSteamIdString(ulong userId)
     {
-        if (_steamIdStringCache.TryGetValue(userId, out string? cached))
-            return cached;
-        return _steamIdStringCache[userId] = userId.ToString();
+        if (!_steamIdStringCache.TryGetValue(userId, out var cached))
+        {
+            _steamIdStringCache[userId] = cached = userId.ToString();
+        }
+
+        return cached;
     }
 
     private double CurrentTime() => DateTime.Now.Subtract(new DateTime(1970, 1, 1)).TotalSeconds;
