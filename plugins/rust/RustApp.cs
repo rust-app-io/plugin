@@ -4710,37 +4710,40 @@ public class RustApp : RustPlugin
 
         int entCount = BaseEntity.Query.Server.GetInSphereFast(pos, SearchRadius, arr, _buildAuthIsBlock);
 
-        for (int i = 0; i < entCount; i++)
+        try
         {
-            BuildingBlock block = (BuildingBlock)arr[i];
-
-            if (seen.Contains(block.buildingID)) continue;
-
-            Vector3 d = block.transform.position - pos;
-            if (d.x * d.x + d.y * d.y + d.z * d.z > SqrRadius) continue;
-
-            BuildingManager.Building? building = block.GetBuilding();
-            if (building == null) continue;
-
-            seen.Add(block.buildingID);
-
-            ListHashSet<BuildingPrivlidge>? privs = building.buildingPrivileges;
-            if (privs == null) continue;
-
-            int tcCount = privs.Count;
-            for (int j = 0; j < tcCount; j++)
+            for (int i = 0; i < entCount; i++)
             {
-                BuildingPrivlidge? tc = privs[j];
-                if (tc != null && tc.authorizedPlayers.Contains(uid))
+                BuildingBlock block = (BuildingBlock)arr[i];
+
+                if (seen.Contains(block.buildingID)) continue;
+
+                Vector3 d = block.transform.position - pos;
+                if (d.x * d.x + d.y * d.y + d.z * d.z > SqrRadius) continue;
+
+                BuildingManager.Building? building = block.GetBuilding();
+                if (building == null) continue;
+
+                seen.Add(block.buildingID);
+
+                ListHashSet<BuildingPrivlidge>? privs = building.buildingPrivileges;
+                if (privs == null) continue;
+
+                int tcCount = privs.Count;
+                for (int j = 0; j < tcCount; j++)
                 {
-                    seen.Clear();
-                    return true;
+                    BuildingPrivlidge? tc = privs[j];
+                    if (tc != null && tc.authorizedPlayers.Contains(uid))
+                        return true;
                 }
             }
+            return false;
         }
-
-        seen.Clear();
-        return false;
+        finally
+        {
+            seen.Clear();
+            Array.Clear(arr, 0, entCount);
+        }
     }
 
     private static readonly HashSet<char> _normalizeAllowed = new()
