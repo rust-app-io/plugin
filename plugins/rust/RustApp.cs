@@ -4705,10 +4705,11 @@ public class RustApp : RustPlugin
 
         HashSet<uint> seen = _buildAuthSeen;
         BaseEntity[] arr = _buildAuthSearchArr;
-        Vector3 pos = player.transform.position;
+        
+        OBB playerObb = player.WorldSpaceBounds();
         ulong uid = player.userID;
 
-        int entCount = BaseEntity.Query.Server.GetInSphereFast(pos, SearchRadius, arr, _buildAuthIsBlock);
+        int entCount = BaseEntity.Query.Server.GetInSphereFast(playerObb.position, SearchRadius, arr, _buildAuthIsBlock);
 
         try
         {
@@ -4718,8 +4719,7 @@ public class RustApp : RustPlugin
 
                 if (seen.Contains(block.buildingID)) continue;
 
-                Vector3 d = block.transform.position - pos;
-                if (d.x * d.x + d.y * d.y + d.z * d.z > SqrRadius) continue;
+                if (playerObb.SqrDistance(block.WorldSpaceBounds()) > SqrRadius) continue;
 
                 BuildingManager.Building? building = block.GetBuilding();
                 if (building == null) continue;
