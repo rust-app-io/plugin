@@ -4694,31 +4694,87 @@ public class RustApp : RustPlugin
         player.Command("gametip.showtoast", (int)type, text, 1);
     }
 
-    private static readonly BaseEntity[] _buildAuthArr = new BaseEntity[32];
-    private static readonly Func<BaseEntity, bool> _buildAuthFilter = static e => e is BuildingPrivlidge;
+    private static readonly Dictionary<uint, bool> _buildAuthStates = new(64);
+    private static readonly BaseEntity[] _buildAuthSearchArray = new BaseEntity[16384];
+    private static readonly Func<BaseEntity, bool> _buildAuthFilter = static ent => ent is BuildingBlock;
 
     // It is more optimized way to detect building authed instead of default BasePlayer.IsBuildingAuthed()
     private static bool DetectBuildingAuth(BasePlayer player)
     {
-        const float SearchRadius = 22f;
-        const float SqrRadius = SearchRadius * SearchRadius;
+        const float FastSearchRadius = 16f;
+        const float CheckRadius = FastSearchRadius + 2f;
+        const float SqrCheckRadius = CheckRadius * CheckRadius;
 
         Vector3 pos = player.transform.position;
-        int count = BaseEntity.Query.Server.GetInSphereFast(pos, SearchRadius, _buildAuthArr, _buildAuthFilter);
+
+        // Fast CheckSphere to prevent more expensive queries if player is not near any building
+        if (!UnityEngine.Physics.CheckSphere(pos, FastSearchRadius, Layers.Server.Buildings, QueryTriggerInteraction.Ignore))
+        {
+            return false;
+        }
+
+        Dictionary<uint, bool> authStates = _buildAuthStates;
+        BaseEntity[] searchArray = _buildAuthSearchArray;
+        ulong userid = player.userID;
+
+        int entCount = BaseEntity.Query.Server.GetInSphereFast(pos, FastSearchRadius, searchArray, _buildAuthFilter);
 
         try
         {
-            for (int i = 0; i < count; i++)
+            for (int i = 0; i < entCount; i++)
             {
-                BuildingPrivlidge tc = (BuildingPrivlidge)_buildAuthArr[i];
-                if ((tc.transform.position - pos).sqrMagnitude <= SqrRadius)
-                    return tc.IsAuthed(player);
+                BuildingBlock block = (BuildingBlock)searchArray[i];
+                uint buildingId = block.buildingID;
+
+                if (!authStates.TryGetValue(buildingId, out bool isAuthed))
+                {
+                    isAuthed = IsBuildingAuthed(buildingId, userid);
+                    authStates[buildingId] = isAuthed;
+                }
+
+                if (!isAuthed || (block.transform.position - pos).sqrMagnitude > SqrCheckRadius)
+                {
+                    continue;
+                }
+
+                return true;
             }
+
             return false;
         }
         finally
         {
-            Array.Clear(_buildAuthArr, 0, count);
+            authStates.Clear();
+            Array.Clear(searchArray, 0, entCount);
+        }
+
+        static bool IsBuildingAuthed(uint buildingId, ulong userid)
+        {
+            BuildingManager.Building building = BuildingManager.server.GetBuilding(buildingId);
+            if (building == null)
+            {
+                return false;
+            }
+
+            ListHashSet<BuildingPrivlidge> privileges = building.buildingPrivileges;
+            if (privileges == null || privileges.Count == 0)
+            {
+                return false;
+            }
+
+            int count = privileges.Count;
+            for (int i = 0; i < count; i++)
+            {
+                BuildingPrivlidge tc = privileges[i];
+                if (tc == null || !tc.IsAuthed(userid))
+                {
+                    continue;
+                }
+
+                return true;
+            }
+
+            return false;
         }
     }
 
