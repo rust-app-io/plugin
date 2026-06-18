@@ -250,7 +250,7 @@ public class RustApp : RustPlugin
 
         public class PluginStatePlayerDto
         {
-            public static PluginStatePlayerDto FromConnection(Network.Connection connection, string status)
+            public static PluginStatePlayerDto FromConnection(Connection connection, string status)
             {
                 var userid = connection.userid;
                 if (!players.TryGetValue(userid, out var payload))
@@ -4715,31 +4715,81 @@ public class RustApp : RustPlugin
         player.Command("gametip.showtoast", (int)type, text, 1);
     }
 
-    private static readonly BaseEntity[] _buildAuthArr = new BaseEntity[32];
-    private static readonly Func<BaseEntity, bool> _buildAuthFilter = static e => e is BuildingPrivlidge;
+    private const float FastSearchRadius = 16f;
+    private const float CheckRadius = FastSearchRadius + 2f;
+    private const float SqrCheckRadius = CheckRadius * CheckRadius;
 
-    // It is more optimized way to detect building authed instead of default BasePlayer.IsBuildingAuthed()
+    private static readonly Dictionary<uint, bool> _buildAuthStates = new(128);
+    private static readonly BaseEntity[] _detectResult = new BaseEntity[1];
+    private static readonly Func<BaseEntity, bool> _detectFilter = DetectFilter;
+
+    private static Vector3 _detectPos;
+    private static ulong _detectUserId;
+
     private static bool DetectBuildingAuth(BasePlayer player)
     {
-        const float SearchRadius = 22f;
-        const float SqrRadius = SearchRadius * SearchRadius;
-
         Vector3 pos = player.transform.position;
-        int count = BaseEntity.Query.Server.GetInSphereFast(pos, SearchRadius, _buildAuthArr, _buildAuthFilter);
+        _detectPos = pos;
+        _detectUserId = player.userID;
 
         try
         {
-            for (int i = 0; i < count; i++)
-            {
-                BuildingPrivlidge tc = (BuildingPrivlidge)_buildAuthArr[i];
-                if ((tc.transform.position - pos).sqrMagnitude <= SqrRadius)
-                    return tc.IsAuthed(player);
-            }
-            return false;
+            return BaseEntity.Query.Server.GetInSphereFast(pos, FastSearchRadius, _detectResult, _detectFilter) > 0;
         }
         finally
         {
-            Array.Clear(_buildAuthArr, 0, count);
+            _buildAuthStates.Clear();
+            _detectResult[0] = null;
+        }
+    }
+
+    private static bool DetectFilter(BaseEntity ent)
+    {
+        if (ent is not BuildingBlock block)
+        {
+            return false;
+        }
+
+        uint buildingId = block.buildingID;
+        if (!_buildAuthStates.TryGetValue(buildingId, out bool isAuthed))
+        {
+            _buildAuthStates[buildingId] = isAuthed = IsAuthed(buildingId, _detectUserId);
+        }
+
+        if (!isAuthed)
+        {
+            return false;
+        }
+
+        return (block.transform.position - _detectPos).sqrMagnitude <= SqrCheckRadius;
+
+        static bool IsAuthed(uint buildingId, ulong userid)
+        {
+            BuildingManager.Building building = BuildingManager.server.GetBuilding(buildingId);
+            if (building == null)
+            {
+                return false;
+            }
+
+            ListHashSet<BuildingPrivlidge> privileges = building.buildingPrivileges;
+            if (privileges == null || privileges.Count == 0)
+            {
+                return false;
+            }
+
+            int count = privileges.Count;
+            for (int i = 0; i < count; i++)
+            {
+                BuildingPrivlidge tc = privileges[i];
+                if (tc == null || !tc.IsAuthed(userid))
+                {
+                    continue;
+                }
+
+                return true;
+            }
+
+            return false;
         }
     }
 
