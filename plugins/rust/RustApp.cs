@@ -250,7 +250,7 @@ public class RustApp : RustPlugin
 
         public class PluginStatePlayerDto
         {
-            public static PluginStatePlayerDto FromConnection(Network.Connection connection, string status)
+            public static PluginStatePlayerDto FromConnection(Connection connection, string status)
             {
                 var userid = connection.userid;
                 if (!players.TryGetValue(userid, out var payload))
@@ -3008,15 +3008,15 @@ public class RustApp : RustPlugin
         }
     }
 
-    private void OnPlayerChat(BasePlayer player, string message, Chat.ChatChannel channel)
+    private void OnPlayerChat(BasePlayer player, string message, ConVar.Chat.ChatChannel channel)
     {
-        if (channel is not Chat.ChatChannel.Team and not Chat.ChatChannel.Global and not Chat.ChatChannel.Local)
+        if (channel is not ConVar.Chat.ChatChannel.Team and not ConVar.Chat.ChatChannel.Global and not ConVar.Chat.ChatChannel.Local)
             return;
 
         ChatWorker? worker = _RustAppEngine?.ChatWorker;
         if (worker == null) return;
 
-        worker.SaveChatMessage(CourtApi.PluginChatMessageDto.Create(player.UserIDString, message, channel == Chat.ChatChannel.Team));
+        worker.SaveChatMessage(CourtApi.PluginChatMessageDto.Create(player.UserIDString, message, channel == ConVar.Chat.ChatChannel.Team));
     }
 
     #endregion
@@ -4238,18 +4238,39 @@ public class RustApp : RustPlugin
 
     private void CreatePlayerAlertsCustom(Plugin plugin, string message, object? data = null, object? meta = null)
     {
-        CourtApi.PluginPlayerAlertCustomAlertMeta? json = meta as CourtApi.PluginPlayerAlertCustomAlertMeta;
-        if (meta != null && json == null)
+        string? customIcon = null;
+        string? name = null;
+        List<string>? customLinks = null;
+
+        if (meta is CourtApi.PluginPlayerAlertCustomAlertMeta strong)
         {
-            Error("Wrong CustomAlertMeta params, default will be used!");
+            customIcon = strong.custom_icon;
+            name = strong.name;
+            customLinks = strong.custom_links;
+        }
+        else if (meta != null)
+        {
+            try
+            {
+                JObject jo = meta as JObject ?? JObject.FromObject(meta);
+
+                customIcon = (string?)jo["custom_icon"];
+                name = (string?)jo["name"];
+                if (jo["custom_links"] is JArray arr)
+                    customLinks = arr.ToObject<List<string>>();
+            }
+            catch (Exception ex)
+            {
+                Error($"Failed to parse CustomAlertMeta from {plugin.Name}: {ex.Message}");
+            }
         }
 
         CourtApi.PluginPlayerAlertCustomDto? payload = CourtApi.PluginPlayerAlertCustomDto.Create(
             message,
             data,
-            customIcon: json?.custom_icon,
-            category: $"{plugin.Name} • {(json?.name ?? "")}",
-            customLinks: json?.custom_links);
+            customIcon: customIcon,
+            category: $"{plugin.Name} • {(name ?? "")}",
+            customLinks: customLinks);
 
         CourtApi.CreatePlayerAlertsCustom(payload).Execute(
             (error) => Debug($"Failed to send custom alert: {error}")
@@ -4694,61 +4715,55 @@ public class RustApp : RustPlugin
         player.Command("gametip.showtoast", (int)type, text, 1);
     }
 
-    private static readonly Dictionary<uint, bool> _buildAuthStates = new(64);
-    private static readonly BaseEntity[] _buildAuthSearchArray = new BaseEntity[16384];
-    private static readonly Func<BaseEntity, bool> _buildAuthFilter = static ent => ent is BuildingBlock;
+    private const float FastSearchRadius = 16f;
+    private const float CheckRadius = FastSearchRadius + 2f;
+    private const float SqrCheckRadius = CheckRadius * CheckRadius;
 
-    // It is more optimized way to detect building authed instead of default BasePlayer.IsBuildingAuthed()
+    private static readonly Dictionary<uint, bool> _buildAuthStates = new(128);
+    private static readonly BaseEntity[] _detectResult = new BaseEntity[1];
+    private static readonly Func<BaseEntity, bool> _detectFilter = DetectFilter;
+
+    private static Vector3 _detectPos;
+    private static ulong _detectUserId;
+
     private static bool DetectBuildingAuth(BasePlayer player)
     {
-        const float FastSearchRadius = 16f;
-        const float CheckRadius = FastSearchRadius + 2f;
-        const float SqrCheckRadius = CheckRadius * CheckRadius;
-
         Vector3 pos = player.transform.position;
-
-        // Fast CheckSphere to prevent more expensive queries if player is not near any building
-        if (!UnityEngine.Physics.CheckSphere(pos, FastSearchRadius, Layers.Server.Buildings, QueryTriggerInteraction.Ignore))
-        {
-            return false;
-        }
-
-        Dictionary<uint, bool> authStates = _buildAuthStates;
-        BaseEntity[] searchArray = _buildAuthSearchArray;
-        ulong userid = player.userID;
-
-        int entCount = BaseEntity.Query.Server.GetInSphereFast(pos, FastSearchRadius, searchArray, _buildAuthFilter);
+        _detectPos = pos;
+        _detectUserId = player.userID;
 
         try
         {
-            for (int i = 0; i < entCount; i++)
-            {
-                BuildingBlock block = (BuildingBlock)searchArray[i];
-                uint buildingId = block.buildingID;
-
-                if (!authStates.TryGetValue(buildingId, out bool isAuthed))
-                {
-                    isAuthed = IsBuildingAuthed(buildingId, userid);
-                    authStates[buildingId] = isAuthed;
-                }
-
-                if (!isAuthed || (block.transform.position - pos).sqrMagnitude > SqrCheckRadius)
-                {
-                    continue;
-                }
-
-                return true;
-            }
-
-            return false;
+            return BaseEntity.Query.Server.GetInSphereFast(pos, FastSearchRadius, _detectResult, _detectFilter) > 0;
         }
         finally
         {
-            authStates.Clear();
-            Array.Clear(searchArray, 0, entCount);
+            _buildAuthStates.Clear();
+            _detectResult[0] = null;
+        }
+    }
+
+    private static bool DetectFilter(BaseEntity ent)
+    {
+        if (ent is not BuildingBlock block)
+        {
+            return false;
         }
 
-        static bool IsBuildingAuthed(uint buildingId, ulong userid)
+        uint buildingId = block.buildingID;
+        if (!_buildAuthStates.TryGetValue(buildingId, out bool isAuthed))
+        {
+            _buildAuthStates[buildingId] = isAuthed = IsAuthed(buildingId, _detectUserId);
+        }
+
+        if (!isAuthed)
+        {
+            return false;
+        }
+
+        return (block.transform.position - _detectPos).sqrMagnitude <= SqrCheckRadius;
+
+        static bool IsAuthed(uint buildingId, ulong userid)
         {
             BuildingManager.Building building = BuildingManager.server.GetBuilding(buildingId);
             if (building == null)
