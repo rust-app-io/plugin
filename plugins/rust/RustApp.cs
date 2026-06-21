@@ -5179,7 +5179,7 @@ public class RustApp : RustPlugin
 
     private void OnEntityKill(BaseNetworkable entity)
     {
-        if (entity is not ISignage || entity.net is null)
+        if (!IsPaintable(entity) || entity.net == null)
         {
             return;
         }
@@ -5187,19 +5187,10 @@ public class RustApp : RustPlugin
         _RustAppEngine?.SignageWorker?.AddSignageDestroy(entity.net.ID.Value.ToString());
     }
 
-    private void OnImagePost(BasePlayer player, string url, bool raw, ISignage signage, uint textureIndex)
-    {
-        _RustAppEngine?.SignageWorker?.SignageCreate(new SignageUpdate(player, signage, textureIndex, url));
-    }
-
+    // ISignage can only be Signage, PhotoFrame, or CarvablePumpkin here
     private void OnSignUpdated(ISignage signage, BasePlayer player, int textureIndex = 0)
     {
-        if (player == null)
-        {
-            return;
-        }
-
-        if (signage.GetTextureCRCs()[textureIndex] == 0)
+        if (player == null || signage.GetTextureCRCs()[textureIndex] == 0)
         {
             return;
         }
@@ -5207,6 +5198,7 @@ public class RustApp : RustPlugin
         _RustAppEngine?.SignageWorker?.SignageCreate(new SignageUpdate(player, signage, (uint)textureIndex));
     }
 
+    // Egg Suit
     private void OnItemPainted(PaintedItemStorageEntity entity, Item item, BasePlayer player, byte[] image)
     {
         if (entity._currentImageCrc == 0)
@@ -5229,7 +5221,7 @@ public class RustApp : RustPlugin
 
     private void OnEntityBuilt(Planner plan, GameObject go)
     {
-        if (go.ToBaseEntity() is not ISignage signage || plan.GetOwnerPlayer() is not BasePlayer player)
+        if (go.ToBaseEntity() is not ISignage signage || !IsPaintable(signage) || plan.GetOwnerPlayer() is not BasePlayer player)
         {
             return;
         }
@@ -5242,6 +5234,17 @@ public class RustApp : RustPlugin
             }
             _RustAppEngine?.SignageWorker?.SignageCreate(new SignageUpdate(player, signage, 0));
         });
+    }
+
+    // Sil external hook
+    private void OnImagePost(BasePlayer player, string url, bool raw, ISignage signage, uint textureIndex)
+    {
+        _RustAppEngine?.SignageWorker?.SignageCreate(new SignageUpdate(player, signage, textureIndex, url));
+    }
+
+    private static bool IsPaintable(object entity)
+    {
+        return entity is Signage or PhotoFrame or CarvablePumpkin or PaintedItemStorageEntity;
     }
 
     #endregion
