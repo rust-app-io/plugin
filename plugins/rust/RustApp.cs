@@ -1,7 +1,7 @@
 ﻿// Reference: ZString
+// Reference: UniTask
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -9,8 +9,10 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using ConVar;
 using Cysharp.Text;
+using Cysharp.Threading.Tasks;
 using JetBrains.Annotations;
 using Network;
 using Newtonsoft.Json;
@@ -4592,6 +4594,8 @@ public class RustApp : RustPlugin
 
     public class StableRequest<T> where T : class
     {
+        private const string NetworkError = "possible network errors, contact @rustapp_help if you see this for more than 5 minutes";
+        private static readonly TimeSpan _timeout = TimeSpan.FromSeconds(10);
         private readonly Uri _url;
         private readonly string _method;
         private readonly object _data;
@@ -4615,48 +4619,61 @@ public class RustApp : RustPlugin
 
         public void Execute()
         {
-            Rust.Global.Runner.StartCoroutine(SendRequest(null, null, null, null));
+            SendRequestAsync(null, null, null, null).Forget();
         }
 
         public void Execute(Action onComplete)
         {
-            Rust.Global.Runner.StartCoroutine(SendRequest(onComplete, null, null, null));
+            SendRequestAsync(onComplete, null, null, null).Forget();
         }
 
         public void Execute(Action<T> onComplete)
         {
-            Rust.Global.Runner.StartCoroutine(SendRequest(null, onComplete, null, null));
+            SendRequestAsync(null, onComplete, null, null).Forget();
         }
 
         public void Execute(Action<string> onException)
         {
-            Rust.Global.Runner.StartCoroutine(SendRequest(null, null, null, onException));
+            SendRequestAsync(null, null, null, onException).Forget();
         }
 
         public void Execute(Action onComplete, Action onException)
         {
-            Rust.Global.Runner.StartCoroutine(SendRequest(onComplete, null, onException, null));
+            SendRequestAsync(onComplete, null, onException, null).Forget();
         }
 
         public void Execute(Action onComplete, Action<string> onException)
         {
-            Rust.Global.Runner.StartCoroutine(SendRequest(onComplete, null, null, onException));
+            SendRequestAsync(onComplete, null, null, onException).Forget();
         }
 
         public void Execute(Action<T> onComplete, Action onException)
         {
-            Rust.Global.Runner.StartCoroutine(SendRequest(null, onComplete, onException, null));
+            SendRequestAsync(null, onComplete, onException, null).Forget();
         }
 
         public void Execute(Action<T> onComplete, Action<string> onException)
         {
-            Rust.Global.Runner.StartCoroutine(SendRequest(null, onComplete, null, onException));
+            SendRequestAsync(null, onComplete, null, onException).Forget();
         }
 
-        private IEnumerator SendRequest(Action onComplete, Action<T> onCompleteT, Action onException, Action<string> onExceptionText)
+        private async UniTaskVoid SendRequestAsync(Action onComplete, Action<T> onCompleteT, Action onException, Action<string> onExceptionText)
         {
-            using var request = CreateWebRequest();
-            yield return request.SendWebRequest();
+            using UnityWebRequest request = CreateWebRequest();
+            using CancellationTokenSource cts = new();
+            using IDisposable timeoutCancellation = cts.CancelAfterSlim(_timeout);
+
+            try
+            {
+                await request.SendWebRequest().WithCancellation(cts.Token);
+            }
+            catch (Exception)
+            {
+                var textError = cts.IsCancellationRequested ? $"Error: ConnectionError. Message: {NetworkError}" : GetError(request);
+                onException?.Invoke();
+                onExceptionText?.Invoke(textError);
+                return;
+            }
 
             if (request.result == UnityWebRequest.Result.Success)
             {
@@ -4678,8 +4695,7 @@ public class RustApp : RustPlugin
         {
             var request = new UnityWebRequest(_url, _method)
             {
-                downloadHandler = new DownloadHandlerBuffer(),
-                timeout = 10
+                downloadHandler = new DownloadHandlerBuffer()
             };
 
             foreach (var (name, value) in _ApiHeaders)
@@ -4735,7 +4751,7 @@ public class RustApp : RustPlugin
             string downloadHandlerText = request.downloadHandler?.text;
             if (string.IsNullOrEmpty(downloadHandlerText))
             {
-                message = "possible network errors, contact @rustapp_help if you see this for more than 5 minutes";
+                message = NetworkError;
             }
             else
             {
