@@ -2850,7 +2850,10 @@ public class RustApp : RustPlugin
     private void CanUserLogin(string name, string id, string ipAddress)
     {
         if (ulong.TryParse(id, out ulong userid))
+        {
             _tempDisconnectReasons.Remove(userid);
+            _pendingKick.Remove(userid);
+        }
 
         _disconnectProcessed.Remove(id);
 
