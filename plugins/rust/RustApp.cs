@@ -35,7 +35,7 @@ namespace Oxide.Plugins;
 // Planks replaced by DezLifer, Bombardir, Phrog, Nimant
 // The Ship of Theseus problem: is this still his code?
 
-[Info("RustApp", "RustApp.io", "3.0.0")]
+[Info("RustApp", "RustApp.io", "3.0.1")]
 public class RustApp : RustPlugin
 {
     #region Variables
