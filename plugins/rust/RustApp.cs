@@ -4440,7 +4440,7 @@ public class RustApp : RustPlugin
 
     private static int WriteFloat(char[] buffer, int pos, float value)
     {
-        if (!value.TryFormat(buffer.AsSpan(pos), out int len, "F3", CultureInfo.InvariantCulture))
+        if (!value.TryFormat(buffer.AsSpan(pos), out int len, "F2", CultureInfo.InvariantCulture))
         {
             throw new JsonSerializationException("Failed to serialize float value");
         }
