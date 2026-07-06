@@ -33,7 +33,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins;
 
-[Info("RustApp", "RustApp.io", "3.0.0")]
+[Info("RustApp", "RustApp.io", "3.0.1")]
 public class RustApp : RustPlugin
 {
     #region Variables
@@ -482,10 +482,11 @@ public class RustApp : RustPlugin
         {
             public string initiator_steam_id;
             public string target_steam_id;
-            public string position;
+            [JsonConverter(typeof(Vector3Converter))]
+            public Vector3 position;
             public bool are_friends;
 
-            public static PluginSleepingBagDto Create(string initiatorSteamId, string targetSteamId, string position, bool areFriends)
+            public static PluginSleepingBagDto Create(string initiatorSteamId, string targetSteamId, Vector3 position, bool areFriends)
             {
                 PluginSleepingBagDto? dto = Pool.Get<PluginSleepingBagDto>();
                 dto.initiator_steam_id = initiatorSteamId;
@@ -501,7 +502,7 @@ public class RustApp : RustPlugin
             {
                 initiator_steam_id = null;
                 target_steam_id = null;
-                position = null;
+                position = default;
                 are_friends = false;
             }
         }
@@ -725,6 +726,7 @@ public class RustApp : RustPlugin
         public class PluginSignageCreateDto : Pool.IPooled
         {
             public string steam_id;
+            [JsonConverter(typeof(UlongConverter))]
             public ulong net_id;
             public byte[] base64_image;
             public string type;
@@ -768,9 +770,10 @@ public class RustApp : RustPlugin
 
         public class SignageDestroyedDto : Pool.IPooled
         {
-            public List<string> net_ids;
+            [JsonProperty(ItemConverterType = typeof(UlongConverter))]
+            public List<ulong> net_ids;
 
-            public void LeavePool() => net_ids = Pool.Get<List<string>>();
+            public void LeavePool() => net_ids = Pool.Get<List<ulong>>();
 
             public void EnterPool()
             {
@@ -2226,7 +2229,7 @@ public class RustApp : RustPlugin
 
     private class SignageWorker : RustAppWorker
     {
-        private readonly List<string> DestroyedSignagesQueue = new();
+        private readonly List<ulong> DestroyedSignagesQueue = new();
 
         private new void Awake()
         {
@@ -2235,7 +2238,7 @@ public class RustApp : RustPlugin
             InvokeRepeating(nameof(CycleSendUpdate), 5f, 5f);
         }
 
-        public void AddSignageDestroy(string netId)
+        public void AddSignageDestroy(ulong netId)
         {
             DestroyedSignagesQueue.Add(netId);
         }
@@ -2840,7 +2843,10 @@ public class RustApp : RustPlugin
     private void CanUserLogin(string name, string id, string ipAddress)
     {
         if (ulong.TryParse(id, out ulong userid))
+        {
             _tempDisconnectReasons.Remove(userid);
+            _pendingKick.Remove(userid);
+        }
 
         _disconnectProcessed.Remove(id);
 
@@ -3025,7 +3031,7 @@ public class RustApp : RustPlugin
         worker.AddSleepingBag(CourtApi.PluginSleepingBagDto.Create(
             player.UserIDString,
             GetSteamIdString(targetPlayerId),
-            bag.transform.position.ToString(),
+            bag.transform.position,
             player.Team?.members?.Contains(targetPlayerId) ?? false));
     }
 
@@ -5406,7 +5412,7 @@ public class RustApp : RustPlugin
             return;
         }
 
-        _RustAppEngine?.SignageWorker?.AddSignageDestroy(entity.net.ID.Value.ToString());
+        _RustAppEngine?.SignageWorker?.AddSignageDestroy(entity.net.ID.Value);
     }
 
     // ISignage can only be Signage, PhotoFrame, or CarvablePumpkin here
