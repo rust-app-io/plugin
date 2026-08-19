@@ -4722,23 +4722,22 @@ public class RustApp : RustPlugin
         player.Command("gametip.showtoast", (int)type, text, 1);
     }
 
-    private static readonly BaseEntity[] _buildAuthArr = new BaseEntity[32];
-    private static readonly Func<BaseEntity, bool> _buildAuthFilter = static e => e is BuildingPrivlidge;
-
     // It is more optimized way to detect building authed instead of default BasePlayer.IsBuildingAuthed()
+    // Uses GetInSphere<T> (generic, type-filtered grid query) instead of GetInSphereFast(..., Func<BaseEntity,bool>)
+    // to avoid delegate dispatch overhead on every candidate entity in range.
     private static bool DetectBuildingAuth(BasePlayer player)
     {
         const float SearchRadius = 22f;
         const float SqrRadius = SearchRadius * SearchRadius;
 
         Vector3 pos = player.transform.position;
-        int count = BaseEntity.Query.Server.GetInSphereFast(pos, SearchRadius, _buildAuthArr, _buildAuthFilter);
-
+        List<BuildingPrivlidge> list = Pool.Get<List<BuildingPrivlidge>>();
         try
         {
-            for (int i = 0; i < count; i++)
+            BaseEntity.Query.Server.GetInSphere(pos, SearchRadius, list, BaseEntity.Query.DistanceCheckType.None);
+            for (int i = 0; i < list.Count; i++)
             {
-                BuildingPrivlidge tc = (BuildingPrivlidge)_buildAuthArr[i];
+                BuildingPrivlidge tc = list[i];
                 if ((tc.transform.position - pos).sqrMagnitude <= SqrRadius)
                     return tc.IsAuthed(player);
             }
@@ -4746,7 +4745,7 @@ public class RustApp : RustPlugin
         }
         finally
         {
-            Array.Clear(_buildAuthArr, 0, count);
+            Pool.FreeUnmanaged(ref list);
         }
     }
 
