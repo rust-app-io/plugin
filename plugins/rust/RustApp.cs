@@ -33,7 +33,7 @@ using Star = ProtoBuf.PatternFirework.Star;
 
 namespace Oxide.Plugins;
 
-[Info("RustApp", "RustApp.io", "3.0.1")]
+[Info("RustApp", "RustApp.io", "3.0.2")]
 public class RustApp : RustPlugin
 {
     #region Variables
