@@ -1,7 +1,7 @@
 ﻿// Reference: ZString
+// Reference: UniTask
 
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.Drawing;
 using System.Drawing.Imaging;
@@ -9,8 +9,10 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Threading;
 using ConVar;
 using Cysharp.Text;
+using Cysharp.Threading.Tasks;
 using JetBrains.Annotations;
 using Network;
 using Newtonsoft.Json;
@@ -35,7 +37,7 @@ namespace Oxide.Plugins;
 // Planks replaced by DezLifer, Bombardir, Phrog, Nimant
 // The Ship of Theseus problem: is this still his code?
 
-[Info("RustApp", "RustApp.io", "3.0.1")]
+[Info("RustApp", "RustApp.io", "3.0.2")]
 public class RustApp : RustPlugin
 {
     #region Variables
@@ -254,41 +256,42 @@ public class RustApp : RustPlugin
 
         public class PluginStatePlayerDto
         {
-            public static PluginStatePlayerDto FromConnection(Network.Connection connection, string status)
+            public static PluginStatePlayerDto FromConnection(Connection connection, string status)
             {
                 var userid = connection.userid;
                 if (!players.TryGetValue(userid, out var payload))
                 {
-                    payload = new PluginStatePlayerDto();
-                    players[userid] = payload;
-                    payload.steam_id = connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : RustApp.GetSteamIdString(userid);
-                    payload.steam_name = connection.username.Replace("<blank>", "blank");
-                    payload.ip = IPAddressWithoutPort(connection.ipaddress);
-                    payload.no_license = DetectNoLicense(connection);
-                    payload.team = Pool.Get<List<string>>();
+                    players[userid] = payload = new PluginStatePlayerDto
+                    {
+                        steam_id = connection.player is BasePlayer basePlayer ? basePlayer.UserIDString : GetSteamIdString(userid),
+                        steam_name = connection.username.Replace("<blank>", "blank"),
+                        ip = IPAddressWithoutPort(connection.ipaddress),
+                        no_license = DetectNoLicense(connection)
+                    };
                 }
 
                 payload.ping = Network.Net.sv.GetAveragePing(connection);
                 payload.seconds_connected = (int)connection.GetSecondsConnected();
                 payload.language = _RustApp.lang.GetLanguage(payload.steam_id);
                 payload.status = status;
-                try { payload.meta = CollectPlayerMeta(payload.steam_id, payload.meta); } catch (Exception ex) { Debug(ex.ToString()); }
-
-                payload.team ??= Pool.Get<List<string>>();
+                payload.team ??= Pool.Get<List<ulong>>();
                 payload.team.Clear();
 
-                RelationshipManager.PlayerTeam? newTeam = RelationshipManager.ServerInstance.FindPlayersTeam(userid);
-                if (newTeam == null)
+                var newTeam = RelationshipManager.ServerInstance.FindPlayersTeam(userid);
+                if (newTeam != null)
                 {
-                    return payload;
+                    var members = newTeam.members;
+                    for (int i = 0; i < members.Count; i++)
+                    {
+                        ulong member = members[i];
+                        if (member != userid)
+                        {
+                            payload.team.Add(member);
+                        }
+                    }
                 }
 
-                for (int index = 0; index < newTeam.members.Count; index++)
-                {
-                    ulong member = newTeam.members[index];
-                    if (member != userid)
-                        payload.team.Add(member.ToString());
-                }
+                try { payload.meta = CollectPlayerMeta(payload.steam_id, payload.meta); } catch (Exception ex) { Debug(ex.ToString()); }
 
                 return payload;
             }
@@ -297,9 +300,9 @@ public class RustApp : RustPlugin
             {
                 PluginStatePlayerDto payload = FromConnection(player.Connection, "active");
 
-                payload.position = player.transform.position.ToString();
-                payload.rotation = player.eyes.rotation.ToString();
-                payload.coords = MapHelper.PositionToString(player.transform.position);
+                payload.position = player.transform.position;
+                payload.rotation = player.eyes.rotation;
+                payload.coords = PositionToGridString(player.transform.position);
 
                 payload.can_build = DetectBuildingAuth(player);
                 payload.is_raiding = DetectIsRaidBlock(player);
@@ -315,8 +318,10 @@ public class RustApp : RustPlugin
             public int seconds_connected;
             public string language;
 
-            [CanBeNull] public string position;
-            [CanBeNull] public string rotation;
+            [JsonConverter(typeof(Vector3Converter))]
+            public Vector3 position;
+            [JsonConverter(typeof(QuaternionConverter))]
+            public Quaternion rotation;
             [CanBeNull] public string coords;
 
             public bool can_build = false;
@@ -327,7 +332,9 @@ public class RustApp : RustPlugin
             public string status;
 
             public PluginStatePlayerMetaDto meta = new();
-            public List<string> team;
+
+            [JsonProperty(ItemConverterType = typeof(UlongConverter))]
+            public List<ulong> team;
 
             public void FreePooledFields()
             {
@@ -337,24 +344,13 @@ public class RustApp : RustPlugin
 
         public class PluginStateUpdatePayload : PluginServerDto
         {
-            public PluginServerDto server_info;
-
             public List<PluginStatePlayerDto> players;
             public Dictionary<string, string> disconnected;
             public Dictionary<string, string> team_changes;
 
-            public override void LeavePool()
-            {
-                base.LeavePool();
-                server_info = Pool.Get<PluginServerDto>();
-            }
-
             public override void EnterPool()
             {
                 base.EnterPool();
-
-                if (server_info != null) Pool.Free(ref server_info);
-
                 if (players != null) Pool.FreeUnmanaged(ref players);
                 if (disconnected != null) Pool.FreeUnmanaged(ref disconnected);
                 if (team_changes != null) Pool.FreeUnmanaged(ref team_changes);
@@ -490,10 +486,11 @@ public class RustApp : RustPlugin
         {
             public string initiator_steam_id;
             public string target_steam_id;
-            public string position;
+            [JsonConverter(typeof(Vector3Converter))]
+            public Vector3 position;
             public bool are_friends;
 
-            public static PluginSleepingBagDto Create(string initiatorSteamId, string targetSteamId, string position, bool areFriends)
+            public static PluginSleepingBagDto Create(string initiatorSteamId, string targetSteamId, Vector3 position, bool areFriends)
             {
                 PluginSleepingBagDto? dto = Pool.Get<PluginSleepingBagDto>();
                 dto.initiator_steam_id = initiatorSteamId;
@@ -509,7 +506,7 @@ public class RustApp : RustPlugin
             {
                 initiator_steam_id = null;
                 target_steam_id = null;
-                position = null;
+                position = default;
                 are_friends = false;
             }
         }
@@ -651,8 +648,10 @@ public class RustApp : RustPlugin
         public class PluginPlayerAlertDugUpStashMeta
         {
             public string steam_id;
-            public string owner_steam_id;
-            public string position;
+            [JsonConverter(typeof(UlongConverter))]
+            public ulong owner_steam_id;
+            [JsonConverter(typeof(Vector3Converter))]
+            public Vector3 position;
             public string square;
         }
 
@@ -731,13 +730,15 @@ public class RustApp : RustPlugin
         public class PluginSignageCreateDto : Pool.IPooled
         {
             public string steam_id;
+            [JsonConverter(typeof(UlongConverter))]
             public ulong net_id;
             public byte[] base64_image;
             public string type;
-            public string position;
+            [JsonConverter(typeof(Vector3Converter))]
+            public Vector3 position;
             public string square;
 
-            public static PluginSignageCreateDto Create(string steamId, ulong netId, byte[] base64Image, string type, string position, string square)
+            public static PluginSignageCreateDto Create(string steamId, ulong netId, byte[] base64Image, string type, Vector3 position, string square)
             {
                 PluginSignageCreateDto? dto = Pool.Get<PluginSignageCreateDto>();
                 dto.steam_id = steamId;
@@ -757,7 +758,7 @@ public class RustApp : RustPlugin
                 net_id = 0;
                 base64_image = null;
                 type = null;
-                position = null;
+                position = default;
                 square = null;
             }
         }
@@ -773,9 +774,10 @@ public class RustApp : RustPlugin
 
         public class SignageDestroyedDto : Pool.IPooled
         {
-            public List<string> net_ids;
+            [JsonProperty(ItemConverterType = typeof(UlongConverter))]
+            public List<ulong> net_ids;
 
-            public void LeavePool() => net_ids = Pool.Get<List<string>>();
+            public void LeavePool() => net_ids = Pool.Get<List<ulong>>();
 
             public void EnterPool()
             {
@@ -1568,19 +1570,19 @@ public class RustApp : RustPlugin
             {
                 InvokeRepeating(nameof(WaitPairFinish), 0f, 1f);
             },
-            (err) =>
+            (error) =>
             {
-                if (Api.ErrorContains(err, "code not exists"))
+                if (Api.ErrorContains(error, "code not exists"))
                 {
                     Error("Pairing failed: requested code not exists");
                 }
-                else if (Api.ErrorContains(err, "pairing prevented from abuse"))
+                else if (Api.ErrorContains(error, "pairing prevented from abuse"))
                 {
                     Error("Pairing failed: seems this server was already connected to another project, please contact TG: @rustapp_help if you think, that it is wrong");
                 }
                 else
                 {
-                    Debug($"Pairing failed: unknown exception {err}");
+                    Debug($"Pairing failed: unknown exception {error}");
                 }
 
                 Destroy(this);
@@ -1621,15 +1623,15 @@ public class RustApp : RustPlugin
                     Destroy(this);
                 }
             },
-            (err) =>
+            (error) =>
             {
-                if (Api.ErrorContains(err, "code not exists"))
+                if (Api.ErrorContains(error, "code not exists"))
                 {
                     Error("Pairing failed: seems you closed modal on site");
                 }
                 else
                 {
-                    Error($"Pairing failed: unknown exception {err}");
+                    Error($"Pairing failed: unknown exception {error}");
                 }
 
                 Destroy(this);
@@ -1656,10 +1658,8 @@ public class RustApp : RustPlugin
 
         public void SendUpdate(Action? onFinished = null)
         {
-
             CourtApi.PluginStateUpdatePayload? payload = Pool.Get<CourtApi.PluginStateUpdatePayload>();
             payload.FillSnapshot();
-            payload.server_info.FillSnapshot();
 
             payload.players = Pool.Get<List<CourtApi.PluginStatePlayerDto>>();
             CollectPlayers(payload.players);
@@ -1679,10 +1679,10 @@ public class RustApp : RustPlugin
                 Trace("State was sent successfull");
                 onFinished?.Invoke();
             },
-            (err) =>
+            (error) =>
             {
                 onFinished?.Invoke();
-                Debug($"State sent error: {err}");
+                Debug($"State sent error: {error}");
 
                 ResurrectDictionary(payload.disconnected, DisconnectReasons);
                 ResurrectDictionary(payload.team_changes, TeamChanges);
@@ -1789,8 +1789,7 @@ public class RustApp : RustPlugin
 
         private void GetQueueTasks()
         {
-            QueueApi.GetQueueTasks().Execute(
-            CallQueueTasks,
+            QueueApi.GetQueueTasks().Execute(CallQueueTasks,
             (error) =>
             {
                 Debug($"Queue retreive failed {error}");
@@ -1845,9 +1844,9 @@ public class RustApp : RustPlugin
                 QueueProcessedIds.Clear();
                 Trace("Ответ по очередям успешно доставлен");
             },
-            (err) =>
+            (error) =>
             {
-                Debug($"Failed to process queue: {err}");
+                Debug($"Failed to process queue: {error}");
             });
         }
 
@@ -2003,7 +2002,7 @@ public class RustApp : RustPlugin
                     Pool.Free(ref payload);
                 }
             },
-            (_) =>
+            () =>
             {
                 Error($"Failed to process ban checks ({payload.players.Count}), retrying...");
                 for (int i = 0; i < payload.players.Count; i++)
@@ -2104,7 +2103,7 @@ public class RustApp : RustPlugin
                 Pool.Free(ref payload.messages, freeElements: true);
                 Pool.Free(ref payload);
             },
-            (_) =>
+            () =>
             {
                 QueueMessages.AddRange(payload.messages);
                 payload.messages.Clear();
@@ -2159,7 +2158,7 @@ public class RustApp : RustPlugin
                 Pool.Free(ref payload.reports, freeElements: true);
                 Pool.Free(ref payload);
             },
-            (_) =>
+            () =>
             {
                 QueueReportSend.AddRange(payload.reports);
                 payload.reports.Clear();
@@ -2210,7 +2209,7 @@ public class RustApp : RustPlugin
                 Pool.Free(ref payload.alerts, freeElements: true);
                 Pool.Free(ref payload);
             },
-            (_) =>
+            () =>
             {
                 PlayerAlertQueue.AddRange(payload.alerts);
                 payload.alerts.Clear();
@@ -2234,7 +2233,7 @@ public class RustApp : RustPlugin
 
     private class SignageWorker : RustAppWorker
     {
-        private readonly List<string> DestroyedSignagesQueue = new();
+        private readonly List<ulong> DestroyedSignagesQueue = new();
 
         private new void Awake()
         {
@@ -2243,7 +2242,7 @@ public class RustApp : RustPlugin
             InvokeRepeating(nameof(CycleSendUpdate), 5f, 5f);
         }
 
-        public void AddSignageDestroy(string netId)
+        public void AddSignageDestroy(ulong netId)
         {
             DestroyedSignagesQueue.Add(netId);
         }
@@ -2258,8 +2257,8 @@ public class RustApp : RustPlugin
                     update.Entity.net.ID.Value,
                     update.GetImage(),
                     update.Entity.ShortPrefabName,
-                    pos.ToString(),
-                    MapHelper.PositionToString(pos));
+                    pos,
+                    PositionToGridString(pos));
 
                 CourtApi.SendSignage(obj).Execute();
 
@@ -2286,7 +2285,7 @@ public class RustApp : RustPlugin
             {
                 Pool.Free(ref payload);
             },
-            (_) =>
+            () =>
             {
                 DestroyedSignagesQueue.AddRange(payload.net_ids);
                 payload.net_ids.Clear();
@@ -2333,7 +2332,7 @@ public class RustApp : RustPlugin
                 Pool.Free(ref payload.sleeping_bags, freeElements: true);
                 Pool.Free(ref payload);
             },
-            (_) =>
+            () =>
             {
                 SleepingBags.AddRange(payload.sleeping_bags);
                 payload.sleeping_bags.Clear();
@@ -2388,7 +2387,7 @@ public class RustApp : RustPlugin
                 Pool.Free(ref payload.kills, freeElements: true);
                 Pool.Free(ref payload);
             },
-            (_) =>
+            () =>
             {
                 KillsQueue.AddRange(payload.kills);
                 payload.kills.Clear();
@@ -2429,8 +2428,7 @@ public class RustApp : RustPlugin
             {
                 PlayerMutes.Clear();
                 data?.data?.ForEach(AddPlayerMute);
-            },
-            (_) => { });
+            });
         }
 
         public void AddPlayerMute(CourtApi.PlayerMuteDto playerMuteDto)
@@ -2464,8 +2462,7 @@ public class RustApp : RustPlugin
         {
             SendMessage(player, lang.GetMessage("Contact.Sent", this, player.UserIDString) + $"<color=#8393cd> {string.Join(" ", args)}</color>");
             SendMessage(player, lang.GetMessage("Contact.SentWait", this, player.UserIDString));
-        },
-        (_) => { });
+        });
     }
 
     private void CmdChatReportInterface(BasePlayer player)
@@ -3038,7 +3035,7 @@ public class RustApp : RustPlugin
         worker.AddSleepingBag(CourtApi.PluginSleepingBagDto.Create(
             player.UserIDString,
             GetSteamIdString(targetPlayerId),
-            bag.transform.position.ToString(),
+            bag.transform.position,
             player.Team?.members?.Contains(targetPlayerId) ?? false));
     }
 
@@ -4015,6 +4012,21 @@ public class RustApp : RustPlugin
 
     #region Methods
 
+    private static readonly Dictionary<Vector2i, string> _gridToStringCache = new();
+
+    public static string PositionToGridString(Vector3 position)
+    {
+        var grid = MapHelper.PositionToGrid(position);
+        if (_gridToStringCache.TryGetValue(grid, out var result))
+        {
+            return result;
+        }
+
+        result = MapHelper.GridToString(grid);
+        _gridToStringCache.Add(grid, result);
+        return result;
+    }
+
     private static string ResolveWeaponName(HitInfo? info)
     {
         if (info == null) return "unknown";
@@ -4227,9 +4239,14 @@ public class RustApp : RustPlugin
     {
         string reason = payload.reason;
 
-        CourtApi.BanCreate(payload).Execute(
-            () => Log($"Player {steamId} banned for {reason}"),
-            (err) => Error($"Failed to ban {steamId}. Reason: {err}"));
+        CourtApi.BanCreate(payload).Execute(() =>
+        {
+            Log($"Player {steamId} banned for {reason}");
+        },
+        (error) =>
+        {
+            Error($"Failed to ban {steamId}. Reason: {error}");
+        });
 
         Pool.Free(ref payload);
     }
@@ -4240,7 +4257,10 @@ public class RustApp : RustPlugin
         {
             Log($"Player {steamId} unbanned");
         },
-        (err) => Error($"Failed to unban {steamId}. Reason: {err}"));
+        (error) =>
+        {
+            Error($"Failed to unban {steamId}. Reason: {error}");
+        });
     }
 
     private void CreatePlayerAlertsCustom(Plugin plugin, string message, object? data = null, object? meta = null)
@@ -4279,9 +4299,10 @@ public class RustApp : RustPlugin
             category: $"{plugin.Name} • {(name ?? "")}",
             customLinks: customLinks);
 
-        CourtApi.CreatePlayerAlertsCustom(payload).Execute(
-            (error) => Debug($"Failed to send custom alert: {error}")
-        );
+        CourtApi.CreatePlayerAlertsCustom(payload).Execute(onException: (error) =>
+        {
+            Debug($"Failed to send custom alert: {error}");
+        });
 
         Pool.Free(ref payload);
     }
@@ -4290,16 +4311,157 @@ public class RustApp : RustPlugin
 
     #region StableRequest
 
+    #region Custom Json Stuff
+
+    public sealed class UlongConverter : JsonConverter
+    {
+        [ThreadStatic]
+        private static char[] _reusableBuffer;
+        public override bool CanRead => false;
+        public override bool CanConvert(Type objectType) => objectType == typeof(ulong);
+
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        {
+            if (writer is not CustomJsonTextWriter customWriter)
+            {
+                throw new JsonSerializationException("Cannot write ulong using non CustomJsonTextWriter");
+            }
+
+            if (value is not ulong number)
+            {
+                throw new JsonSerializationException($"Unsupported type: {value?.GetType()}");
+            }
+
+            _reusableBuffer ??= new char[256];
+            var buffer = _reusableBuffer;
+            var pos = WriteUlong(buffer, number);
+            customWriter.WriteRawStringValue(buffer, pos);
+        }
+
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        {
+            throw new NotImplementedException("Unnecessary because CanRead is false.");
+        }
+    }
+
+    public sealed class Vector3Converter : JsonConverter
+    {
+        [ThreadStatic]
+        private static char[] _reusableBuffer;
+        public override bool CanRead => false;
+        public override bool CanConvert(Type objectType) => objectType == typeof(Vector3);
+
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        {
+            if (writer is not CustomJsonTextWriter customWriter)
+            {
+                throw new JsonSerializationException("Cannot write Vector3 using non CustomJsonTextWriter");
+            }
+
+            if (value is not Vector3 vec3)
+            {
+                throw new JsonSerializationException($"Unsupported type: {value?.GetType()}");
+            }
+
+            var buffer = _reusableBuffer ??= new char[256];
+            var pos = WriteTuple(buffer, vec3.x, vec3.y, vec3.z);
+            customWriter.WriteRawStringValue(buffer, pos);
+        }
+
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        {
+            throw new NotImplementedException("Unnecessary because CanRead is false.");
+        }
+    }
+
+    public sealed class QuaternionConverter : JsonConverter
+    {
+        [ThreadStatic]
+        private static char[] _reusableBuffer;
+        public override bool CanRead => false;
+        public override bool CanConvert(Type objectType) => objectType == typeof(Quaternion);
+
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
+        {
+            if (writer is not CustomJsonTextWriter customWriter)
+            {
+                throw new JsonSerializationException("Cannot write Quaternion using non CustomJsonTextWriter");
+            }
+
+            if (value is not Quaternion quat)
+            {
+                throw new JsonSerializationException($"Unsupported type: {value?.GetType()}");
+            }
+
+            var buffer = _reusableBuffer ??= new char[256];
+            var pos = WriteTuple(buffer, quat.x, quat.y, quat.z, quat.w);
+            customWriter.WriteRawStringValue(buffer, pos);
+        }
+
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        {
+            throw new NotImplementedException("Unnecessary because CanRead is false.");
+        }
+    }
+
+    private static int WriteUlong(char[] buffer, ulong value)
+    {
+        if (!value.TryFormat(buffer.AsSpan(), out int len, default, CultureInfo.InvariantCulture))
+        {
+            throw new JsonSerializationException("Failed to serialize ulong value");
+        }
+
+        return len;
+    }
+
+    private static int WriteTuple(char[] buffer, float x, float y, float z)
+    {
+        int pos = 0;
+        buffer[pos++] = '(';
+        pos = WriteFloat(buffer, pos, x);
+        buffer[pos++] = ',';
+        pos = WriteFloat(buffer, pos, y);
+        buffer[pos++] = ',';
+        pos = WriteFloat(buffer, pos, z);
+        buffer[pos++] = ')';
+        return pos;
+    }
+
+    private static int WriteTuple(char[] buffer, float x, float y, float z, float w)
+    {
+        int pos = 0;
+        buffer[pos++] = '(';
+        pos = WriteFloat(buffer, pos, x);
+        buffer[pos++] = ',';
+        pos = WriteFloat(buffer, pos, y);
+        buffer[pos++] = ',';
+        pos = WriteFloat(buffer, pos, z);
+        buffer[pos++] = ',';
+        pos = WriteFloat(buffer, pos, w);
+        buffer[pos++] = ')';
+        return pos;
+    }
+
+    private static int WriteFloat(char[] buffer, int pos, float value)
+    {
+        if (!value.TryFormat(buffer.AsSpan(pos), out int len, "F2", CultureInfo.InvariantCulture))
+        {
+            throw new JsonSerializationException("Failed to serialize float value");
+        }
+
+        return pos + len;
+    }
+
     [ThreadStatic]
     private static char[] _reusableCharBuffer;
     private static readonly UTF8Encoding _encoding = new(false);
 
-    public sealed class PooledTextReaderUtf8 : TextReader
+    public sealed class CustomTextReader : TextReader
     {
         private readonly int _length;
         private int _pos;
 
-        public PooledTextReaderUtf8(ReadOnlySpan<byte> data)
+        public CustomTextReader(ReadOnlySpan<byte> data)
         {
             var requiredBufferLen = _encoding.GetMaxCharCount(data.Length);
             if (_reusableCharBuffer == null || _reusableCharBuffer.Length < requiredBufferLen)
@@ -4307,41 +4469,57 @@ public class RustApp : RustPlugin
                 var length = _reusableCharBuffer?.Length ?? 2048;
                 _reusableCharBuffer = new char[Math.Max(length * 2, requiredBufferLen)];
             }
+
             _length = _encoding.GetChars(data, _reusableCharBuffer);
             _pos = 0;
-
         }
 
         public override int Read(char[] buffer, int index, int count)
         {
             if (buffer == null)
+            {
                 throw new ArgumentNullException(nameof(buffer), "Buffer cannot be null.");
+            }
+
             if (index < 0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(index), "Non-negative number required.");
+            }
+
             if (count < 0)
+            {
                 throw new ArgumentOutOfRangeException(nameof(count), "Non-negative number required.");
+            }
+
             if (buffer.Length - index < count)
+            {
                 throw new ArgumentException("Offset and length were out of bounds for the array or count is greater than the number of elements from index to the end of the source collection.");
+            }
+
             int readCount = _length - _pos;
             if (readCount > 0)
             {
                 if (readCount > count)
+                {
                     readCount = count;
+                }
+
                 _reusableCharBuffer.AsSpan(_pos, readCount).CopyTo(buffer.AsSpan(index));
                 _pos += readCount;
             }
+
             return readCount;
         }
     }
 
-    public sealed class PooledTextWriterUtf8 : TextWriter
+    public sealed class CustomTextWriter : TextWriter
     {
         [ThreadStatic]
         private static byte[] _reusableByteBuffer;
-
         private int _pos;
+        public override Encoding Encoding => _encoding;
 
-        public PooledTextWriterUtf8() : base(CultureInfo.InvariantCulture)
+        public CustomTextWriter() : base(CultureInfo.InvariantCulture)
         {
             _reusableCharBuffer ??= new char[4096];
             _pos = 0;
@@ -4355,11 +4533,10 @@ public class RustApp : RustPlugin
                 var length = _reusableByteBuffer?.Length ?? 2048;
                 _reusableByteBuffer = new byte[Math.Max(length * 2, requiredBufferLen)];
             }
+
             var len = _encoding.GetBytes(_reusableCharBuffer, 0, _pos, _reusableByteBuffer, 0);
             return new ArraySegment<byte>(_reusableByteBuffer, 0, len);
         }
-
-        public override Encoding Encoding => _encoding;
 
         public override void Write(char value)
         {
@@ -4384,7 +4561,10 @@ public class RustApp : RustPlugin
         public override void Write(string value)
         {
             if (value == null)
+            {
                 return;
+            }
+
             Grow(value.Length);
             value.CopyTo(0, _reusableCharBuffer, _pos, value.Length);
             _pos += value.Length;
@@ -4395,22 +4575,44 @@ public class RustApp : RustPlugin
             var freeSize = _reusableCharBuffer.Length - _pos;
             if (freeSize < requestedSize)
             {
-                var newBuffer = new char[Math.Max(_reusableCharBuffer.Length * 2, _reusableCharBuffer.Length + requestedSize)];
-                _reusableCharBuffer.AsSpan().CopyTo(newBuffer);
+                var newBuffer = new char[Math.Max(_reusableCharBuffer.Length * 2, _pos + requestedSize)];
+                _reusableCharBuffer.AsSpan(0, _pos).CopyTo(newBuffer);
                 _reusableCharBuffer = newBuffer;
             }
         }
     }
 
+    public class CustomJsonTextWriter : JsonTextWriter
+    {
+        private readonly TextWriter _textWriter;
+
+        public CustomJsonTextWriter(TextWriter textWriter) : base(textWriter)
+        {
+            _textWriter = textWriter;
+        }
+
+        public void WriteRawStringValue(char[] buffer, int count)
+        {
+            WriteRawValue(string.Empty);
+            _textWriter.Write(QuoteChar);
+            _textWriter.Write(buffer, 0, count);
+            _textWriter.Write(QuoteChar);
+        }
+    }
+
+    #endregion
+
     public class StableRequest<T> where T : class
     {
-        private Uri url;
-        private string method;
-        private object? data;
+        private const string NetworkError = "possible network errors, contact @rustapp_help if you see this for more than 5 minutes";
+        private static readonly TimeSpan _timeout = TimeSpan.FromSeconds(10);
+        private readonly Uri _url;
+        private readonly string _method;
+        private readonly object _data;
 
-        public StableRequest(Uri url, RequestMethod requestMethod, object? data)
+        public StableRequest(Uri url, RequestMethod requestMethod, object data)
         {
-            method = requestMethod switch
+            _method = requestMethod switch
             {
                 RequestMethod.GET => UnityWebRequest.kHttpVerbGET,
                 RequestMethod.PUT => UnityWebRequest.kHttpVerbPUT,
@@ -4419,83 +4621,91 @@ public class RustApp : RustPlugin
                 _ => throw new ArgumentOutOfRangeException(nameof(requestMethod), requestMethod, null)
             };
 
-            this.url = url;
-            this.data = data;
+            _url = url;
+            _data = data;
         }
 
-        public StableRequest(string url, RequestMethod requestMethod, object? data)
-            : this(new Uri(url), requestMethod, data) { }
+        public StableRequest(string url, RequestMethod requestMethod, object data) : this(new Uri(url), requestMethod, data) { }
 
         public void Execute()
         {
-            Rust.Global.Runner.StartCoroutine(SendWebRequestDeserialize(onComplete: null, onException: null));
+            SendRequestAsync(null, null, null, null).Forget();
+        }
+
+        public void Execute(Action onComplete)
+        {
+            SendRequestAsync(onComplete, null, null, null).Forget();
+        }
+
+        public void Execute(Action<T> onComplete)
+        {
+            SendRequestAsync(null, onComplete, null, null).Forget();
         }
 
         public void Execute(Action<string> onException)
         {
-            Rust.Global.Runner.StartCoroutine(SendWebRequestDeserialize(onComplete: null, onException));
+            SendRequestAsync(null, null, null, onException).Forget();
+        }
+
+        public void Execute(Action onComplete, Action onException)
+        {
+            SendRequestAsync(onComplete, null, onException, null).Forget();
+        }
+
+        public void Execute(Action onComplete, Action<string> onException)
+        {
+            SendRequestAsync(onComplete, null, null, onException).Forget();
+        }
+
+        public void Execute(Action<T> onComplete, Action onException)
+        {
+            SendRequestAsync(null, onComplete, onException, null).Forget();
         }
 
         public void Execute(Action<T> onComplete, Action<string> onException)
         {
-            Rust.Global.Runner.StartCoroutine(SendWebRequestDeserialize(onComplete, onException));
+            SendRequestAsync(null, onComplete, null, onException).Forget();
         }
 
-        // Overload for requests when we don't need to deserialize response
-        public void Execute(Action onComplete, Action<string> onException)
+        private async UniTaskVoid SendRequestAsync(Action onComplete, Action<T> onCompleteT, Action onException, Action<string> onExceptionText)
         {
-            Rust.Global.Runner.StartCoroutine(SendWebRequest(onComplete, onException));
-        }
-
-        private IEnumerator SendWebRequest(Action onComplete, Action<string> onException)
-        {
-            using var request = CreateWebRequest();
-
-            yield return request.SendWebRequest();
-
-            if (TryGetError(request, out var error))
-            {
-                onException?.Invoke(error);
-                yield break;
-            }
-
-            onComplete?.Invoke();
-        }
-
-        private IEnumerator SendWebRequestDeserialize(Action<T> onComplete, Action<string> onException)
-        {
-            using var request = CreateWebRequest();
-
-            yield return request.SendWebRequest();
-
-            if (TryGetError(request, out var error))
-            {
-                onException?.Invoke(error);
-                yield break;
-            }
-
-            if (onComplete == null)
-            {
-                yield break;
-            }
+            using UnityWebRequest request = CreateWebRequest();
+            using CancellationTokenSource cts = new();
+            using IDisposable timeoutCancellation = cts.CancelAfterSlim(_timeout);
 
             try
             {
-                var obj = DeserializeWebResponse(request);
-                onComplete.Invoke(obj);
+                await request.SendWebRequest().WithCancellation(cts.Token);
             }
-            catch (Exception parseException)
+            catch (Exception)
             {
-                Error($"Failed to parse response ({request.method.ToUpper()} {request.url}): {parseException} (Response: {request.downloadHandler?.text})");
+                var textError = cts.IsCancellationRequested ? $"Error: ConnectionError. Message: {NetworkError}" : GetError(request);
+                onException?.Invoke();
+                onExceptionText?.Invoke(textError);
+                return;
+            }
+
+            if (request.result == UnityWebRequest.Result.Success)
+            {
+                onComplete?.Invoke();
+
+                if (onCompleteT != null && TryDeserializeResponse(request, out var deserialized))
+                {
+                    onCompleteT.Invoke(deserialized);
+                }
+            }
+            else
+            {
+                onException?.Invoke();
+                onExceptionText?.Invoke(GetError(request));
             }
         }
 
         private UnityWebRequest CreateWebRequest()
         {
-            var request = new UnityWebRequest(url, method)
+            var request = new UnityWebRequest(_url, _method)
             {
-                downloadHandler = new DownloadHandlerBuffer(),
-                timeout = 10
+                downloadHandler = new DownloadHandlerBuffer()
             };
 
             foreach (var (name, value) in _ApiHeaders)
@@ -4503,62 +4713,67 @@ public class RustApp : RustPlugin
                 request.SetRequestHeader(name, value);
             }
 
-            SetWebRequestPayload(request, data);
+            if (_data != null)
+            {
+                using var stringWriter = new CustomTextWriter();
+                using var jsonWriter = new CustomJsonTextWriter(stringWriter);
+                _jsonSerializer.Serialize(jsonWriter, _data);
+                var dataArray = stringWriter.AsArraySegment();
+                var dataNativeArray = new NativeArray<byte>(dataArray.Count, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+                NativeArray<byte>.Copy(dataArray.Array, dataNativeArray, dataArray.Count);
+
+                request.uploadHandler = new UploadHandlerRaw(dataNativeArray, true)
+                {
+                    contentType = "application/json"
+                };
+            }
+
             return request;
         }
 
-        private static void SetWebRequestPayload(UnityWebRequest request, object data)
+        private static bool TryDeserializeResponse(UnityWebRequest request, out T deserialized)
         {
-            if (data == null)
+            deserialized = default;
+
+            try
             {
-                return;
+                var data = request.downloadHandler.nativeData;
+                if (data.Length == 0 || data.Length == 2 && data[0] == '[' && data[1] == ']')
+                {
+                    return true;
+                }
+
+                using var textReader = new CustomTextReader(data.AsReadOnlySpan());
+                using var reader = new JsonTextReader(textReader);
+                deserialized = _jsonSerializer.Deserialize<T>(reader);
+                return true;
             }
-
-            using var stringWriter = new PooledTextWriterUtf8();
-            _jsonSerializer.Serialize(stringWriter, data);
-            var dataArray = stringWriter.AsArraySegment();
-
-            var dataNativeArray = new NativeArray<byte>(dataArray.Count, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-            NativeArray<byte>.Copy(dataArray.Array, dataNativeArray, dataArray.Count);
-
-            request.uploadHandler = new UploadHandlerRaw(dataNativeArray, transferOwnership: true)
+            catch (Exception ex)
             {
-                contentType = "application/json"
-            };
-        }
-
-        private static bool TryGetError(UnityWebRequest request, out string error)
-        {
-            if (request.result == UnityWebRequest.Result.Success)
-            {
-                error = null;
+                Error($"Failed to parse response ({request.method.ToUpper()} {request.url}): {ex} (Response: {request.downloadHandler?.text})");
                 return false;
             }
-
-            error = $"Error: {request.result}. Message: {request.downloadHandler?.text.ToLower() ?? "possible network errors, contact @rustapp_help if you see > 5 minutes"}";
-            if (error.Contains("502 bad gateway") || error.Contains("cloudflare"))
-            {
-                error = "rustapp is restarting, wait please";
-            }
-            return true;
         }
 
-        private static T DeserializeWebResponse(UnityWebRequest request)
+        private static string GetError(UnityWebRequest request)
         {
-            var data = request.downloadHandler.nativeData;
-            if (data.Length == 0)
+            string message;
+            string downloadHandlerText = request.downloadHandler?.text;
+            if (string.IsNullOrEmpty(downloadHandlerText))
             {
-                return default;
+                message = NetworkError;
+            }
+            else
+            {
+                if (downloadHandlerText.Contains("502 bad gateway", StringComparison.OrdinalIgnoreCase) || downloadHandlerText.Contains("cloudflare", StringComparison.OrdinalIgnoreCase))
+                {
+                    return "rustapp is restarting, please wait";
+                }
+
+                message = downloadHandlerText;
             }
 
-            if (data.Length == 2 && data[0] == '[' && data[1] == ']')
-            {
-                return default;
-            }
-
-            using var textReader = new PooledTextReaderUtf8(data.AsReadOnlySpan());
-            using var reader = new JsonTextReader(textReader);
-            return _jsonSerializer.Deserialize<T>(reader);
+            return $"Error: {request.result}. Message: {message}";
         }
     }
 
@@ -4570,9 +4785,14 @@ public class RustApp : RustPlugin
     {
         CourtApi.PlayerMuteCreateDto? payload = CourtApi.PlayerMuteCreateDto.Create(targetSteamId, reason, duration, broadcast, comment, referenceMessageText);
 
-        CourtApi.PlayerMuteCreate(payload).Execute(
-            () => Puts($"Player ({targetSteamId}) is muted"),
-            (err) => PrintError($"Failed to mute player: {err}"));
+        CourtApi.PlayerMuteCreate(payload).Execute(() =>
+        {
+            Puts($"Player ({targetSteamId}) is muted");
+        },
+        (error) =>
+        {
+            PrintError($"Failed to mute player: {error}");
+        });
 
         Pool.Free(ref payload);
     }
@@ -4581,9 +4801,14 @@ public class RustApp : RustPlugin
     {
         CourtApi.PlayerMuteDeleteDto? payload = CourtApi.PlayerMuteDeleteDto.Create(targetSteamId);
 
-        CourtApi.PlayerMuteDelete(payload).Execute(
-            () => Puts($"Player ({targetSteamId}) is unmuted"),
-            (err) => PrintError($"Failed to unmute player: {err}"));
+        CourtApi.PlayerMuteDelete(payload).Execute(() =>
+        {
+            Puts($"Player ({targetSteamId}) is unmuted");
+        },
+        (error) =>
+        {
+            PrintError($"Failed to unmute player: {error}");
+        });
 
         Pool.Free(ref payload);
     }
@@ -4722,31 +4947,81 @@ public class RustApp : RustPlugin
         player.Command("gametip.showtoast", (int)type, text, 1);
     }
 
-    private static readonly BaseEntity[] _buildAuthArr = new BaseEntity[32];
-    private static readonly Func<BaseEntity, bool> _buildAuthFilter = static e => e is BuildingPrivlidge;
+    private const float FastSearchRadius = 16f;
+    private const float CheckRadius = FastSearchRadius + 2f;
+    private const float SqrCheckRadius = CheckRadius * CheckRadius;
 
-    // It is more optimized way to detect building authed instead of default BasePlayer.IsBuildingAuthed()
+    private static readonly Dictionary<uint, bool> _buildAuthStates = new(128);
+    private static readonly BaseEntity[] _detectResult = new BaseEntity[1];
+    private static readonly Func<BaseEntity, bool> _detectFilter = DetectFilter;
+
+    private static Vector3 _detectPos;
+    private static ulong _detectUserId;
+
     private static bool DetectBuildingAuth(BasePlayer player)
     {
-        const float SearchRadius = 22f;
-        const float SqrRadius = SearchRadius * SearchRadius;
-
         Vector3 pos = player.transform.position;
-        int count = BaseEntity.Query.Server.GetInSphereFast(pos, SearchRadius, _buildAuthArr, _buildAuthFilter);
+        _detectPos = pos;
+        _detectUserId = player.userID;
 
         try
         {
-            for (int i = 0; i < count; i++)
-            {
-                BuildingPrivlidge tc = (BuildingPrivlidge)_buildAuthArr[i];
-                if ((tc.transform.position - pos).sqrMagnitude <= SqrRadius)
-                    return tc.IsAuthed(player);
-            }
-            return false;
+            return BaseEntity.Query.Server.GetInSphereFast(pos, FastSearchRadius, _detectResult, _detectFilter) > 0;
         }
         finally
         {
-            Array.Clear(_buildAuthArr, 0, count);
+            _buildAuthStates.Clear();
+            _detectResult[0] = null;
+        }
+    }
+
+    private static bool DetectFilter(BaseEntity ent)
+    {
+        if (ent is not BuildingBlock block)
+        {
+            return false;
+        }
+
+        uint buildingId = block.buildingID;
+        if (!_buildAuthStates.TryGetValue(buildingId, out bool isAuthed))
+        {
+            _buildAuthStates[buildingId] = isAuthed = IsAuthed(buildingId, _detectUserId);
+        }
+
+        if (!isAuthed)
+        {
+            return false;
+        }
+
+        return (block.transform.position - _detectPos).sqrMagnitude <= SqrCheckRadius;
+
+        static bool IsAuthed(uint buildingId, ulong userid)
+        {
+            BuildingManager.Building building = BuildingManager.server.GetBuilding(buildingId);
+            if (building == null)
+            {
+                return false;
+            }
+
+            ListHashSet<BuildingPrivlidge> privileges = building.buildingPrivileges;
+            if (privileges == null || privileges.Count == 0)
+            {
+                return false;
+            }
+
+            int count = privileges.Count;
+            for (int i = 0; i < count; i++)
+            {
+                BuildingPrivlidge tc = privileges[i];
+                if (tc == null || !tc.IsAuthed(userid))
+                {
+                    continue;
+                }
+
+                return true;
+            }
+
+            return false;
         }
     }
 
@@ -5136,27 +5411,18 @@ public class RustApp : RustPlugin
 
     private void OnEntityKill(BaseNetworkable entity)
     {
-        if (entity is not ISignage || entity.net is null)
+        if (!IsPaintable(entity) || entity.net == null)
         {
             return;
         }
 
-        _RustAppEngine?.SignageWorker?.AddSignageDestroy(entity.net.ID.Value.ToString());
+        _RustAppEngine?.SignageWorker?.AddSignageDestroy(entity.net.ID.Value);
     }
 
-    private void OnImagePost(BasePlayer player, string url, bool raw, ISignage signage, uint textureIndex)
-    {
-        _RustAppEngine?.SignageWorker?.SignageCreate(new SignageUpdate(player, signage, textureIndex, url));
-    }
-
+    // ISignage can only be Signage, PhotoFrame, or CarvablePumpkin here
     private void OnSignUpdated(ISignage signage, BasePlayer player, int textureIndex = 0)
     {
-        if (player == null)
-        {
-            return;
-        }
-
-        if (signage.GetTextureCRCs()[textureIndex] == 0)
+        if (player == null || signage.GetTextureCRCs()[textureIndex] == 0)
         {
             return;
         }
@@ -5164,6 +5430,7 @@ public class RustApp : RustPlugin
         _RustAppEngine?.SignageWorker?.SignageCreate(new SignageUpdate(player, signage, (uint)textureIndex));
     }
 
+    // Egg Suit
     private void OnItemPainted(PaintedItemStorageEntity entity, Item item, BasePlayer player, byte[] image)
     {
         if (entity._currentImageCrc == 0)
@@ -5186,7 +5453,7 @@ public class RustApp : RustPlugin
 
     private void OnEntityBuilt(Planner plan, GameObject go)
     {
-        if (go.ToBaseEntity() is not ISignage signage || plan.GetOwnerPlayer() is not BasePlayer player)
+        if (go.ToBaseEntity() is not ISignage signage || !IsPaintable(signage) || plan.GetOwnerPlayer() is not BasePlayer player)
         {
             return;
         }
@@ -5199,6 +5466,17 @@ public class RustApp : RustPlugin
             }
             _RustAppEngine?.SignageWorker?.SignageCreate(new SignageUpdate(player, signage, 0));
         });
+    }
+
+    // Sil external hook
+    private void OnImagePost(BasePlayer player, string url, bool raw, ISignage signage, uint textureIndex)
+    {
+        _RustAppEngine?.SignageWorker?.SignageCreate(new SignageUpdate(player, signage, textureIndex, url));
+    }
+
+    private static bool IsPaintable(object entity)
+    {
+        return entity is Signage or PhotoFrame or CarvablePumpkin or PaintedItemStorageEntity;
     }
 
     #endregion
