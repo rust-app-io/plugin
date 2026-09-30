@@ -37,10 +37,10 @@ namespace Oxide.Plugins;
 // Planks replaced by DezLifer, Bombardir, Phrog, Nimant
 // The Ship of Theseus problem: is this still his code?
 
-[Info("RustApp", "RustApp.io", "3.0.2")]
+[Info("RustApp", "RustApp.io", "3.1.0")]
 public class RustApp : RustPlugin
 {
-    #region Variables
+    #region Variables 
 
     // References to other plugin with API
     [PluginReference] private Plugin NoEscape, RaidZone, RaidBlock, MultiFighting, TGPP, ExtRaidBlock;
@@ -371,14 +371,16 @@ public class RustApp : RustPlugin
             public string steam_id;
             public string target_steam_id;
             public bool is_team;
+            public bool is_clan;
             public string text;
 
-            public static PluginChatMessageDto Create(string steamId, string text, bool isTeam, [CanBeNull] string targetSteamId = null)
+            public static PluginChatMessageDto Create(string steamId, string text, bool isTeam, bool isClan, [CanBeNull] string targetSteamId = null)
             {
                 PluginChatMessageDto dto = Pool.Get<PluginChatMessageDto>();
                 dto.steam_id = steamId;
                 dto.target_steam_id = targetSteamId;
                 dto.is_team = isTeam;
+                dto.is_clan = isClan;
                 dto.text = text;
                 return dto;
             }
@@ -3014,13 +3016,13 @@ public class RustApp : RustPlugin
 
     private void OnPlayerChat(BasePlayer player, string message, ConVar.Chat.ChatChannel channel)
     {
-        if (channel is not ConVar.Chat.ChatChannel.Team and not ConVar.Chat.ChatChannel.Global and not ConVar.Chat.ChatChannel.Local)
+        if (channel is not ConVar.Chat.ChatChannel.Team and not ConVar.Chat.ChatChannel.Global and not ConVar.Chat.ChatChannel.Local and not ConVar.Chat.ChatChannel.Clan)
             return;
 
         ChatWorker? worker = _RustAppEngine?.ChatWorker;
         if (worker == null) return;
 
-        worker.SaveChatMessage(CourtApi.PluginChatMessageDto.Create(player.UserIDString, message, channel == ConVar.Chat.ChatChannel.Team));
+        worker.SaveChatMessage(CourtApi.PluginChatMessageDto.Create(player.UserIDString, message, channel == ConVar.Chat.ChatChannel.Team, channel == ConVar.Chat.ChatChannel.Clan));
     }
 
     #endregion
@@ -4825,7 +4827,7 @@ public class RustApp : RustPlugin
         ChatWorker? worker = _RustAppEngine?.ChatWorker;
         if (worker == null) return;
 
-        worker.SaveChatMessage(CourtApi.PluginChatMessageDto.Create(from, message, isTeam: false, targetSteamId: to));
+        worker.SaveChatMessage(CourtApi.PluginChatMessageDto.Create(from, message, isTeam: false, isClan: false, targetSteamId: to));
     }
 
     private void RA_ReportSend(string initiator_steam_id, string target_steam_id, string reason, string message = "")
