@@ -37,7 +37,7 @@ namespace Oxide.Plugins;
 // Planks replaced by DezLifer, Bombardir, Phrog, Nimant
 // The Ship of Theseus problem: is this still his code?
 
-[Info("RustApp", "RustApp.io", "3.1.0")]
+[Info("RustApp", "RustApp.io", "3.1.1")]
 public class RustApp : RustPlugin
 {
     #region Variables 
@@ -118,7 +118,7 @@ public class RustApp : RustPlugin
                 level_image_url = _cachedLevelImageUrl ??= MapUploader.ImageUrl;
                 world_size = _cachedWorldSize ??= ConVar.Server.worldsize;
                 description = _cachedDescription ??= (ConVar.Server.description + " " + ConVar.Server.motd);
-                branch = _cachedBranch ??= ConVar.Server.branch;
+                branch = _cachedBranch ??= Facepunch.BuildInfo.Current.Scm.Branch;
                 avatar_big = _cachedAvatarBig ??= ConVar.Server.logoimage;
                 avatar_url = _cachedAvatarUrl ??= ConVar.Server.logoimage;
                 banner_url = _cachedBannerUrl ??= ConVar.Server.headerimage;
