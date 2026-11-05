@@ -4428,7 +4428,6 @@ public class RustApp : RustPlugin
                     && serializer.NullValueHandling == NullValueHandling.Include
                     && serializer.DefaultValueHandling == DefaultValueHandling.Include
                     && serializer.ContractResolver?.GetType() == typeof(Newtonsoft.Json.Serialization.DefaultContractResolver)
-                    && ((Newtonsoft.Json.Serialization.DefaultContractResolver)serializer.ContractResolver).NamingStrategy == null
                     && !serializer.Converters.Any(converter => _fieldTypes.Any(converter.CanConvert));
                 _checkedSerializer = serializer;
             }
