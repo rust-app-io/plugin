@@ -37,7 +37,7 @@ namespace Oxide.Plugins;
 // Planks replaced by DezLifer, Bombardir, Phrog, Nimant
 // The Ship of Theseus problem: is this still his code?
 
-[Info("RustApp", "RustApp.io", "3.1.1")]
+[Info("RustApp", "RustApp.io", "3.1.2")]
 public class RustApp : RustPlugin
 {
     #region Variables 
@@ -5493,7 +5493,7 @@ public class RustApp : RustPlugin
             ISignage sign = Signage;
             uint crc = sign.GetTextureCRCs()[TextureIndex];
 
-            return FileStorage.server.Get(crc, FileStorage.Type.png, sign.NetworkID, TextureIndex);
+            return FileStorage.server.Get(sign.NetworkID, (ulong)TextureIndex, crc);
         }
     }
 
