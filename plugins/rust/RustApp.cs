@@ -808,7 +808,6 @@ public class RustApp : RustPlugin
             }
         }
 
-        [JsonConverter(typeof(KillEntryConverter))]
         public class PluginKillEntryDto : Pool.IPooled
         {
             public string initiator_steam_id;
@@ -4316,29 +4315,29 @@ public class RustApp : RustPlugin
 
     #region Custom Json Stuff
 
-    public abstract class RawStringConverter<T> : JsonConverter
+    public sealed class UlongConverter : JsonConverter
     {
         [ThreadStatic]
-        private static char[] _buffer;
+        private static char[] _reusableBuffer;
         public override bool CanRead => false;
-        public override bool CanConvert(Type objectType) => objectType == typeof(T);
-
-        protected abstract int Format(char[] buffer, T value);
+        public override bool CanConvert(Type objectType) => objectType == typeof(ulong);
 
         public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
         {
             if (writer is not CustomJsonTextWriter customWriter)
             {
-                throw new JsonSerializationException($"Cannot write {typeof(T).Name} using non CustomJsonTextWriter");
+                throw new JsonSerializationException("Cannot write ulong using non CustomJsonTextWriter");
             }
 
-            if (value is not T typed)
+            if (value is not ulong number)
             {
                 throw new JsonSerializationException($"Unsupported type: {value?.GetType()}");
             }
 
-            char[] buffer = _buffer ??= new char[256];
-            customWriter.WriteRawStringValue(buffer, Format(buffer, typed));
+            _reusableBuffer ??= new char[256];
+            var buffer = _reusableBuffer;
+            var pos = WriteUlong(buffer, number);
+            customWriter.WriteRawStringValue(buffer, pos);
         }
 
         public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
@@ -4347,156 +4346,63 @@ public class RustApp : RustPlugin
         }
     }
 
-    public sealed class UlongConverter : RawStringConverter<ulong>
+    public sealed class Vector3Converter : JsonConverter
     {
-        protected override int Format(char[] buffer, ulong value) => WriteUlong(buffer, value);
-    }
-
-    public sealed class Vector3Converter : RawStringConverter<Vector3>
-    {
-        protected override int Format(char[] buffer, Vector3 value) => WriteTuple(buffer, value.x, value.y, value.z);
-    }
-
-    public sealed class QuaternionConverter : RawStringConverter<Quaternion>
-    {
-        protected override int Format(char[] buffer, Quaternion value) => WriteTuple(buffer, value.x, value.y, value.z, value.w);
-    }
-
-    public sealed class KillEntryConverter : JsonConverter
-    {
-        private static readonly Type[] _fieldTypes = { typeof(float), typeof(int), typeof(bool), typeof(string), typeof(List<CourtApi.CombatLogEventDto>), typeof(CourtApi.CombatLogEventDto) };
-
         [ThreadStatic]
-        private static char[] _floatBuffer;
-        private static JsonSerializer _checkedSerializer;
-        private static bool _isFastPathAvailable;
-
+        private static char[] _reusableBuffer;
         public override bool CanRead => false;
-        public override bool CanWrite => IsFastPathAvailable();
-        public override bool CanConvert(Type objectType) => objectType == typeof(CourtApi.PluginKillEntryDto);
+        public override bool CanConvert(Type objectType) => objectType == typeof(Vector3);
 
         public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
         {
-            CourtApi.PluginKillEntryDto kill = (CourtApi.PluginKillEntryDto)value;
-
-            writer.WriteStartObject();
-            WriteProperty(writer, "initiator_steam_id", kill.initiator_steam_id);
-            WriteProperty(writer, "target_steam_id", kill.target_steam_id);
-            WriteProperty(writer, "game_time", kill.game_time);
-            WriteProperty(writer, "distance", kill.distance);
-            WriteProperty(writer, "weapon", kill.weapon);
-            WriteProperty(writer, "is_headshot", kill.is_headshot);
-            writer.WritePropertyName("hit_history");
-
-            List<CourtApi.CombatLogEventDto> hitHistory = kill.hit_history;
-            if (hitHistory == null)
+            if (writer is not CustomJsonTextWriter customWriter)
             {
-                writer.WriteNull();
-            }
-            else
-            {
-                writer.WriteStartArray();
-                for (int i = 0; i < hitHistory.Count; i++)
-                {
-                    CourtApi.CombatLogEventDto ev = hitHistory[i];
-                    if (ev == null)
-                    {
-                        writer.WriteNull();
-                        continue;
-                    }
-
-                    WriteCombatLogEvent(writer, ev);
-                }
-                writer.WriteEndArray();
+                throw new JsonSerializationException("Cannot write Vector3 using non CustomJsonTextWriter");
             }
 
-            writer.WriteEndObject();
+            if (value is not Vector3 vec3)
+            {
+                throw new JsonSerializationException($"Unsupported type: {value?.GetType()}");
+            }
+
+            var buffer = _reusableBuffer ??= new char[256];
+            var pos = WriteTuple(buffer, vec3.x, vec3.y, vec3.z);
+            customWriter.WriteRawStringValue(buffer, pos);
         }
 
         public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
         {
             throw new NotImplementedException("Unnecessary because CanRead is false.");
         }
+    }
 
-        private static bool IsFastPathAvailable()
+    public sealed class QuaternionConverter : JsonConverter
+    {
+        [ThreadStatic]
+        private static char[] _reusableBuffer;
+        public override bool CanRead => false;
+        public override bool CanConvert(Type objectType) => objectType == typeof(Quaternion);
+
+        public override void WriteJson(JsonWriter writer, object value, JsonSerializer serializer)
         {
-            JsonSerializer serializer = _jsonSerializer;
-            if (!ReferenceEquals(serializer, _checkedSerializer))
+            if (writer is not CustomJsonTextWriter customWriter)
             {
-                _isFastPathAvailable = serializer.TypeNameHandling == TypeNameHandling.None
-                    && serializer.PreserveReferencesHandling == PreserveReferencesHandling.None
-                    && serializer.NullValueHandling == NullValueHandling.Include
-                    && serializer.DefaultValueHandling == DefaultValueHandling.Include
-                    && serializer.ContractResolver?.GetType() == typeof(Newtonsoft.Json.Serialization.DefaultContractResolver)
-                    && ((Newtonsoft.Json.Serialization.DefaultContractResolver)serializer.ContractResolver).NamingStrategy == null
-                    && !serializer.Converters.Any(converter => _fieldTypes.Any(converter.CanConvert));
-                _checkedSerializer = serializer;
+                throw new JsonSerializationException("Cannot write Quaternion using non CustomJsonTextWriter");
             }
 
-            return _isFastPathAvailable;
-        }
-
-        private static void WriteCombatLogEvent(JsonWriter writer, CourtApi.CombatLogEventDto ev)
-        {
-            writer.WriteStartObject();
-            WriteProperty(writer, "time", ev.time);
-            WriteProperty(writer, "attacker_steam_id", ev.attacker_steam_id);
-            WriteProperty(writer, "target_steam_id", ev.target_steam_id);
-            WriteProperty(writer, "attacker", ev.attacker);
-            WriteProperty(writer, "target", ev.target);
-            WriteProperty(writer, "weapon", ev.weapon);
-            WriteProperty(writer, "ammo", ev.ammo);
-            WriteProperty(writer, "bone", ev.bone);
-            WriteProperty(writer, "distance", ev.distance);
-            WriteProperty(writer, "hp_old", ev.hp_old);
-            WriteProperty(writer, "hp_new", ev.hp_new);
-            WriteProperty(writer, "info", ev.info);
-            WriteProperty(writer, "proj_hits", ev.proj_hits);
-            WriteProperty(writer, "pi", ev.pi);
-            WriteProperty(writer, "proj_travel", ev.proj_travel);
-            WriteProperty(writer, "pm", ev.pm);
-            WriteProperty(writer, "desync", ev.desync);
-            WriteProperty(writer, "ad", ev.ad);
-            writer.WriteEndObject();
-        }
-
-        private static void WriteProperty(JsonWriter writer, string name, string value)
-        {
-            writer.WritePropertyName(name);
-            writer.WriteValue(value);
-        }
-
-        private static void WriteProperty(JsonWriter writer, string name, int value)
-        {
-            writer.WritePropertyName(name);
-            writer.WriteValue(value);
-        }
-
-        private static void WriteProperty(JsonWriter writer, string name, bool value)
-        {
-            writer.WritePropertyName(name);
-            writer.WriteValue(value);
-        }
-
-        private static void WriteProperty(JsonWriter writer, string name, float value)
-        {
-            writer.WritePropertyName(name);
-
-            if (writer is not CustomJsonTextWriter customWriter || float.IsNaN(value) || float.IsInfinity(value))
+            if (value is not Quaternion quat)
             {
-                writer.WriteValue(value);
-                return;
+                throw new JsonSerializationException($"Unsupported type: {value?.GetType()}");
             }
 
-            char[] buffer = _floatBuffer ??= new char[32];
-            int length = WriteFloat(buffer, 0, value, "R");
-            if (buffer.AsSpan(0, length).IndexOfAny('.', 'E', 'e') < 0)
-            {
-                buffer[length++] = '.';
-                buffer[length++] = '0';
-            }
+            var buffer = _reusableBuffer ??= new char[256];
+            var pos = WriteTuple(buffer, quat.x, quat.y, quat.z, quat.w);
+            customWriter.WriteRawStringValue(buffer, pos);
+        }
 
-            customWriter.WriteRawNumberValue(buffer, length);
+        public override object ReadJson(JsonReader reader, Type objectType, object existingValue, JsonSerializer serializer)
+        {
+            throw new NotImplementedException("Unnecessary because CanRead is false.");
         }
     }
 
@@ -4514,11 +4420,11 @@ public class RustApp : RustPlugin
     {
         int pos = 0;
         buffer[pos++] = '(';
-        pos = WriteFloat(buffer, pos, x, "F2");
+        pos = WriteFloat(buffer, pos, x);
         buffer[pos++] = ',';
-        pos = WriteFloat(buffer, pos, y, "F2");
+        pos = WriteFloat(buffer, pos, y);
         buffer[pos++] = ',';
-        pos = WriteFloat(buffer, pos, z, "F2");
+        pos = WriteFloat(buffer, pos, z);
         buffer[pos++] = ')';
         return pos;
     }
@@ -4527,20 +4433,20 @@ public class RustApp : RustPlugin
     {
         int pos = 0;
         buffer[pos++] = '(';
-        pos = WriteFloat(buffer, pos, x, "F2");
+        pos = WriteFloat(buffer, pos, x);
         buffer[pos++] = ',';
-        pos = WriteFloat(buffer, pos, y, "F2");
+        pos = WriteFloat(buffer, pos, y);
         buffer[pos++] = ',';
-        pos = WriteFloat(buffer, pos, z, "F2");
+        pos = WriteFloat(buffer, pos, z);
         buffer[pos++] = ',';
-        pos = WriteFloat(buffer, pos, w, "F2");
+        pos = WriteFloat(buffer, pos, w);
         buffer[pos++] = ')';
         return pos;
     }
 
-    private static int WriteFloat(char[] buffer, int pos, float value, string format)
+    private static int WriteFloat(char[] buffer, int pos, float value)
     {
-        if (!value.TryFormat(buffer.AsSpan(pos), out int len, format, CultureInfo.InvariantCulture))
+        if (!value.TryFormat(buffer.AsSpan(pos), out int len, "F2", CultureInfo.InvariantCulture))
         {
             throw new JsonSerializationException("Failed to serialize float value");
         }
@@ -4548,25 +4454,26 @@ public class RustApp : RustPlugin
         return pos + len;
     }
 
+    [ThreadStatic]
+    private static char[] _reusableCharBuffer;
     private static readonly UTF8Encoding _encoding = new(false);
 
     public sealed class CustomTextReader : TextReader
     {
-        // Do not decode straight into the buffer passed to Read: Newtonsoft may ask for just 1 char,
-        // and the decoder throws if the next char is an emoji (a surrogate pair, 2 chars) that does not fit.
-        [ThreadStatic]
-        private static char[] _buffer;
+        private readonly int _length;
+        private int _pos;
 
-        private readonly NativeArray<byte>.ReadOnly _data;
-        private readonly Decoder _decoder = _encoding.GetDecoder();
-        private int _dataPos;
-        private int _bufferLength;
-        private int _bufferPos;
-
-        public CustomTextReader(NativeArray<byte>.ReadOnly data)
+        public CustomTextReader(ReadOnlySpan<byte> data)
         {
-            _data = data;
-            _buffer ??= new char[4096];
+            var requiredBufferLen = _encoding.GetMaxCharCount(data.Length);
+            if (_reusableCharBuffer == null || _reusableCharBuffer.Length < requiredBufferLen)
+            {
+                var length = _reusableCharBuffer?.Length ?? 2048;
+                _reusableCharBuffer = new char[Math.Max(length * 2, requiredBufferLen)];
+            }
+
+            _length = _encoding.GetChars(data, _reusableCharBuffer);
+            _pos = 0;
         }
 
         public override int Read(char[] buffer, int index, int count)
@@ -4591,78 +4498,88 @@ public class RustApp : RustPlugin
                 throw new ArgumentException("Offset and length were out of bounds for the array or count is greater than the number of elements from index to the end of the source collection.");
             }
 
-            if (_bufferPos == _bufferLength && !FillBuffer())
+            int readCount = _length - _pos;
+            if (readCount > 0)
             {
-                return 0;
+                if (readCount > count)
+                {
+                    readCount = count;
+                }
+
+                _reusableCharBuffer.AsSpan(_pos, readCount).CopyTo(buffer.AsSpan(index));
+                _pos += readCount;
             }
 
-            int readCount = Math.Min(count, _bufferLength - _bufferPos);
-            _buffer.AsSpan(_bufferPos, readCount).CopyTo(buffer.AsSpan(index));
-            _bufferPos += readCount;
             return readCount;
-        }
-
-        private bool FillBuffer()
-        {
-            ReadOnlySpan<byte> rest = _data.AsReadOnlySpan().Slice(_dataPos);
-            if (rest.IsEmpty)
-            {
-                return false;
-            }
-
-            _decoder.Convert(rest, _buffer, true, out int bytesUsed, out int charsUsed, out _);
-            _dataPos += bytesUsed;
-            _bufferPos = 0;
-            _bufferLength = charsUsed;
-            return charsUsed > 0;
         }
     }
 
     public sealed class CustomTextWriter : TextWriter
     {
         [ThreadStatic]
-        private static char[] _buffer;
+        private static byte[] _reusableByteBuffer;
         private int _pos;
         public override Encoding Encoding => _encoding;
 
         public CustomTextWriter() : base(CultureInfo.InvariantCulture)
         {
-            _buffer ??= new char[4096];
+            _reusableCharBuffer ??= new char[4096];
+            _pos = 0;
         }
 
-        public NativeArray<byte> ToNativeArray()
+        public ArraySegment<byte> AsArraySegment()
         {
-            ReadOnlySpan<char> chars = _buffer.AsSpan(0, _pos);
-            NativeArray<byte> bytes = new NativeArray<byte>(_encoding.GetByteCount(chars), Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
-            _encoding.GetBytes(chars, bytes.AsSpan());
-            return bytes;
+            var requiredBufferLen = _encoding.GetMaxByteCount(_pos);
+            if (_reusableByteBuffer == null || _reusableByteBuffer.Length < requiredBufferLen)
+            {
+                var length = _reusableByteBuffer?.Length ?? 2048;
+                _reusableByteBuffer = new byte[Math.Max(length * 2, requiredBufferLen)];
+            }
+
+            var len = _encoding.GetBytes(_reusableCharBuffer, 0, _pos, _reusableByteBuffer, 0);
+            return new ArraySegment<byte>(_reusableByteBuffer, 0, len);
         }
 
         public override void Write(char value)
         {
             Grow(1);
-            _buffer[_pos++] = value;
+            _reusableCharBuffer[_pos++] = value;
         }
 
-        public override void Write(char[] buffer, int index, int count) => Write(buffer.AsSpan(index, count));
-
-        public override void Write(string value) => Write(value.AsSpan());
+        public override void Write(char[] buffer, int index, int count)
+        {
+            Grow(count);
+            buffer.AsSpan(index, count).CopyTo(_reusableCharBuffer.AsSpan(_pos));
+            _pos += count;
+        }
 
         public override void Write(ReadOnlySpan<char> buffer)
         {
             Grow(buffer.Length);
-            buffer.CopyTo(_buffer.AsSpan(_pos));
+            buffer.CopyTo(_reusableCharBuffer.AsSpan(_pos));
             _pos += buffer.Length;
+        }
+
+        public override void Write(string value)
+        {
+            if (value == null)
+            {
+                return;
+            }
+
+            Grow(value.Length);
+            value.CopyTo(0, _reusableCharBuffer, _pos, value.Length);
+            _pos += value.Length;
         }
 
         private void Grow(int requestedSize)
         {
-            int freeSize = _buffer.Length - _pos;
+            var freeSize = _reusableCharBuffer.Length - _pos;
             if (freeSize < requestedSize)
             {
-                char[] newBuffer = new char[Math.Max(_buffer.Length * 2, _pos + requestedSize)];
-                _buffer.AsSpan(0, _pos).CopyTo(newBuffer);
-                _buffer = newBuffer;
+                var newBuffer = new char[Math.Max(_reusableCharBuffer.Length * 2, _pos + requestedSize)];
+                _reusableCharBuffer.AsSpan(0, _pos).CopyTo(newBuffer);
+                _reusableCharBuffer = newBuffer;
             }
         }
     }
@@ -4682,12 +4599,6 @@ public class RustApp : RustPlugin
             _textWriter.Write(QuoteChar);
             _textWriter.Write(buffer, 0, count);
             _textWriter.Write(QuoteChar);
-        }
-
-        public void WriteRawNumberValue(char[] buffer, int count)
-        {
-            WriteRawValue(string.Empty);
-            _textWriter.Write(buffer, 0, count);
         }
     }
 
@@ -4809,8 +4720,11 @@ public class RustApp : RustPlugin
                 using var stringWriter = new CustomTextWriter();
                 using var jsonWriter = new CustomJsonTextWriter(stringWriter);
                 _jsonSerializer.Serialize(jsonWriter, _data);
+                var dataArray = stringWriter.AsArraySegment();
+                var dataNativeArray = new NativeArray<byte>(dataArray.Count, Allocator.Persistent, NativeArrayOptions.UninitializedMemory);
+                NativeArray<byte>.Copy(dataArray.Array, dataNativeArray, dataArray.Count);
 
-                request.uploadHandler = new UploadHandlerRaw(stringWriter.ToNativeArray(), true)
+                request.uploadHandler = new UploadHandlerRaw(dataNativeArray, true)
                 {
                     contentType = "application/json"
                 };
@@ -4831,7 +4745,7 @@ public class RustApp : RustPlugin
                     return true;
                 }
 
-                using var textReader = new CustomTextReader(data);
+                using var textReader = new CustomTextReader(data.AsReadOnlySpan());
                 using var reader = new JsonTextReader(textReader);
                 deserialized = _jsonSerializer.Deserialize<T>(reader);
                 return true;
