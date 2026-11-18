@@ -945,7 +945,7 @@ public class RustApp : RustPlugin
 
             private static string NormalizeName(string fullName)
             {
-                const string Suffix = ".entity.prefab";
+                const string Suffix = ".entity";
 
                 if (string.IsNullOrEmpty(fullName) || fullName == "N/A"
                     || !fullName.EndsWith(Suffix, StringComparison.Ordinal))
