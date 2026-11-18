@@ -945,10 +945,11 @@ public class RustApp : RustPlugin
 
             private static string NormalizeName(string fullName)
             {
-                const string Suffix = ".entity.prefab";
+                const string Suffix = ".entity";
+                const string LegacySuffix = ".entity.prefab"; // full prefab path, stored before the November 18 Rust update
 
                 if (string.IsNullOrEmpty(fullName) || fullName == "N/A"
-                    || !fullName.EndsWith(Suffix, StringComparison.Ordinal))
+                    || (!fullName.EndsWith(Suffix, StringComparison.Ordinal) && !fullName.EndsWith(LegacySuffix, StringComparison.Ordinal)))
                     return fullName;
 
                 if (_normalizedWeaponNameCache.TryGetValue(fullName, out string? normalized))
@@ -956,7 +957,7 @@ public class RustApp : RustPlugin
 
                 int lastSlash = fullName.LastIndexOf('/');
                 int start = lastSlash + 1;
-                int len = fullName.Length - start - Suffix.Length;
+                int len = fullName.Length - start - (fullName.EndsWith(Suffix, StringComparison.Ordinal) ? Suffix.Length : LegacySuffix.Length);
 
                 normalized = fullName.Substring(start, len);
                 _normalizedWeaponNameCache[fullName] = normalized;
