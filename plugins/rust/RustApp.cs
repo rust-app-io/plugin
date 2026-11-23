@@ -37,7 +37,7 @@ namespace Oxide.Plugins;
 // Planks replaced by DezLifer, Bombardir, Phrog, Nimant
 // The Ship of Theseus problem: is this still his code?
 
-[Info("RustApp", "RustApp.io", "3.1.3")]
+[Info("RustApp", "RustApp.io", "3.1.4")] 
 public class RustApp : RustPlugin
 {
     #region Variables 
@@ -3894,6 +3894,11 @@ public class RustApp : RustPlugin
             Image = { Color = "0 0 0 1" }
         }, ReportLayer + $".L", ReportLayer + $".T");
 
+        container.Add(new CuiButton()
+        {
+            RectTransform = { AnchorMax = "1 1", OffsetMin = $"-1111111 -1111111", OffsetMax = $"1111111 1111111" },
+            Button = { Close = $"{ReportLayer}.T", Color = "0 0 0 0", Material = "assets/icons/greyout.mat" }
+        }, ReportLayer + $".T");
 
         container.Add(new CuiButton()
         {
@@ -3906,12 +3911,6 @@ public class RustApp : RustPlugin
         {
             RectTransform = { AnchorMin = $"{(leftAlign ? -1 : 2)} 0", AnchorMax = $"{(leftAlign ? -2 : 3)} 1", OffsetMin = $"-500 -500", OffsetMax = $"500 500" },
             Button = { Close = $"{ReportLayer}.T", Color = "0.204 0.204 0.204", Sprite = "assets/content/ui/gameui/attackheli/compass/ui.soft.radial.png" }
-        }, ReportLayer + $".T");
-
-        container.Add(new CuiButton()
-        {
-            RectTransform = { AnchorMax = "1 1", OffsetMin = $"-1111111 -1111111", OffsetMax = $"1111111 1111111" },
-            Button = { Close = $"{ReportLayer}.T", Color = "0 0 0 0.5", Material = "assets/content/ui/uibackgroundblur-ingamemenu.mat" }
         }, ReportLayer + $".T");
 
 
@@ -3960,12 +3959,12 @@ public class RustApp : RustPlugin
         {
             Puts($"Failed to apply was_checked mark for {targetId}");
         }
-
+ 
         try
         {
             for (int i = 0; i < _Settings.report_ui_reasons.Count; i++)
             {
-                int offXMin = (20 + (i * 5)) + i * 80;
+                int offXMin = (20 + (i * 5)) + i * 80; 
                 int offXMax = 20 + (i * 5) + (i + 1) * 80;
 
                 string sendReportCommand = ZString.Format("{0} send {1} {2}", _UiCommandName, target.UserIDString, _Settings.report_ui_reasons[i]);
@@ -4935,12 +4934,15 @@ public class RustApp : RustPlugin
     private const string FxButtonUnpress = "assets/prefabs/tools/detonator/effects/unpress.prefab";
     private const string FxInviteNotice = "assets/bundled/prefabs/fx/invite_notice.prefab";
 
+    private static readonly Effect _reusableEffect = new();
+
     private static void PlayEffect(BasePlayer player, string prefabPath)
     {
-        Effect? effect = Effect.reusableInstance;
+        Effect effect = _reusableEffect;
         effect.Init(Effect.Type.Generic, player, 0, Vector3.zero, Vector3.zero);
         effect.pooledString = prefabPath;
         EffectNetwork.Send(effect, player.Connection);
+        effect.Clear();
     }
 
     private void SoundToast(BasePlayer player, string text, SoundToastType type)
